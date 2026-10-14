@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -15,8 +15,10 @@ app.add_middleware(
 )
 
 class JournalInput(BaseModel):
-    pair: str
-    notes: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    pair: str = Field(min_length=1)
+    notes: str = Field(min_length=1)
 
 
 @app.get("/")

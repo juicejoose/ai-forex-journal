@@ -12,6 +12,18 @@ function App() {
     event.preventDefault()
     setError('')
     setPreview(null)
+    const trimmedPair = pair.trim()
+    const trimmedNotes = notes.trim()
+
+    if (!trimmedPair) {
+      setError('Please enter a currency pair.')
+      return
+    }
+
+    if (!trimmedNotes) {
+      setError('Please enter your market observations.')
+      return
+    }
     setLoading(true)
 
     try {
@@ -22,7 +34,10 @@ function App() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ pair, notes }),
+          body: JSON.stringify({
+            pair: trimmedPair,
+            notes: trimmedNotes,
+          }),
         }
       )
 
