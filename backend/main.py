@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import date
+from typing import Literal
 
 app = FastAPI()
 
@@ -18,6 +20,9 @@ class JournalInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     pair: str = Field(min_length=1)
+    journal_date: date
+    timeframe: Literal["15m", "1h", "4h", "1d"]
+    strategy: str = Field(min_length=1)
     notes: str = Field(min_length=1)
 
 
@@ -28,7 +33,4 @@ def home():
 
 @app.post("/journal/preview")
 def preview_journal(entry: JournalInput):
-    return {
-        "pair": entry.pair,
-        "notes": entry.notes,
-    }
+    return entry.model_dump(mode="json")

@@ -5,6 +5,9 @@ function App() {
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [journalDate, setJournalDate] = useState('')
+  const [timeframe, setTimeframe] = useState('1h')
+  const [strategy, setStrategy] = useState('')
 
   const [preview, setPreview] = useState(null)
 
@@ -14,6 +17,7 @@ function App() {
     setPreview(null)
     const trimmedPair = pair.trim()
     const trimmedNotes = notes.trim()
+    const trimmedStrategy = strategy.trim()
 
     if (!trimmedPair) {
       setError('Please enter a currency pair.')
@@ -24,6 +28,17 @@ function App() {
       setError('Please enter your market observations.')
       return
     }
+
+    if (!journalDate) {
+      setError('Please choose a journal date.')
+      return
+    }
+
+    if (!trimmedStrategy) {
+      setError('Please enter your strategy rules.')
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -36,6 +51,9 @@ function App() {
           },
           body: JSON.stringify({
             pair: trimmedPair,
+            journal_date: journalDate,
+            timeframe,
+            strategy: trimmedStrategy,
             notes: trimmedNotes,
           }),
         }
@@ -71,6 +89,40 @@ function App() {
         </div>
 
         <div>
+          <label htmlFor="journal-date">Journal date</label>
+          <input
+            id="journal-date"
+            type="date"
+            value={journalDate}
+            onChange={(event) => setJournalDate(event.target.value)}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="timeframe">Candle timeframe</label>
+          <select
+            id="timeframe"
+            value={timeframe}
+            onChange={(event) => setTimeframe(event.target.value)}
+          >
+            <option value="15m">15 minutes</option>
+            <option value="1h">1 hour</option>
+            <option value="4h">4 hours</option>
+            <option value="1d">1 day</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="strategy">Strategy rules</label>
+          <textarea
+            id="strategy"
+            rows={5}
+            value={strategy}
+            onChange={(event) => setStrategy(event.target.value)}
+          />
+        </div>
+
+        <div>
           <label htmlFor="notes">Market observations</label>
           <textarea
             id="notes"
@@ -92,6 +144,9 @@ function App() {
         <section>
           <h2>Entry preview</h2>
           <p>Currency pair: {preview.pair}</p>
+          <p>Journal date: {preview.journal_date}</p>
+          <p>Candle timeframe: {preview.timeframe}</p>
+          <p>Strategy rules: {preview.strategy}</p>
           <p>Observations: {preview.notes}</p>
         </section>
       )}
