@@ -43,7 +43,7 @@ function App() {
 
     try {
       const response = await fetch(
-        'http://127.0.0.1:8000/journal/preview',
+        'http://127.0.0.1:8000/journal/generate',
         {
           method: 'POST',
           headers: {
@@ -59,12 +59,23 @@ function App() {
         }
       )
 
+      const data = await response.json().catch(() => null)
+
       if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`)
+        const message =
+          typeof data?.detail === 'string'
+            ? data.detail
+            : `Request failed (${response.status}). Please check your inputs.`
+
+        throw new Error(message)
       }
 
-      const data = await response.json()
+      if (!data?.entry || typeof data?.draft !== 'string' || !data.draft.trim()) {
+        throw new Error('The server did not return a journal draft.')
+      }
+
       setPreview(data)
+
     } catch (err) {
       setError(err.message)
     } finally {
@@ -85,6 +96,7 @@ function App() {
             type="text"
             value={pair}
             onChange={(event) => setPair(event.target.value)}
+            maxLength={20}
           />
         </div>
 
@@ -119,6 +131,7 @@ function App() {
             rows={5}
             value={strategy}
             onChange={(event) => setStrategy(event.target.value)}
+            maxLength={10000}
           />
         </div>
 
@@ -129,11 +142,12 @@ function App() {
             rows={5}
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
+            maxLength={10000}
           />
         </div>
 
         <button type="submit" disabled={loading}>
-          {loading ? 'Loading...' : 'Preview entry'}
+          {loading ? 'Generating...' : 'Generate journal'}
         </button>
 
       </form>
@@ -142,12 +156,25 @@ function App() {
 
       {preview && (
         <section>
-          <h2>Entry preview</h2>
-          <p>Currency pair: {preview.pair}</p>
-          <p>Journal date: {preview.journal_date}</p>
-          <p>Candle timeframe: {preview.timeframe}</p>
-          <p>Strategy rules: {preview.strategy}</p>
-          <p>Observations: {preview.notes}</p>
+          <h2>AI journal draft</h2>
+
+          <p>Currency pair: {preview.entry.pair}</p>
+          <p>Journal date: {preview.entry.journal_date}</p>
+          <p>Candle timeframe: {preview.entry.timeframe}</p>
+          <p>Strategy rules: {preview.entry.strategy}</p>
+          <p>Observations: {preview.entry.notes}</p>
+
+          <div
+            style={{
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+              lineHeight: 1.6,
+            }}
+          >
+            {preview.draft}
+          </div>
+
+          <p>This draft has not been saved.</p>
         </section>
       )}
     </main>
