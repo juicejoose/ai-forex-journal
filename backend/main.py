@@ -1,19 +1,26 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import date
 from typing import Literal
 import os
 from pathlib import Path
-
 from dotenv import load_dotenv
 from openai import OpenAI, APIError
+from contextlib import asynccontextmanager
+from database import init_db, insert_journal, fetch_journal, update_journal_text, fetch_journals
 
 load_dotenv(Path(__file__).with_name(".env"))
 
 client = OpenAI(timeout=45.0, max_retries=0)
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,7 +28,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
-    allow_methods=["POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type"],
 )
 
@@ -34,6 +41,17 @@ class JournalInput(BaseModel):
     strategy: str = Field(min_length=1, max_length=10000)
     notes: str = Field(min_length=1, max_length=10000)
 
+class JournalSaveInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    entry: JournalInput
+    original_draft: str = Field(min_length=1, max_length=20000)
+    edited_draft: str = Field(min_length=1, max_length=20000)
+
+class JournalUpdateInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    edited_draft: str = Field(min_length=1, max_length=20000)
 
 @app.get("/")
 def home():
@@ -106,3 +124,34 @@ def generate_journal(entry: JournalInput):
         "entry": entry.model_dump(mode="json"),
         "draft": draft,
     }
+
+@app.post("/journals", status_code=201)
+def save_journal(payload: JournalSaveInput):
+    return insert_journal(
+        payload.entry.model_dump(mode="json"),
+        payload.original_draft,
+        payload.edited_draft,
+    )
+
+@app.get("/journals")
+def list_journals(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    return fetch_journals(limit=limit, offset=offset)
+
+@app.get("/journals/{journal_id}")
+def read_journal(journal_id: int):
+    journal = fetch_journal(journal_id)
+    if journal is None:
+        raise HTTPException(status_code=404, detail="Journal not found.")
+    return journal
+
+@app.patch("/journals/{journal_id}")
+def update_journal(journal_id: int, payload: JournalUpdateInput):
+    journal = update_journal_text(journal_id, payload.edited_draft)
+
+    if journal is None:
+        raise HTTPException(status_code=404, detail="Journal not found.")
+
+    return journal
