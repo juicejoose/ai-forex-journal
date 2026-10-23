@@ -13,6 +13,8 @@ from contextlib import asynccontextmanager
 from database import (
     init_db, store_generated_draft, save_generated_journal,
     fetch_journal, update_journal_text, fetch_journals, DraftAlreadySavedError,
+    fetch_strategy_profiles, fetch_strategy_profile, insert_strategy_profile,
+    update_strategy_profile, DuplicateStrategyProfileError,
 )
 from market_data import MarketDataError, get_market_data
 
@@ -57,6 +59,12 @@ class JournalUpdateInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     edited_draft: str = Field(min_length=1, max_length=20000)
+
+class StrategyProfileInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    rules: str = Field(min_length=1, max_length=10000)
 
 @app.get("/")
 def home():
@@ -209,3 +217,41 @@ def update_journal(journal_id: int, payload: JournalUpdateInput):
         raise HTTPException(status_code=404, detail="Journal not found.")
 
     return journal
+
+
+@app.get("/strategy-profiles")
+def list_strategy_profiles():
+    return fetch_strategy_profiles()
+
+
+@app.get("/strategy-profiles/{profile_id}")
+def read_strategy_profile(profile_id: int):
+    profile = fetch_strategy_profile(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Strategy profile not found.")
+    return profile
+
+
+@app.post("/strategy-profiles", status_code=201)
+def create_strategy_profile(payload: StrategyProfileInput):
+    try:
+        return insert_strategy_profile(payload.name, payload.rules)
+    except DuplicateStrategyProfileError:
+        raise HTTPException(
+            status_code=409,
+            detail="A strategy profile with that name already exists. Choose another name.",
+        ) from None
+
+
+@app.patch("/strategy-profiles/{profile_id}")
+def edit_strategy_profile(profile_id: int, payload: StrategyProfileInput):
+    try:
+        profile = update_strategy_profile(profile_id, payload.name, payload.rules)
+    except DuplicateStrategyProfileError:
+        raise HTTPException(
+            status_code=409,
+            detail="A strategy profile with that name already exists. Choose another name.",
+        ) from None
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Strategy profile not found.")
+    return profile

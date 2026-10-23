@@ -12,6 +12,10 @@ class DraftAlreadySavedError(Exception):
     pass
 
 
+class DuplicateStrategyProfileError(Exception):
+    pass
+
+
 @contextmanager
 def get_connection(*, write=False):
     # Explicit transactions make the save check and insertion atomic.
@@ -59,6 +63,15 @@ def init_db():
                 original_draft TEXT NOT NULL,
                 market_data_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS strategy_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                rules TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
         """)
 
@@ -171,3 +184,61 @@ def fetch_journals(limit=20, offset=0):
             "limit": limit,
             "offset": offset,
         }
+
+
+def fetch_strategy_profiles():
+    with get_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM strategy_profiles ORDER BY name COLLATE NOCASE, id"
+        ).fetchall()
+        return {"items": [dict(row) for row in rows], "total": len(rows)}
+
+
+def fetch_strategy_profile(profile_id):
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM strategy_profiles WHERE id = ?", (profile_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+
+def insert_strategy_profile(name, rules):
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with get_connection(write=True) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO strategy_profiles (name, rules, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (name, rules, now, now),
+            )
+            return dict(connection.execute(
+                "SELECT * FROM strategy_profiles WHERE id = ?", (cursor.lastrowid,),
+            ).fetchone())
+    except sqlite3.IntegrityError as exc:
+        if exc.sqlite_errorname == "SQLITE_CONSTRAINT_UNIQUE":
+            raise DuplicateStrategyProfileError from None
+        raise
+
+
+def update_strategy_profile(profile_id, name, rules):
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with get_connection(write=True) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE strategy_profiles SET name = ?, rules = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (name, rules, now, profile_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+            return dict(connection.execute(
+                "SELECT * FROM strategy_profiles WHERE id = ?", (profile_id,),
+            ).fetchone())
+    except sqlite3.IntegrityError as exc:
+        if exc.sqlite_errorname == "SQLITE_CONSTRAINT_UNIQUE":
+            raise DuplicateStrategyProfileError from None
+        raise

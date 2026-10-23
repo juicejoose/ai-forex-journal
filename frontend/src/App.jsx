@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
 import MarketEvidence from './MarketEvidence.jsx'
+import StrategyProfiles from './StrategyProfiles.jsx'
 
 const tabs = [
   { id: 'generate', label: 'Generate journal' },
   { id: 'saved', label: 'Saved journals' },
+  { id: 'profiles', label: 'Strategy profiles' },
 ]
 
 function App() {
@@ -17,6 +19,9 @@ function App() {
   const [journalDate, setJournalDate] = useState('')
   const timeframe = '4h'
   const [strategy, setStrategy] = useState('')
+  const [loadedProfile, setLoadedProfile] = useState(null)
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileDirty, setProfileDirty] = useState(false)
   const [editedDraft, setEditedDraft] = useState('')
 
   const [preview, setPreview] = useState(null)
@@ -27,7 +32,7 @@ function App() {
   const [historyError, setHistoryError] = useState('')
   const [historyVersion, setHistoryVersion] = useState(0)
 
-  const busy = loading || saving || opening
+  const busy = loading || saving || opening || profileBusy
 
   const isSaved =
     savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
@@ -45,6 +50,19 @@ function App() {
     const nextTab = tabs[nextIndex].id
     setActiveTab(nextTab)
     document.getElementById(`${nextTab}-tab`)?.focus()
+  }
+
+  function handleUseProfile(profile) {
+    if (busy) return
+    if (strategy.trim() && strategy.trim() !== profile.rules.trim() &&
+        !window.confirm(`Replace the strategy rules in the generation form with “${profile.name}”?`)) {
+      return
+    }
+    setStrategy(profile.rules)
+    setLoadedProfile({ name: profile.name, rules: profile.rules })
+    setError('')
+    setActiveTab('generate')
+    requestAnimationFrame(() => document.getElementById('strategy')?.focus())
   }
 
   async function handleSubmit(event) {
@@ -326,7 +344,7 @@ function App() {
       <div
         role="tablist"
         aria-label="Journal pages"
-        style={{ display: 'flex', gap: '0.5rem', padding: '1rem', borderBottom: '1px solid var(--border)' }}
+        style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', padding: '1rem', borderBottom: '1px solid var(--border)' }}
       >
         {tabs.map((tab, index) => (
           <button
@@ -352,6 +370,7 @@ function App() {
           >
             {tab.label}
             {preview && editorTab === tab.id && !isSaved && ' · Unsaved'}
+            {tab.id === 'profiles' && profileDirty && ' · Unsaved'}
           </button>
         ))}
       </div>
@@ -412,6 +431,13 @@ function App() {
               disabled={busy}
               maxLength={10000}
             />
+            {loadedProfile && (
+              <p role="status">
+                Loaded profile: {loadedProfile.name}
+                {strategy.trim() !== loadedProfile.rules.trim() && ' (customized for this journal)'}.
+                {' '}Changes here apply to the next journal. Save profile edits in the Strategy profiles tab.
+              </p>
+            )}
           </div>
 
           <div>
@@ -453,6 +479,22 @@ function App() {
           busy={busy}
         />
         {editorTab === 'saved' && journalEditor}
+      </section>
+
+      <section
+        id="profiles-panel"
+        role="tabpanel"
+        aria-labelledby="profiles-tab"
+        hidden={activeTab !== 'profiles'}
+        tabIndex={0}
+        style={{ padding: '1rem' }}
+      >
+        <StrategyProfiles
+          busy={busy}
+          onUse={handleUseProfile}
+          onBusyChange={setProfileBusy}
+          onDirtyChange={setProfileDirty}
+        />
       </section>
     </main>
   )

@@ -98,7 +98,7 @@ export default function MarketEvidence({ snapshot }) {
                   <td style={cellStyle}>{number(candle.indicators.sma190)}</td>
                   <td style={cellStyle}>{number(candle.indicators.rsi14, 2)}</td>
                   <td style={cellStyle}>{candle.indicators.squeeze.state}</td>
-                  <td style={cellStyle}>{number(candle.indicators.squeeze.momentum, 8)}</td>
+                  <td style={cellStyle}>{number(candle.indicators.squeeze.momentum, 5)}</td>
                   <td style={cellStyle}>{candle.indicators.squeeze.histogram_color}</td>
                   <td style={cellStyle}>
                     {candle.indicators.squeeze.released === null
