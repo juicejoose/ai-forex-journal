@@ -2,7 +2,14 @@ import { useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
 import MarketEvidence from './MarketEvidence.jsx'
 
+const tabs = [
+  { id: 'generate', label: 'Generate journal' },
+  { id: 'saved', label: 'Saved journals' },
+]
+
 function App() {
+  const [activeTab, setActiveTab] = useState('generate')
+  const [editorTab, setEditorTab] = useState('generate')
   const pair = 'EURUSD'
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
@@ -17,12 +24,28 @@ function App() {
   const [saveError, setSaveError] = useState('')
   const [savedJournal, setSavedJournal] = useState(null)
   const [opening, setOpening] = useState(false)
+  const [historyError, setHistoryError] = useState('')
   const [historyVersion, setHistoryVersion] = useState(0)
 
   const busy = loading || saving || opening
 
   const isSaved =
     savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
+
+  function handleTabKeyDown(event, index) {
+    if (busy) return
+    const nextIndex = {
+      ArrowRight: (index + 1) % tabs.length,
+      ArrowLeft: (index - 1 + tabs.length) % tabs.length,
+      Home: 0,
+      End: tabs.length - 1,
+    }[event.key]
+    if (nextIndex === undefined) return
+    event.preventDefault()
+    const nextTab = tabs[nextIndex].id
+    setActiveTab(nextTab)
+    document.getElementById(`${nextTab}-tab`)?.focus()
+  }
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -100,6 +123,7 @@ function App() {
       setPreview(data)
       setEditedDraft(data.draft)
       setSavedJournal(null)
+      setEditorTab('generate')
 
     } catch (err) {
       setError(err.message)
@@ -171,12 +195,12 @@ function App() {
     if (
       preview &&
       !isSaved &&
-      !window.confirm('Discard the unsaved journal in the editor and open this entry?')
+      !window.confirm(`Discard the unsaved journal in the ${editorTab === 'generate' ? 'Generate journal' : 'Saved journals'} tab and open this entry?`)
     ) {
       return
     }
 
-    setError('')
+    setHistoryError('')
     setSaveError('')
     setOpening(true)
 
@@ -221,157 +245,215 @@ function App() {
 
       setEditedDraft(data.edited_draft)
       setSavedJournal(data)
+      setEditorTab('saved')
     } catch (err) {
-      setError(err.message)
+      setHistoryError(err.message)
     } finally {
       setOpening(false)
     }
   }
+
+  const journalEditor = preview && (
+    <section>
+      <h2>
+        {savedJournal ? `Journal #${savedJournal.id}` : 'AI journal draft'}
+      </h2>
+
+      <p>Currency pair: {preview.entry.pair}</p>
+      <p>Journal date: {preview.entry.journal_date}</p>
+      <p>Candle timeframe: {preview.entry.timeframe}</p>
+      <p>Strategy rules: {preview.entry.strategy}</p>
+      <p>Your observations: {preview.entry.notes || 'None provided.'}</p>
+
+      <MarketEvidence snapshot={preview.market_data} />
+
+      <div>
+        <label htmlFor="journal-draft">Review and edit your journal</label>
+
+        <textarea
+          id="journal-draft"
+          rows={18}
+          value={editedDraft}
+          onChange={(event) => setEditedDraft(event.target.value)}
+          disabled={busy}
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            lineHeight: 1.6,
+          }}
+          maxLength={20000}
+        />
+
+        <button
+          type="button"
+          onClick={() => setEditedDraft(preview.draft)}
+          disabled={busy || editedDraft === preview.draft}
+        >
+          Restore AI draft
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={busy || isSaved || !editedDraft.trim()}
+      >
+        {saving ? 'Saving...' : isSaved ? 'Saved' : 'Save journal'}
+      </button>
+
+      {saveError && <p role="alert">{saveError}</p>}
+
+      <p role="status">
+        {isSaved
+          ? `Saved as journal #${savedJournal.id}.`
+          : savedJournal
+            ? `Unsaved changes to journal #${savedJournal.id}.`
+            : 'This draft has not been saved yet.'}
+      </p>
+
+      <p>
+        Switching tabs keeps this journal in the editor. Opening another
+        journal or generating a new one will ask before discarding unsaved changes.
+      </p>
+    </section>
+  )
 
   return (
     <main>
       <h1>Forex AI Journal</h1>
       <p>Review a completed EUR/USD session against your strategy.</p>
 
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="pair">Currency pair</label>
-          <input
-            id="pair"
-            type="text"
-            value={pair}
-            readOnly
-          />
-        </div>
-
-        <div>
-          <label htmlFor="journal-date">Journal date</label>
-          <input
-            id="journal-date"
-            type="date"
-            value={journalDate}
-            onChange={(event) => setJournalDate(event.target.value)}
+      <div
+        role="tablist"
+        aria-label="Journal pages"
+        style={{ display: 'flex', gap: '0.5rem', padding: '1rem', borderBottom: '1px solid var(--border)' }}
+      >
+        {tabs.map((tab, index) => (
+          <button
+            key={tab.id}
+            id={`${tab.id}-tab`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`${tab.id}-panel`}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
             disabled={busy}
-            aria-describedby="session-help"
-          />
-          <p id="session-help">
-            From 5 p.m. the previous day to 5 p.m. on this date, New York time.
-            Choose a completed weekday session.
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor="timeframe">Candle timeframe</label>
-          <select
-            id="timeframe"
-            value={timeframe}
-            disabled
+            style={{
+              padding: '0.65rem 1rem',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              background: activeTab === tab.id ? 'var(--accent-bg)' : 'var(--bg)',
+              color: 'var(--text-h)',
+              fontWeight: activeTab === tab.id ? 700 : 400,
+              cursor: busy ? 'wait' : 'pointer',
+            }}
           >
-            <option value="4h">4 hours</option>
-          </select>
-        </div>
+            {tab.label}
+            {preview && editorTab === tab.id && !isSaved && ' · Unsaved'}
+          </button>
+        ))}
+      </div>
 
-        <div>
-          <label htmlFor="strategy">Strategy rules</label>
-          <textarea
-            id="strategy"
-            rows={5}
-            value={strategy}
-            onChange={(event) => setStrategy(event.target.value)}
-            disabled={busy}
-            maxLength={10000}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="notes">Your observations (optional)</label>
-          <textarea
-            id="notes"
-            rows={5}
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            disabled={busy}
-            maxLength={10000}
-          />
-        </div>
-
-        <button type="submit" disabled={busy}>
-          {loading ? 'Generating...' : 'Generate journal'}
-        </button>
-
-      </form>
-
-      {error && <p role="alert">{error}</p>}
-
-      {opening && <p role="status">Opening journal...</p>}
-
-      <JournalHistory
-        key={historyVersion}
-        onOpen={handleOpenJournal}
-        busy={busy}
-      />
-
-      {preview && (
-        <section>
-          <h2>
-            {savedJournal ? `Journal #${savedJournal.id}` : 'AI journal draft'}
-          </h2>
-
-          <p>Currency pair: {preview.entry.pair}</p>
-          <p>Journal date: {preview.entry.journal_date}</p>
-          <p>Candle timeframe: {preview.entry.timeframe}</p>
-          <p>Strategy rules: {preview.entry.strategy}</p>
-          <p>Your observations: {preview.entry.notes || 'None provided.'}</p>
-
-          <MarketEvidence snapshot={preview.market_data} />
-
+      <section
+        id="generate-panel"
+        role="tabpanel"
+        aria-labelledby="generate-tab"
+        hidden={activeTab !== 'generate'}
+        tabIndex={0}
+        style={{ padding: '1rem' }}
+      >
+        <form onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="journal-draft">Review and edit your journal</label>
-
-            <textarea
-              id="journal-draft"
-              rows={18}
-              value={editedDraft}
-              onChange={(event) => setEditedDraft(event.target.value)}
-              disabled={busy}
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                lineHeight: 1.6,
-              }}
-              maxLength={20000}
+            <label htmlFor="pair">Currency pair</label>
+            <input
+              id="pair"
+              type="text"
+              value={pair}
+              readOnly
             />
-
-            <button
-              type="button"
-              onClick={() => setEditedDraft(preview.draft)}
-              disabled={busy || editedDraft === preview.draft}
-            >
-              Restore AI draft
-            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={busy || isSaved || !editedDraft.trim()}
-          >
-            {saving ? 'Saving...' : isSaved ? 'Saved' : 'Save journal'}
+          <div>
+            <label htmlFor="journal-date">Journal date</label>
+            <input
+              id="journal-date"
+              type="date"
+              value={journalDate}
+              onChange={(event) => setJournalDate(event.target.value)}
+              disabled={busy}
+              aria-describedby="session-help"
+            />
+            <p id="session-help">
+              From 5 p.m. the previous day to 5 p.m. on this date, New York time.
+              Choose a completed weekday session.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="timeframe">Candle timeframe</label>
+            <select
+              id="timeframe"
+              value={timeframe}
+              disabled
+            >
+              <option value="4h">4 hours</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="strategy">Strategy rules</label>
+            <textarea
+              id="strategy"
+              rows={5}
+              value={strategy}
+              onChange={(event) => setStrategy(event.target.value)}
+              disabled={busy}
+              maxLength={10000}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="notes">Your observations (optional)</label>
+            <textarea
+              id="notes"
+              rows={5}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              disabled={busy}
+              maxLength={10000}
+            />
+          </div>
+
+          <button type="submit" disabled={busy}>
+            {loading ? 'Generating...' : 'Generate journal'}
           </button>
 
-          {saveError && <p role="alert">{saveError}</p>}
+        </form>
 
-          <p role="status">
-            {isSaved
-              ? `Saved as journal #${savedJournal.id}.`
-              : savedJournal
-                ? `Unsaved changes to journal #${savedJournal.id}.`
-                : 'This draft has not been saved yet.'}
-          </p>
+        {error && <p role="alert">{error}</p>}
+        {editorTab === 'generate' && journalEditor}
+      </section>
 
-          <p>Generating another journal replaces the draft shown here.</p>
-        </section>
-      )}
+      <section
+        id="saved-panel"
+        role="tabpanel"
+        aria-labelledby="saved-tab"
+        hidden={activeTab !== 'saved'}
+        tabIndex={0}
+        style={{ padding: '1rem' }}
+      >
+        {historyError && <p role="alert">{historyError}</p>}
+        {opening && <p role="status">Opening journal...</p>}
+
+        <JournalHistory
+          key={historyVersion}
+          onOpen={handleOpenJournal}
+          busy={busy}
+        />
+        {editorTab === 'saved' && journalEditor}
+      </section>
     </main>
   )
 }
