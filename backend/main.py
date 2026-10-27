@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import date
@@ -13,9 +13,9 @@ from openai import OpenAI, APIError
 from contextlib import asynccontextmanager
 from database import (
     init_db, store_generated_draft, save_generated_journal,
-    fetch_journal, update_journal_text, fetch_journals, DraftAlreadySavedError,
+    fetch_journal, update_journal_text, delete_journal, fetch_journals, DraftAlreadySavedError,
     fetch_strategy_profiles, fetch_strategy_profile, insert_strategy_profile,
-    update_strategy_profile, DuplicateStrategyProfileError,
+    update_strategy_profile, delete_strategy_profile, DuplicateStrategyProfileError,
 )
 from market_data import MarketDataError, get_market_data
 from journal_grounding import (
@@ -42,7 +42,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -192,6 +192,13 @@ def update_journal(journal_id: int, payload: JournalUpdateInput):
     return journal
 
 
+@app.delete("/journals/{journal_id}", status_code=204)
+def remove_journal(journal_id: int):
+    if not delete_journal(journal_id):
+        raise HTTPException(status_code=404, detail="Journal not found.")
+    return Response(status_code=204)
+
+
 @app.get("/strategy-profiles")
 def list_strategy_profiles():
     return fetch_strategy_profiles()
@@ -214,6 +221,13 @@ def create_strategy_profile(payload: StrategyProfileInput):
             status_code=409,
             detail="A strategy profile with that name already exists. Choose another name.",
         ) from None
+
+
+@app.delete("/strategy-profiles/{profile_id}", status_code=204)
+def remove_strategy_profile(profile_id: int):
+    if not delete_strategy_profile(profile_id):
+        raise HTTPException(status_code=404, detail="Strategy profile not found.")
+    return Response(status_code=204)
 
 
 @app.patch("/strategy-profiles/{profile_id}")

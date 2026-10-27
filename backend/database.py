@@ -166,6 +166,13 @@ def update_journal_text(journal_id, edited_draft):
         return _journal_from_row(row)
 
 
+def delete_journal(journal_id):
+    """Permanently remove one saved journal, including its stored evidence."""
+    with get_connection(write=True) as connection:
+        cursor = connection.execute("DELETE FROM journals WHERE id = ?", (journal_id,))
+        return cursor.rowcount == 1
+
+
 def fetch_journals(limit=20, offset=0):
     with get_connection() as connection:
         total = connection.execute("SELECT COUNT(*) FROM journals").fetchone()[0]
@@ -200,6 +207,15 @@ def fetch_strategy_profile(profile_id):
             "SELECT * FROM strategy_profiles WHERE id = ?", (profile_id,),
         ).fetchone()
         return dict(row) if row is not None else None
+
+
+def delete_strategy_profile(profile_id):
+    """Remove one profile; journals and generated drafts keep their copied rules."""
+    with get_connection(write=True) as connection:
+        cursor = connection.execute(
+            "DELETE FROM strategy_profiles WHERE id = ?", (profile_id,),
+        )
+        return cursor.rowcount == 1
 
 
 def insert_strategy_profile(name, rules):
