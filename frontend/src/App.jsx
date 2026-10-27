@@ -2,6 +2,7 @@ import { useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
 import MarketEvidence from './MarketEvidence.jsx'
 import StrategyProfiles from './StrategyProfiles.jsx'
+import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 
 const tabs = [
   { id: 'generate', label: 'Generate journal' },
@@ -31,8 +32,12 @@ function App() {
   const [opening, setOpening] = useState(false)
   const [historyError, setHistoryError] = useState('')
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [deletingId, setDeletingId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [deleteMessage, setDeleteMessage] = useState('')
 
-  const busy = loading || saving || opening || profileBusy
+  const busy = loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
     savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
@@ -59,10 +64,14 @@ function App() {
       return
     }
     setStrategy(profile.rules)
-    setLoadedProfile({ name: profile.name, rules: profile.rules })
+    setLoadedProfile({ id: profile.id, name: profile.name, rules: profile.rules })
     setError('')
     setActiveTab('generate')
     requestAnimationFrame(() => document.getElementById('strategy')?.focus())
+  }
+
+  function handleProfileDeleted(profileId) {
+    setLoadedProfile((current) => current?.id === profileId ? null : current)
   }
 
   async function handleSubmit(event) {
@@ -271,6 +280,52 @@ function App() {
     }
   }
 
+  function requestDeleteJournal(journal) {
+    if (busy) return
+    setDeleteError('')
+    setDeleteMessage('')
+    setDeleteTarget(journal)
+  }
+
+  async function handleDeleteJournal() {
+    if (busy || !deleteTarget) return
+    const journal = deleteTarget
+    const isOpenJournal = savedJournal?.id === journal.id
+    setDeletingId(journal.id)
+    setDeleteError('')
+    setDeleteMessage('')
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/journals/${journal.id}`,
+        { method: 'DELETE' }
+      )
+      // A stale entry may already have been removed in another browser tab.
+      if (response.status !== 204 && response.status !== 404) {
+        const data = await response.json().catch(() => null)
+        throw new Error(typeof data?.detail === 'string'
+          ? data.detail : `Could not delete journal (${response.status}). Please try again.`)
+      }
+
+      if (isOpenJournal) {
+        setPreview(null)
+        setEditedDraft('')
+        setSavedJournal(null)
+        setSaveError('')
+        setHistoryError('')
+      }
+      setDeleteTarget(null)
+      setHistoryVersion((value) => value + 1)
+      setDeleteMessage(response.status === 404
+        ? `Journal #${journal.id} was already deleted. History refreshed.`
+        : `Journal #${journal.id} deleted.`)
+    } catch (err) {
+      setDeleteError(err.message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const journalEditor = preview && (
     <section>
       <h2>
@@ -318,6 +373,17 @@ function App() {
       >
         {saving ? 'Saving...' : isSaved ? 'Saved' : 'Save journal'}
       </button>
+
+      {savedJournal && (
+        <button
+          type="button"
+          onClick={() => requestDeleteJournal(savedJournal)}
+          disabled={busy}
+          style={{ marginLeft: '0.5rem' }}
+        >
+          {deletingId === savedJournal.id ? 'Deleting...' : 'Delete journal'}
+        </button>
+      )}
 
       {saveError && <p role="alert">{saveError}</p>}
 
@@ -374,6 +440,18 @@ function App() {
           </button>
         ))}
       </div>
+
+      {deleteTarget && (
+        <DeleteJournalDialog
+          journal={deleteTarget}
+          hasUnsavedEdits={savedJournal?.id === deleteTarget.id && !isSaved}
+          pending={deletingId !== null}
+          error={deleteError}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteJournal}
+        />
+      )}
+      {deleteMessage && <p role="status">{deleteMessage}</p>}
 
       <section
         id="generate-panel"
@@ -476,6 +554,8 @@ function App() {
         <JournalHistory
           key={historyVersion}
           onOpen={handleOpenJournal}
+          onDelete={requestDeleteJournal}
+          deletingId={deletingId}
           busy={busy}
         />
         {editorTab === 'saved' && journalEditor}
@@ -492,6 +572,7 @@ function App() {
         <StrategyProfiles
           busy={busy}
           onUse={handleUseProfile}
+          onDeleted={handleProfileDeleted}
           onBusyChange={setProfileBusy}
           onDirtyChange={setProfileDirty}
         />

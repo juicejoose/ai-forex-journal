@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 const PAGE_SIZE = 20
 
-export default function JournalHistory({ onOpen, busy }) {
+export default function JournalHistory({ onOpen, onDelete, deletingId, busy }) {
   const [offset, setOffset] = useState(0)
   const [reload, setReload] = useState(0)
   const [page, setPage] = useState(null)
@@ -74,7 +74,7 @@ export default function JournalHistory({ onOpen, busy }) {
           <p>{page.total} saved journals</p>
 
           {page.items.length === 0 ? (
-            <p>No journals on this page.</p>
+            <p>{page.total === 0 ? 'No saved journals yet.' : 'No journals on this page.'}</p>
           ) : (
             <ul>
               {page.items.map((journal) => (
@@ -86,6 +86,15 @@ export default function JournalHistory({ onOpen, busy }) {
                   >
                     {journal.journal_date} — {journal.pair} ({journal.timeframe})
                     {' '}· #{journal.id}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(journal)}
+                    disabled={busy}
+                    aria-label={`Delete journal #${journal.id} from ${journal.journal_date}`}
+                    style={{ marginLeft: '0.5rem' }}
+                  >
+                    {deletingId === journal.id ? 'Deleting...' : 'Delete'}
                   </button>
                 </li>
               ))}
