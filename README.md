@@ -7,8 +7,8 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 ## Current features
 
 - **Generate journal:** choose a session date, enter strategy rules and optional observations, then generate and edit a journal.
-- **Saved journals:** reopen entries, edit their text, or restore the original draft in the editor and save it.
-- **Strategy profiles:** save named rule sets, update them, and copy their rules into the generation form.
+- **Saved journals:** reopen entries, edit their text, restore the original draft, or permanently delete an entry after confirmation.
+- **Strategy profiles:** save named rule sets, update them, copy their rules into the generation form, or delete a profile after confirmation.
 - **Market evidence:** inspect all six candles, including open/close times, open and close prices, candle change percentage, and indicators. Momentum displays five decimal places.
 
 ## Supported market data
@@ -112,6 +112,10 @@ SQLite data lives at `backend/data/journal.db`. It contains saved journals, stag
 
 Drafts do not appear in **Saved journals** until you click **Save journal**. Unsaved editor changes are held in the browser and can be lost on refresh. Older journals created before market snapshots were added remain readable but have no stored candle evidence.
 
+Use **Delete** beside an entry in Saved journals, or **Delete journal** in an open saved entry. The confirmation identifies the journal and warns that deletion cannot be undone. Deletion removes that journal's original draft, saved edits, and market snapshot. If it is open, its editor closes after deletion; other open drafts and strategy profiles are preserved. History refreshes to the first page. A failed request displays an error, and an entry already deleted in another tab is removed from the stale view when you confirm deletion.
+
+Use **Delete** beside a strategy profile, or **Delete profile** in its editor. The confirmation names the saved profile and warns about unsaved edits if that profile is open. Deletion clears that profile's editor; edits to another profile are kept. Existing journals, staged drafts, and strategy text already copied into the generation form retain their rules. The deleted profile's name is removed from the form's loaded-profile label, and that name can be reused for a new profile. Failed deletion keeps the profile and editor available for retry; confirming deletion of an already deleted profile removes it from the stale view.
+
 ## Automated checks
 
 From the repository root, run the backend tests:
@@ -121,16 +125,18 @@ cd backend
 ./.venv/bin/python -B -m unittest discover -v
 ```
 
-The current suite contains **56 tests**:
+The current suite contains **74 tests**:
 
 | File | Tests | Coverage |
 | --- | ---: | --- |
 | `test_market_data.py` | 14 | Session boundaries, candle validation, history cutoff, and provider errors |
 | `test_journal_evidence.py` | 13 | Saving, immutable original evidence, repeated saves, and older database migration |
 | `test_journal_grounding.py` | 19 | Candle references, rendered values/times, structured output, and rejected drafts |
+| `test_journal_deletion.py` | 9 | Deletion, stale requests, isolation, persistence, rollback, pagination, and browser access |
 | `test_strategy_profiles.py` | 10 | Profile creation, updates, validation, persistence, and journal independence |
+| `test_strategy_profile_deletion.py` | 9 | Profile deletion, copied-rule preservation, stale edits, name reuse, rollback, persistence, concurrency, and browser access |
 
-These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 56 tests` and `OK`.
+These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 74 tests` and `OK`.
 
 From the repository root, check the frontend:
 

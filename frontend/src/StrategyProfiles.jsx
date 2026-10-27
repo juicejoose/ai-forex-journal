@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import DeleteStrategyProfileDialog from './DeleteStrategyProfileDialog.jsx'
 
 const API_URL = 'http://127.0.0.1:8000/strategy-profiles'
 const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: '0.5rem' }
@@ -9,7 +10,8 @@ function isProfile(value) {
     typeof value.rules === 'string' && value.rules.trim() !== ''
 }
 
-export default function StrategyProfiles({ busy, onUse, onBusyChange, onDirtyChange }) {
+export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange, onDirtyChange }) {
+  const listRequest = useRef(null)
   const [page, setPage] = useState(null)
   const [listError, setListError] = useState('')
   const [reload, setReload] = useState(0)
@@ -19,8 +21,11 @@ export default function StrategyProfiles({ busy, onUse, onBusyChange, onDirtyCha
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [message, setMessage] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const loading = page === null && !listError
-  const blocked = busy || saving || loading
+  const blocked = busy || saving || deleting || loading
   const dirty = name !== (selected?.name ?? '') || rules !== (selected?.rules ?? '')
 
   useEffect(() => {
@@ -29,6 +34,7 @@ export default function StrategyProfiles({ busy, onUse, onBusyChange, onDirtyCha
 
   useEffect(() => {
     const controller = new AbortController()
+    listRequest.current = controller
     async function loadProfiles() {
       try {
         const response = await fetch(API_URL, { signal: controller.signal })
@@ -62,6 +68,54 @@ export default function StrategyProfiles({ busy, onUse, onBusyChange, onDirtyCha
     setRules(profile?.rules ?? '')
     setSaveError('')
     setMessage('')
+  }
+
+  function requestDeleteProfile(profile) {
+    if (blocked) return
+    setDeleteError('')
+    setMessage('')
+    setDeleteTarget(profile)
+  }
+
+  async function deleteProfile() {
+    if (blocked || !deleteTarget) return
+    const target = deleteTarget
+    // An older list response must not put a deleted profile back in the list.
+    listRequest.current?.abort()
+    setDeleting(true)
+    onBusyChange(true)
+    setDeleteError('')
+    try {
+      const response = await fetch(`${API_URL}/${target.id}`, { method: 'DELETE' })
+      if (response.status !== 204 && response.status !== 404) {
+        const data = await response.json().catch(() => null)
+        throw new Error(typeof data?.detail === 'string'
+          ? data.detail : `Could not delete the profile (${response.status}). Please try again.`)
+      }
+      setPage((current) => {
+        if (!current) return current
+        const items = current.items.filter((profile) => profile.id !== target.id)
+        return { items, total: items.length }
+      })
+      if (selected?.id === target.id) {
+        setSelected(null)
+        setName('')
+        setRules('')
+        setSaveError('')
+      }
+      onDeleted(target.id)
+      setDeleteTarget(null)
+      setListError('')
+      setReload((value) => value + 1)
+      setMessage(response.status === 404
+        ? `“${target.name}” was already deleted. The profile list has been refreshed.`
+        : `Deleted “${target.name}”. Existing journals and rules copied into the generation form are kept.`)
+    } catch (err) {
+      setDeleteError(err.message)
+    } finally {
+      setDeleting(false)
+      onBusyChange(false)
+    }
   }
 
   async function saveProfile(event) {
@@ -114,6 +168,16 @@ export default function StrategyProfiles({ busy, onUse, onBusyChange, onDirtyCha
     <section aria-labelledby="profiles-heading" style={{ textAlign: 'left' }}>
       <h2 id="profiles-heading">Strategy profiles</h2>
       <p>Save named strategies and reuse their rules when generating a journal.</p>
+      {deleteTarget && (
+        <DeleteStrategyProfileDialog
+          profile={deleteTarget}
+          hasUnsavedEdits={selected?.id === deleteTarget.id && dirty}
+          pending={deleting}
+          error={deleteError}
+          onCancel={() => { if (!deleting) setDeleteTarget(null) }}
+          onConfirm={deleteProfile}
+        />
+      )}
       <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
         <section aria-labelledby="profile-list-heading" style={{ flex: '1 1 16rem', minWidth: 0 }}>
           <h3 id="profile-list-heading">Saved profiles</h3>
@@ -140,6 +204,7 @@ export default function StrategyProfiles({ busy, onUse, onBusyChange, onDirtyCha
                       onClick={() => onUse(profile)}
                       disabled={blocked || (selected?.id === profile.id && dirty)}
                     >Use in journal</button>
+                    <button type="button" aria-label={`Delete ${profile.name}`} onClick={() => requestDeleteProfile(profile)} disabled={blocked}>Delete</button>
                   </div>
                 </li>
               ))}
@@ -171,6 +236,11 @@ export default function StrategyProfiles({ busy, onUse, onBusyChange, onDirtyCha
             <button type="submit" disabled={blocked || !dirty}>
               {saving ? 'Saving profile...' : selected ? 'Save profile changes' : 'Save profile'}
             </button>
+            {selected && (
+              <button type="button" onClick={() => requestDeleteProfile(selected)} disabled={blocked} style={{ marginLeft: '0.5rem' }}>
+                Delete profile
+              </button>
+            )}
           </form>
           {saveError && <p role="alert">{saveError}</p>}
           {message && <p role="status">{message}</p>}
