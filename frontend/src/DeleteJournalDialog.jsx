@@ -1,123 +1,52 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
-const PAGE_SIZE = 20
-
-export default function JournalHistory({ onOpen, onDelete, deletingId, busy }) {
-  const [offset, setOffset] = useState(0)
-  const [reload, setReload] = useState(0)
-  const [page, setPage] = useState(null)
-  const [error, setError] = useState('')
-  const loading = page === null && !error
+export default function DeleteJournalDialog({ journal, hasUnsavedEdits, pending, error, onCancel, onConfirm }) {
+  const dialogRef = useRef(null)
 
   useEffect(() => {
-    const controller = new AbortController()
-
-    async function loadHistory() {
-      try {
-        const response = await fetch(
-          `http://127.0.0.1:8000/journals?limit=${PAGE_SIZE}&offset=${offset}`,
-          { signal: controller.signal }
-        )
-        const data = await response.json().catch(() => null)
-
-        if (!response.ok) {
-          throw new Error('Could not load journal history. Please try again.')
-        }
-
-        if (
-          !Array.isArray(data?.items) ||
-          !Number.isInteger(data.total) ||
-          !data.items.every((item) =>
-            Number.isInteger(item?.id) &&
-            ['pair', 'journal_date', 'timeframe'].every(
-              (field) => typeof item[field] === 'string'
-            )
-          )
-        ) {
-          throw new Error('The server returned an invalid journal list.')
-        }
-
-        if (!controller.signal.aborted) setPage(data)
-      } catch (err) {
-        if (!controller.signal.aborted) setError(err.message)
-      }
-    }
-
-    loadHistory()
-    return () => controller.abort()
-  }, [offset, reload])
-
-  function loadPage(nextOffset) {
-    setPage(null)
-    setError('')
-    setOffset(nextOffset)
-    setReload((value) => value + 1)
-  }
+    const dialog = dialogRef.current
+    dialog.showModal()
+    return () => dialog.close()
+  }, [])
 
   return (
-    <section aria-labelledby="history-heading">
-      <h2 id="history-heading">Saved journals</h2>
-
-      <button
-        type="button"
-        onClick={() => loadPage(0)}
-        disabled={busy || loading}
-      >
-        Refresh history
-      </button>
-
-      {loading && <p role="status">Loading history...</p>}
-      {error && <p role="alert">{error}</p>}
-
-      {page && (
-        <>
-          <p>{page.total} saved journals</p>
-
-          {page.items.length === 0 ? (
-            <p>{page.total === 0 ? 'No saved journals yet.' : 'No journals on this page.'}</p>
-          ) : (
-            <ul>
-              {page.items.map((journal) => (
-                <li key={journal.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(journal.id)}
-                    disabled={busy}
-                  >
-                    {journal.journal_date} — {journal.pair} ({journal.timeframe})
-                    {' '}· #{journal.id}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(journal)}
-                    disabled={busy}
-                    aria-label={`Delete journal #${journal.id} from ${journal.journal_date}`}
-                    style={{ marginLeft: '0.5rem' }}
-                  >
-                    {deletingId === journal.id ? 'Deleting...' : 'Delete'}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <button
-            type="button"
-            onClick={() => loadPage(Math.max(0, offset - PAGE_SIZE))}
-            disabled={busy || offset === 0}
-          >
-            Previous
-          </button>
-
-          <button
-            type="button"
-            onClick={() => loadPage(offset + PAGE_SIZE)}
-            disabled={busy || offset + PAGE_SIZE >= page.total}
-          >
-            Next
-          </button>
-        </>
-      )}
-    </section>
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="delete-journal-heading"
+      aria-describedby="delete-journal-details delete-journal-warning"
+      aria-busy={pending}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!pending) onCancel()
+      }}
+      style={{
+        width: 'min(32rem, calc(100% - 2rem))', boxSizing: 'border-box',
+        padding: '1.5rem', border: '1px solid var(--border)', borderRadius: '8px',
+        background: 'var(--bg)', color: 'var(--text)', textAlign: 'left',
+      }}
+    >
+      <h2 id="delete-journal-heading">Delete saved journal?</h2>
+      <p id="delete-journal-details" style={{ marginTop: '1rem' }}>
+        Journal #{journal.id} · {journal.journal_date} · {journal.pair} ({journal.timeframe})
+      </p>
+      <p id="delete-journal-warning" style={{ marginTop: '1rem' }}>
+        This permanently removes the original draft, saved edits, and market snapshot.
+        {' '}This cannot be undone.
+        {hasUnsavedEdits && ' Your unsaved edits to this journal will also be discarded.'}
+      </p>
+      {error && <p role="alert" style={{ marginTop: '1rem' }}>{error}</p>}
+      {pending && <p role="status" style={{ marginTop: '1rem' }}>Deleting journal...</p>}
+      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+        <button type="button" onClick={onCancel} disabled={pending} autoFocus>Cancel</button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={pending}
+          style={{ background: '#b42318', color: '#fff', border: '1px solid #b42318', borderRadius: '4px', padding: '0.5rem 0.75rem', opacity: pending ? 0.6 : 1 }}
+        >
+          {pending ? 'Deleting...' : 'Delete permanently'}
+        </button>
+      </div>
+    </dialog>
   )
 }
