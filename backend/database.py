@@ -1,7 +1,9 @@
 import json
+import math
 import sqlite3
+from calendar import monthrange
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -55,6 +57,10 @@ def init_db():
         connection.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS journals_generation_id
             ON journals(generation_id)
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS journals_session_date
+            ON journals(journal_date, created_at DESC, id DESC)
         """)
         connection.execute("""
             CREATE TABLE IF NOT EXISTS generated_drafts (
@@ -173,23 +179,86 @@ def delete_journal(journal_id):
         return cursor.rowcount == 1
 
 
-def fetch_journals(limit=20, offset=0):
+def _session_change_percent(row):
+    """Read a saved EUR/USD H4 session's return, never a journal's AI prose."""
+    if row["pair"].upper().replace("/", "").replace("_", "") != "EURUSD" or row["timeframe"] != "4h":
+        return None
+    try:
+        snapshot = json.loads(row["market_data_json"])
+        if (not isinstance(snapshot, dict) or snapshot.get("instrument") != "EUR_USD"
+                or snapshot.get("timeframe") != "H4"
+                or snapshot.get("journal_date") != row["journal_date"]
+                or not isinstance(snapshot.get("session"), dict)
+                or snapshot["session"].get("complete") is not True):
+            return None
+        summary = snapshot["summary"]
+        opened, closed = summary["open"], summary["close"]
+        if any(isinstance(value, bool) or not isinstance(value, (int, float))
+               or not math.isfinite(value) or value <= 0 for value in (opened, closed)):
+            return None
+        change = (closed - opened) / opened * 100
+        return change if math.isfinite(change) else None
+    except (TypeError, ValueError, KeyError, OverflowError):
+        return None
+
+
+def fetch_journals(limit=20, offset=0, journal_date=None):
+    where = " WHERE journal_date = ?" if journal_date is not None else ""
+    parameters = (journal_date,) if journal_date is not None else ()
     with get_connection() as connection:
-        total = connection.execute("SELECT COUNT(*) FROM journals").fetchone()[0]
+        total = connection.execute("SELECT COUNT(*) FROM journals" + where, parameters).fetchone()[0]
         rows = connection.execute(
-            """
-            SELECT id, pair, journal_date, timeframe, created_at, updated_at
-            FROM journals
+            """SELECT id, pair, journal_date, timeframe, created_at, updated_at, market_data_json
+            FROM journals""" + where + """
             ORDER BY created_at DESC, id DESC
             LIMIT ? OFFSET ?
             """,
-            (limit, offset),
+            (*parameters, limit, offset),
         ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            item.pop("market_data_json")
+            item["change_percent"] = _session_change_percent(row)
+            items.append(item)
         return {
-            "items": [dict(row) for row in rows],
+            "items": items,
             "total": total,
             "limit": limit,
             "offset": offset,
+        }
+
+
+def fetch_journal_calendar(month):
+    first = date.fromisoformat(f"{month}-01")
+    last = first.replace(day=monthrange(first.year, first.month)[1])
+    with get_connection() as connection:
+        overall = connection.execute(
+            "SELECT COUNT(*) AS total, MAX(journal_date) AS latest FROM journals"
+        ).fetchone()
+        rows = connection.execute("""
+            SELECT id, pair, journal_date, timeframe, market_data_json
+            FROM journals WHERE journal_date >= ? AND journal_date <= ?
+            ORDER BY journal_date, created_at DESC, id DESC
+        """, (first.isoformat(), last.isoformat()))
+        days = {}
+        for row in rows:
+            day = days.setdefault(row["journal_date"], {
+                "date": row["journal_date"], "journal_count": 0,
+                "change_percent": None, "source_journal_id": None,
+            })
+            day["journal_count"] += 1
+            # Several strategies can share a session. Do not add their returns.
+            # The first usable snapshot is the most recently saved one for this date.
+            if day["source_journal_id"] is None:
+                change = _session_change_percent(row)
+                if change is not None:
+                    day["change_percent"] = change
+                    day["source_journal_id"] = row["id"]
+        return {
+            "month": month, "days": list(days.values()),
+            "journal_count": sum(day["journal_count"] for day in days.values()),
+            "total_journals": overall["total"], "latest_journal_date": overall["latest"],
         }
 
 

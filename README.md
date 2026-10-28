@@ -7,7 +7,7 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 ## Current features
 
 - **Generate journal:** choose a session date, enter strategy rules and optional observations, then generate and edit a journal.
-- **Saved journals:** reopen entries, edit their text, restore the original draft, or permanently delete an entry after confirmation.
+- **Saved journals:** browse a month calendar, select a session date to see its saved entries, then reopen, edit, restore the original draft, or delete after confirmation. Green/red days show the saved EUR/USD session's positive/negative price change.
 - **Strategy profiles:** save named rule sets, update them, copy their rules into the generation form, or delete a profile after confirmation.
 - **Market evidence:** inspect all six candles, including open/close times, open and close prices, candle change percentage, and indicators. Momentum displays five decimal places.
 
@@ -116,7 +116,11 @@ SQLite data lives at `backend/data/journal.db`. It contains saved journals, stag
 
 Drafts do not appear in **Saved journals** until you click **Save journal**. Unsaved editor changes are held in the browser and can be lost on refresh. Older journals created before market snapshots were added remain readable but have no stored candle evidence.
 
-Use **Delete** beside an entry in Saved journals, or **Delete journal** in an open saved entry. The confirmation identifies the journal and warns that deletion cannot be undone. Deletion removes that journal's original draft, saved edits, and market snapshot. If it is open, its editor closes after deletion; other open drafts and strategy profiles are preserved. History refreshes to the first page. A failed request displays an error, and an entry already deleted in another tab is removed from the stale view when you confirm deletion.
+The calendar groups entries by **journal session date**, not the date you saved them. Its percentage is `(session close - session open) / session open * 100`, using the stored EUR/USD H4 snapshot for the 5 p.m.–5 p.m. New York window. This is market price change, not trade profit or loss. If multiple journals share a date, the day uses the most recently saved usable snapshot; their percentages are never added together. Flat sessions and entries without usable snapshots stay neutral. Dates without saved journals have no percentage, and viewing the calendar makes no OANDA or OpenAI requests.
+
+Use the month arrows or **Jump to month** to browse, **Today** to return to the current New York date, and **Latest saved date** to find your most recent journal session. Select a date to see all its entries, with pagination when there are more than 20. The calendar shows every saved date in the month, regardless of that list's page. Calendar days support arrow keys plus Home/End. **Refresh calendar** reloads the displayed month and date after changes in another browser tab or a failed request.
+
+Use **Delete** beside an entry in Saved journals, or **Delete journal** in an open saved entry. The confirmation identifies the journal and warns that deletion cannot be undone. Deletion removes that journal's original draft, saved edits, and market snapshot. If it is open, its editor closes after deletion; other open drafts and strategy profiles are preserved. The calendar and entry list refresh while keeping the selected month and date. If deletion empties the current page, the list moves to the last remaining page. A failed request displays an error, and an entry already deleted in another tab is removed from the stale view when you confirm deletion.
 
 Use **Delete** beside a strategy profile, or **Delete profile** in its editor. The confirmation names the saved profile and warns about unsaved edits if that profile is open. Deletion clears that profile's editor; edits to another profile are kept. Existing journals, staged drafts, and strategy text already copied into the generation form retain their rules. The deleted profile's name is removed from the form's loaded-profile label, and that name can be reused for a new profile. Failed deletion keeps the profile and editor available for retry; confirming deletion of an already deleted profile removes it from the stale view.
 
@@ -129,7 +133,7 @@ cd backend
 ./.venv/bin/python -B -m unittest discover -v
 ```
 
-The current suite contains **74 tests**:
+The current backend suite contains **84 tests**:
 
 | File | Tests | Coverage |
 | --- | ---: | --- |
@@ -137,20 +141,22 @@ The current suite contains **74 tests**:
 | `test_journal_evidence.py` | 13 | Saving, immutable original evidence, repeated saves, and older database migration |
 | `test_journal_grounding.py` | 19 | Candle references, rendered values/times, structured output, rejected drafts, and the Sol/medium request sent by the SDK |
 | `test_journal_deletion.py` | 9 | Deletion, stale requests, isolation, persistence, rollback, pagination, and browser access |
+| `test_journal_calendar.py` | 10 | Monthly counts, date filtering, leap days, saved percentages, duplicate sessions, missing snapshots, validation, and deletion refresh |
 | `test_strategy_profiles.py` | 10 | Profile creation, updates, validation, persistence, and journal independence |
 | `test_strategy_profile_deletion.py` | 9 | Profile deletion, copied-rule preservation, stale edits, name reuse, rollback, persistence, concurrency, and browser access |
 
-These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 74 tests` and `OK`.
+These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 84 tests` and `OK`.
 
 From the repository root, check the frontend:
 
 ```bash
 cd frontend
+node --test tests/journalCalendar.test.js
 npm run lint
 npm run build
 ```
 
-The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
+The seven frontend calendar tests cover date placement, leap years, month/year navigation, New York date boundaries, and percentage formatting. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
 
 The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OpenAI check uses the configured model with medium reasoning and a smaller 2,048-token limit. It prints the requested and returned model, response status, and usage, and exits with an error for incomplete or empty replies. The OANDA check currently uses the fixed session date 2026-10-20.
 

@@ -13,7 +13,7 @@ from openai import OpenAI, APIError
 from contextlib import asynccontextmanager
 from database import (
     init_db, store_generated_draft, save_generated_journal,
-    fetch_journal, update_journal_text, delete_journal, fetch_journals, DraftAlreadySavedError,
+    fetch_journal, update_journal_text, delete_journal, fetch_journals, fetch_journal_calendar, DraftAlreadySavedError,
     fetch_strategy_profiles, fetch_strategy_profile, insert_strategy_profile,
     update_strategy_profile, delete_strategy_profile, DuplicateStrategyProfileError,
 )
@@ -173,8 +173,20 @@ def save_journal(payload: JournalSaveInput):
 def list_journals(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    journal_date: date | None = Query(default=None, description="Filter by the journal's session date"),
 ):
-    return fetch_journals(limit=limit, offset=offset)
+    return fetch_journals(limit=limit, offset=offset,
+                          journal_date=journal_date.isoformat() if journal_date is not None else None)
+
+
+@app.get("/journals/calendar")
+def read_journal_calendar(
+    month: str = Query(..., pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$", description="Calendar month, YYYY-MM"),
+):
+    try:
+        return fetch_journal_calendar(month)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Choose a valid calendar month.") from None
 
 @app.get("/journals/{journal_id}")
 def read_journal(journal_id: int):
