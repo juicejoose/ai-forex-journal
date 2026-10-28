@@ -25,7 +25,7 @@ from journal_grounding import (
 
 load_dotenv(Path(__file__).with_name(".env"))
 
-client = OpenAI(timeout=45.0, max_retries=0)
+client = OpenAI(timeout=90.0, max_retries=0)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
@@ -109,14 +109,15 @@ def generate_journal(entry: JournalInput):
         raise HTTPException(status_code=502, detail="The market data could not be prepared for journal evidence.") from None
     try:
         response = client.responses.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-6-luna"),
+            model=os.getenv("OPENAI_MODEL", "gpt-6.1-sol"),
             instructions=JOURNAL_INSTRUCTIONS,
             input=json.dumps({
                 "entry": entry_data, "market_data": market_data, "evidence_catalog": evidence_catalog,
             }, allow_nan=False),
             text={"format": response_format()},
-            reasoning={"effort": "low"},
-            max_output_tokens=3000,
+            reasoning={"effort": "medium"},
+            # This budget includes reasoning tokens as well as the structured draft.
+            max_output_tokens=8000,
             service_tier="default",
             store=False,
         )

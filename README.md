@@ -61,12 +61,16 @@ Edit `.env` and replace the credential placeholders:
 | Variable | Purpose |
 | --- | --- |
 | `OPENAI_API_KEY` | Your OpenAI API key |
-| `OPENAI_MODEL` | Model used for generation; the current application default is `gpt-6-luna` |
+| `OPENAI_MODEL` | Model used for generation; the current application default is `gpt-6.1-sol` |
 | `OANDA_API_TOKEN` | Your OANDA practice API token |
 | `OANDA_ACCOUNT_ID` | Your OANDA practice account ID |
 | `OANDA_API_URL` | Must be `https://api-fxpractice.oanda.com` for the current implementation |
 
 The backend loads this file automatically. Restart the backend after changing its configuration. Keep real credentials in `.env`, which is ignored by Git; commit only the placeholder `.env.example`. The frontend does not need API keys or a Python virtual environment.
+
+Journal generation uses **GPT-6.1 Sol with medium reasoning** by default. When upgrading an existing installation, change only `OPENAI_MODEL=gpt-6.1-sol` in your existing `backend/.env`; copying a new `.env.example` does not update that file. Keep your API keys and OANDA settings. A model already exported in the backend terminal's environment takes precedence over `.env`.
+
+The OpenAI request allows up to 8,000 combined reasoning and output tokens, with a 90-second client timeout and no automatic retries. These are starting limits, not a guarantee that every strategy will complete within them. Incomplete responses are rejected without staging a new draft. The grounding rules, indicators, and saved journals are unchanged by the model switch. Compare generated rule assessments against the market evidence; changing models does not itself establish improved accuracy.
 
 ### 3. Start the backend
 
@@ -131,7 +135,7 @@ The current suite contains **74 tests**:
 | --- | ---: | --- |
 | `test_market_data.py` | 14 | Session boundaries, candle validation, history cutoff, and provider errors |
 | `test_journal_evidence.py` | 13 | Saving, immutable original evidence, repeated saves, and older database migration |
-| `test_journal_grounding.py` | 19 | Candle references, rendered values/times, structured output, and rejected drafts |
+| `test_journal_grounding.py` | 19 | Candle references, rendered values/times, structured output, rejected drafts, and the Sol/medium request sent by the SDK |
 | `test_journal_deletion.py` | 9 | Deletion, stale requests, isolation, persistence, rollback, pagination, and browser access |
 | `test_strategy_profiles.py` | 10 | Profile creation, updates, validation, persistence, and journal independence |
 | `test_strategy_profile_deletion.py` | 9 | Profile deletion, copied-rule preservation, stale edits, name reuse, rollback, persistence, concurrency, and browser access |
@@ -148,7 +152,7 @@ npm run build
 
 The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
 
-The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OANDA check currently uses the fixed session date 2026-10-20.
+The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OpenAI check uses the configured model with medium reasoning and a smaller 2,048-token limit. It prints the requested and returned model, response status, and usage, and exits with an error for incomplete or empty replies. The OANDA check currently uses the fixed session date 2026-10-20.
 
 ## Troubleshooting and limits
 
