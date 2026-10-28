@@ -289,14 +289,19 @@ class GroundingEndpointTests(unittest.TestCase):
             requests.append(json.loads(request.content))
             return httpx2.Response(200, json={
                 "id": "resp_offline", "object": "response", "created_at": 1, "status": "completed",
-                "model": "gpt-6-luna", "output": [{"id": "msg_offline", "type": "message", "role": "assistant",
+                "model": requests[-1]["model"], "output": [{"id": "msg_offline", "type": "message", "role": "assistant",
                     "status": "completed", "content": [{"type": "output_text", "text": json.dumps(valid_analysis()), "annotations": []}]}],
             })
         with OpenAI(api_key="dummy-offline-token", max_retries=0, http_client=DefaultHttpxClient(transport=httpx2.MockTransport(respond))) as client:
-            with patch.object(main, "client", client):
+            with patch.object(main, "client", client), patch.dict(os.environ, {}, clear=True):
                 response = self.client.post("/journal/generate", json=ENTRY)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["model"], "gpt-6.1-sol")
+        self.assertEqual(requests[0]["reasoning"], {"effort": "medium"})
+        self.assertEqual(requests[0]["max_output_tokens"], 8000)
+        self.assertEqual(requests[0]["service_tier"], "default")
+        self.assertIs(requests[0]["store"], False)
         self.assertEqual(requests[0]["text"]["format"], response_format())
         self.assertIn("Close 1.12333", response.json()["draft"])
 
