@@ -552,7 +552,7 @@ function App() {
         {opening && <p role="status">Opening journal...</p>}
 
         <JournalHistory
-          key={historyVersion}
+          refreshVersion={historyVersion}
           onOpen={handleOpenJournal}
           onDelete={requestDeleteJournal}
           deletingId={deletingId}
