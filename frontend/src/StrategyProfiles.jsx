@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import DeleteStrategyProfileDialog from './DeleteStrategyProfileDialog.jsx'
+import './StrategyProfiles.css'
 
 const API_URL = 'http://127.0.0.1:8000/strategy-profiles'
-const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: '0.5rem' }
 
 function isProfile(value) {
   return Number.isInteger(value?.id) && value.id > 0 &&
@@ -12,6 +12,7 @@ function isProfile(value) {
 
 export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange, onDirtyChange }) {
   const listRequest = useRef(null)
+  const editorHeading = useRef(null)
   const [page, setPage] = useState(null)
   const [listError, setListError] = useState('')
   const [reload, setReload] = useState(0)
@@ -68,6 +69,10 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
     setRules(profile?.rules ?? '')
     setSaveError('')
     setMessage('')
+    requestAnimationFrame(() => {
+      editorHeading.current?.focus({ preventScroll: true })
+      editorHeading.current?.scrollIntoView({ block: 'nearest' })
+    })
   }
 
   function requestDeleteProfile(profile) {
@@ -165,9 +170,12 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
   }
 
   return (
-    <section aria-labelledby="profiles-heading" style={{ textAlign: 'left' }}>
-      <h2 id="profiles-heading">Strategy profiles</h2>
-      <p>Save named strategies and reuse their rules when generating a journal.</p>
+    <section className="strategy-profiles" aria-labelledby="profiles-heading">
+      <header className="sp-heading">
+        <p className="sp-eyebrow">YOUR STRATEGIES</p>
+        <h2 id="profiles-heading">Strategy profiles</h2>
+        <p>Keep your rules in one place, ready for your next journal.</p>
+      </header>
       {deleteTarget && (
         <DeleteStrategyProfileDialog
           profile={deleteTarget}
@@ -178,33 +186,47 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
           onConfirm={deleteProfile}
         />
       )}
-      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-        <section aria-labelledby="profile-list-heading" style={{ flex: '1 1 16rem', minWidth: 0 }}>
-          <h3 id="profile-list-heading">Saved profiles</h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <button type="button" onClick={() => openEditor(null)} disabled={blocked}>New profile</button>
-            <button type="button" onClick={refreshProfiles} disabled={blocked}>Refresh profiles</button>
+      <div className="sp-layout">
+        <section className="sp-library" aria-labelledby="profile-list-heading">
+          <header className="sp-library-heading">
+            <h3 id="profile-list-heading">Saved profiles</h3>
+            {page && <span className="sp-count" aria-label={`${page.total} saved profiles`}>{page.total}</span>}
+          </header>
+          <div className="sp-library-tools">
+            <button className="sp-button sp-new" type="button" onClick={() => openEditor(null)} disabled={blocked}>
+              <span aria-hidden="true">+</span> New profile
+            </button>
+            <button className="sp-button sp-subtle" type="button" onClick={refreshProfiles} disabled={blocked}>Refresh profiles</button>
           </div>
-          {loading && <p role="status">Loading profiles...</p>}
-          {listError && <p role="alert">{listError}</p>}
-          {page?.items.length === 0 && <p>No profiles yet. Create your first strategy using the form.</p>}
-          {page && (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
+          {loading && <p className="sp-list-status" role="status">Loading profiles…</p>}
+          {listError && <p className="sp-alert sp-error" role="alert">{listError}</p>}
+          {page?.items.length === 0 && <div className="sp-empty">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="1.4" /><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            <h4>Your first strategy starts here</h4>
+            <p>Give it a name and add your rules in the form. Saved profiles will appear here.</p>
+          </div>}
+          {page?.items.length > 0 && (
+            <ul className="sp-profile-list">
               {page.items.map((profile) => (
-                <li key={profile.id} style={{ border: '1px solid var(--border)', borderRadius: '6px', padding: '0.75rem', marginBottom: '0.75rem', overflowWrap: 'anywhere' }}>
-                  <h4 style={{ margin: '0 0 0.5rem' }}>{profile.name}</h4>
-                  <p style={{ whiteSpace: 'pre-wrap' }}>
+                <li key={profile.id} className={`sp-profile-card${selected?.id === profile.id ? ' sp-selected' : ''}`}>
+                  <div className="sp-profile-title">
+                    <h4>{profile.name}</h4>
+                    {selected?.id === profile.id && <span className="sp-editing">Editing</span>}
+                  </div>
+                  <p className="sp-rule-preview">
                     {profile.rules.length > 160 ? `${profile.rules.slice(0, 160)}…` : profile.rules}
                   </p>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-                    <button type="button" aria-label={`Edit ${profile.name}`} onClick={() => openEditor(profile)} disabled={blocked}>Edit</button>
+                  <div className="sp-profile-actions">
+                    <button className="sp-button sp-small" type="button" aria-label={`Edit ${profile.name}`} onClick={() => openEditor(profile)} disabled={blocked}>Edit</button>
                     <button
+                      className="sp-button sp-small sp-use"
                       type="button"
                       aria-label={`Use ${profile.name} in journal`}
                       onClick={() => onUse(profile)}
                       disabled={blocked || (selected?.id === profile.id && dirty)}
+                      aria-describedby={selected?.id === profile.id && dirty ? 'profile-unsaved-help' : undefined}
                     >Use in journal</button>
-                    <button type="button" aria-label={`Delete ${profile.name}`} onClick={() => requestDeleteProfile(profile)} disabled={blocked}>Delete</button>
+                    <button className="sp-button sp-small sp-danger sp-subtle" type="button" aria-label={`Delete ${profile.name}`} onClick={() => requestDeleteProfile(profile)} disabled={blocked}>Delete</button>
                   </div>
                 </li>
               ))}
@@ -212,43 +234,54 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
           )}
         </section>
 
-        <section aria-labelledby="profile-editor-heading" style={{ flex: '2 1 24rem', minWidth: 0 }}>
-          <h3 id="profile-editor-heading">{selected ? 'Edit strategy profile' : 'New strategy profile'}</h3>
-          <form onSubmit={saveProfile}>
-            <div style={{ marginBottom: '1rem' }}>
-              <label htmlFor="profile-name">Profile name</label>
-              <input id="profile-name" value={name} onChange={(event) => { setName(event.target.value); setMessage('') }} required maxLength={100} disabled={blocked} style={fieldStyle} />
+        <section className="sp-editor-column" aria-labelledby="profile-editor-heading">
+          <form className="sp-editor" onSubmit={saveProfile} aria-busy={saving}>
+            <header className="sp-editor-heading">
+              <div>
+                <h3 id="profile-editor-heading" ref={editorHeading} tabIndex={-1}>{selected ? 'Edit strategy profile' : 'New strategy profile'}</h3>
+                <p>{selected ? 'Refine your rules and save the updated profile.' : 'Create a reusable set of rules for your session reviews.'}</p>
+              </div>
+              <span className={`sp-badge${dirty ? ' sp-badge-dirty' : ''}`}>{dirty ? 'Unsaved changes' : selected ? 'Saved profile' : 'New profile'}</span>
+            </header>
+            <div className="sp-field">
+              <label htmlFor="profile-name">Profile name <span aria-hidden="true">Required</span></label>
+              <input id="profile-name" value={name} onChange={(event) => { setName(event.target.value); setMessage('') }} required maxLength={100} disabled={blocked} aria-describedby="profile-name-help profile-name-count" placeholder="e.g. EUR/USD trend & momentum" />
+              <div className="sp-field-footer"><p id="profile-name-help">Choose a name you’ll recognize later.</p><span id="profile-name-count">{name.length} / 100</span></div>
             </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label htmlFor="profile-rules">Profile strategy rules</label>
+            <div className="sp-field sp-rules-field">
+              <label htmlFor="profile-rules">Profile strategy rules <span aria-hidden="true">Required</span></label>
+              <p id="profile-rules-help" className="sp-help">Include bullish and bearish factors, indicator settings, and when each condition should hold.</p>
               <textarea
                 id="profile-rules"
                 value={rules}
                 onChange={(event) => { setRules(event.target.value); setMessage('') }}
-                rows={10}
+                rows={12}
                 required
                 maxLength={10000}
                 disabled={blocked}
-                style={{ ...fieldStyle, lineHeight: 1.6 }}
-                placeholder="Describe your bullish and bearish factors, indicator periods, and when conditions must hold."
+                aria-describedby="profile-rules-help profile-rules-count"
+                placeholder={'Bullish factors:\nDescribe the conditions you want checked.\n\nBearish factors:\nDescribe the conditions you want checked.\n\nTiming & context:\nState when the conditions should apply.'}
               />
+              <div className="sp-field-footer"><span>Your rules, in your own words</span><span id="profile-rules-count">{rules.length.toLocaleString()} / 10,000 characters</span></div>
             </div>
-            <button type="submit" disabled={blocked || !dirty}>
-              {saving ? 'Saving profile...' : selected ? 'Save profile changes' : 'Save profile'}
-            </button>
-            {selected && (
-              <button type="button" onClick={() => requestDeleteProfile(selected)} disabled={blocked} style={{ marginLeft: '0.5rem' }}>
-                Delete profile
+            {saveError && <div className="sp-alert sp-error" role="alert"><strong>Could not save profile</strong><p>{saveError}</p></div>}
+            {message && <p className="sp-alert sp-feedback" role="status">{message}</p>}
+            {dirty && <p className="sp-unsaved" id="profile-unsaved-help" role="status">Unsaved profile changes. Save before using this version in a journal.</p>}
+            <footer className="sp-editor-actions">
+              {selected && (
+                <button className="sp-button sp-danger sp-subtle" type="button" onClick={() => requestDeleteProfile(selected)} disabled={blocked}>Delete profile</button>
+              )}
+              <button className="sp-button sp-primary" type="submit" disabled={blocked || !dirty}>
+                {saving ? <><span className="sp-spinner" aria-hidden="true" />Saving profile…</> : selected ? 'Save profile changes' : 'Save profile'}
               </button>
-            )}
+            </footer>
+            {saving && <p className="sp-progress" role="status">Saving your strategy profile…</p>}
           </form>
-          {saveError && <p role="alert">{saveError}</p>}
-          {message && <p role="status">{message}</p>}
-          {dirty && <p role="status">Unsaved profile changes. Save before using this version in a journal.</p>}
-          <p style={{ marginTop: '1rem' }}>
-            Switching tabs keeps your profile edits here. Using a saved profile copies its rules
-            into the generation form. You can customize that copy for an individual journal.
-          </p>
+          <aside className="sp-reuse-note" aria-labelledby="profile-reuse-heading">
+            <h4 id="profile-reuse-heading">From profile to journal</h4>
+            <p><strong>Use in journal</strong> copies a saved profile’s rules into the generation form. Customize that copy for a session without changing your saved profile.</p>
+            <p>Switching tabs keeps your edits here. Updating a profile leaves past journals unchanged.</p>
+          </aside>
         </section>
       </div>
     </section>
