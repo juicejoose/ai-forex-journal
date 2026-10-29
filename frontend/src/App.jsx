@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
+import GenerateJournalForm from './GenerateJournalForm.jsx'
 import JournalView from './JournalView.jsx'
 import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
@@ -406,82 +407,26 @@ function App() {
         tabIndex={0}
         style={{ padding: '1rem' }}
       >
-        <form onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="pair">Currency pair</label>
-            <input
-              id="pair"
-              type="text"
-              value={pair}
-              readOnly
-            />
-          </div>
+        <GenerateJournalForm
+          pair={pair}
+          journalDate={journalDate}
+          timeframe={timeframe}
+          strategy={strategy}
+          notes={notes}
+          loadedProfile={loadedProfile}
+          busy={busy}
+          loading={loading}
+          error={error}
+          onDateChange={setJournalDate}
+          onStrategyChange={setStrategy}
+          onNotesChange={setNotes}
+          onChooseProfile={() => {
+            setActiveTab('profiles')
+            requestAnimationFrame(() => document.getElementById('profiles-tab')?.focus())
+          }}
+          onSubmit={handleSubmit}
+        />
 
-          <div>
-            <label htmlFor="journal-date">Journal date</label>
-            <input
-              id="journal-date"
-              type="date"
-              value={journalDate}
-              onChange={(event) => setJournalDate(event.target.value)}
-              disabled={busy}
-              aria-describedby="session-help"
-            />
-            <p id="session-help">
-              From 5 p.m. the previous day to 5 p.m. on this date, New York time.
-              Choose a completed weekday session.
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="timeframe">Candle timeframe</label>
-            <select
-              id="timeframe"
-              value={timeframe}
-              disabled
-            >
-              <option value="4h">4 hours</option>
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="strategy">Strategy rules</label>
-            <textarea
-              id="strategy"
-              rows={5}
-              value={strategy}
-              onChange={(event) => setStrategy(event.target.value)}
-              disabled={busy}
-              maxLength={10000}
-            />
-            {loadedProfile && (
-              <p role="status">
-                Loaded profile: {loadedProfile.name}
-                {strategy.trim() !== loadedProfile.rules.trim() && ' (customized for this journal)'}.
-                {' '}Changes here apply to the next journal. Save profile edits in the Strategy profiles tab.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="notes">Your observations (optional)</label>
-            <textarea
-              id="notes"
-              rows={5}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              disabled={busy}
-              maxLength={10000}
-            />
-          </div>
-
-          <button type="submit" disabled={busy}>
-            {loading ? 'Generating...' : 'Generate journal'}
-          </button>
-
-        </form>
-
-        {error && <p role="alert">{error}</p>}
         {editorTab === 'generate' && journalEditor}
       </section>
 

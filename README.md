@@ -100,6 +100,10 @@ Keep both terminals running while using the app. The frontend currently calls `h
 
 ## How generation and saving work
 
+The **Generate journal** form groups session settings, strategy rules, and optional observations into separate panels. Session settings show the fixed EUR/USD pair, 4-hour timeframe, and 5 p.m.–5 p.m. New York window. **Saved strategies** opens Strategy profiles, where **Use in journal** copies a profile into the form. The loaded profile is identified beside the rules, and edits to that copy are marked as customized for the journal. The rule and note fields show their existing 10,000-character limits.
+
+Generation disables the form controls and shows a waiting message. Required-field and generation errors appear beside the Generate button, while your inputs remain available for correction or retry. A successful request opens the journal reading view below the form.
+
 1. The frontend sends the selected date, strategy, and optional observations to the backend.
 2. The backend fetches OANDA candles, validates the session, and calculates indicators using earlier history. It excludes candles that finish after the session cutoff.
 3. `journal_grounding.py` builds a session-specific catalogue labeled `C1` through `C6`. The backend sends the user input, six session candles with indicators, summary/settings metadata, and catalogue to OpenAI. The 300 earlier candles are used for calculation but are not sent as individual candles.
