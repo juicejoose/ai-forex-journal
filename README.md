@@ -108,6 +108,10 @@ Keep both terminals running while using the app. The frontend currently calls `h
 
 Reopening a saved journal uses its stored snapshot without fetching OANDA data or generating another AI response. Updating a strategy profile does not change the strategy stored in an older journal. Candle labels are generated for each session; they are not separate database candle IDs.
 
+Generated and saved journals share a reading view with a dated session header, market price summary, and clearly separated journal sections. Use **Edit** to change the original text and **Read** to preview it; switching modes does not save or rewrite the journal. **Save journal** saves a new draft, while **Save changes** updates an existing entry. **Restore AI draft** restores the original text in the editor and still requires saving. Opening a journal brings its header into view; **Back to calendar** returns to the selected saved date without discarding edits.
+
+Expand **Strategy & observations** to review the session inputs, or **View all six candles and indicators** for the market table. The table retains open/close time ranges, open and close prices, percentage changes, and five-decimal momentum values. On narrow screens the table scrolls within its panel. Older journals without snapshots keep their readable text. The reading view formats known journal headings and Markdown-style headings while displaying other content as plain text; it does not execute embedded HTML or turn journal content into links.
+
 Grounding binds displayed evidence values to the referenced candles. It does not independently prove that every qualitative AI assessment is correct or that the chosen evidence fully supports a strategy rule. Review the draft and candle table before saving. User edits are saved separately from the original draft and are not checked by the generation-time grounding rules.
 
 ## Data storage
@@ -151,12 +155,12 @@ From the repository root, check the frontend:
 
 ```bash
 cd frontend
-node --test tests/journalCalendar.test.js
+node --test tests/*.test.js
 npm run lint
 npm run build
 ```
 
-The seven frontend calendar tests cover date placement, leap years, month/year navigation, New York date boundaries, and percentage formatting. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
+The 11 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage formatting, and preservation of journal text in the reading view. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
 
 The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OpenAI check uses the configured model with medium reasoning and a smaller 2,048-token limit. It prints the requested and returned model, response status, and usage, and exits with an error for incomplete or empty replies. The OANDA check currently uses the fixed session date 2026-10-20.
 

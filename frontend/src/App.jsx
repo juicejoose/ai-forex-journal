@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
-import MarketEvidence from './MarketEvidence.jsx'
+import JournalView from './JournalView.jsx'
 import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 
@@ -327,79 +327,24 @@ function App() {
   }
 
   const journalEditor = preview && (
-    <section>
-      <h2>
-        {savedJournal ? `Journal #${savedJournal.id}` : 'AI journal draft'}
-      </h2>
-
-      <p>Currency pair: {preview.entry.pair}</p>
-      <p>Journal date: {preview.entry.journal_date}</p>
-      <p>Candle timeframe: {preview.entry.timeframe}</p>
-      <p>Strategy rules: {preview.entry.strategy}</p>
-      <p>Your observations: {preview.entry.notes || 'None provided.'}</p>
-
-      <MarketEvidence snapshot={preview.market_data} />
-
-      <div>
-        <label htmlFor="journal-draft">Review and edit your journal</label>
-
-        <textarea
-          id="journal-draft"
-          rows={18}
-          value={editedDraft}
-          onChange={(event) => setEditedDraft(event.target.value)}
-          disabled={busy}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            lineHeight: 1.6,
-          }}
-          maxLength={20000}
-        />
-
-        <button
-          type="button"
-          onClick={() => setEditedDraft(preview.draft)}
-          disabled={busy || editedDraft === preview.draft}
-        >
-          Restore AI draft
-        </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={busy || isSaved || !editedDraft.trim()}
-      >
-        {saving ? 'Saving...' : isSaved ? 'Saved' : 'Save journal'}
-      </button>
-
-      {savedJournal && (
-        <button
-          type="button"
-          onClick={() => requestDeleteJournal(savedJournal)}
-          disabled={busy}
-          style={{ marginLeft: '0.5rem' }}
-        >
-          {deletingId === savedJournal.id ? 'Deleting...' : 'Delete journal'}
-        </button>
-      )}
-
-      {saveError && <p role="alert">{saveError}</p>}
-
-      <p role="status">
-        {isSaved
-          ? `Saved as journal #${savedJournal.id}.`
-          : savedJournal
-            ? `Unsaved changes to journal #${savedJournal.id}.`
-            : 'This draft has not been saved yet.'}
-      </p>
-
-      <p>
-        Switching tabs keeps this journal in the editor. Opening another
-        journal or generating a new one will ask before discarding unsaved changes.
-      </p>
-    </section>
+    <JournalView
+      key={preview.generation_id || savedJournal?.id || 'draft'}
+      preview={preview}
+      savedJournal={savedJournal}
+      text={editedDraft}
+      onChange={setEditedDraft}
+      onSave={handleSave}
+      onDelete={() => requestDeleteJournal(savedJournal)}
+      busy={busy}
+      saving={saving}
+      deleting={deletingId === savedJournal?.id}
+      isSaved={isSaved}
+      error={saveError}
+      onBack={editorTab === 'saved' ? () => {
+        document.querySelector('.jh-day[aria-pressed="true"]')?.focus({ preventScroll: true })
+        document.getElementById('history-heading')?.scrollIntoView({ block: 'start' })
+      } : undefined}
+    />
   )
 
   return (
