@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { journalSections } from '../src/journalPresentation.js'
+import { isShortSummary, journalSections } from '../src/journalPresentation.js'
 
 test('old free-form journals keep every line, including ordinary numbered rules', () => {
   const text = 'My original journal\n\n1. Check EMA20\n2. Wait for confirmation\n\nNotes: price stayed below 1.12345.'
@@ -26,4 +26,15 @@ test('empty edits and long journal text remain safe to display', () => {
   assert.deepEqual(journalSections(' \n\t\n'), [])
   const text = 'x'.repeat(20000)
   assert.equal(journalSections(text)[0].body, text)
+})
+
+
+test('short summaries preserve all content without an outline; old and edited formats still work', () => {
+  const text = '## Session recap\nEUR/USD closed higher: 0.25%.\n\n## Agreement and conflict\nMixed factors.\n\n## Directional consensus\nBullish session; bearish final candle.\n\n## Concerns\nMomentum slowed.'
+  const sections = journalSections(text)
+  assert.equal(isShortSummary(sections), true)
+  assert.equal(sections.map(({ title, body }) => '## ' + title + '\n' + body).join('\n'), text)
+  assert.equal(isShortSummary(journalSections('1. Market summary\nOld journal.')), false)
+  assert.equal(isShortSummary(journalSections(text + '\n\n## My notes\nExtra observations.')), false)
+  assert.equal(isShortSummary(journalSections('')), false)
 })

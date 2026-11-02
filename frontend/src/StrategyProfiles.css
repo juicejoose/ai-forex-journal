@@ -36,6 +36,7 @@
 .sp-profile-title h4 { color: var(--text-h); font-size: 0.8rem; font-weight: 600; line-height: 1.5; margin: 0; }
 .sp-editing { font-size: 0.56rem; font-weight: 550; color: var(--text-h); border: 1px solid var(--accent-border); border-radius: 4px; padding: 0.05rem 0.3rem; }
 .sp-rule-preview { white-space: pre-wrap; font-size: 0.68rem; line-height: 1.75; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sp-evaluation-label { font-size: 0.6rem; margin-top: 0.5rem; color: var(--text-h); }
 .sp-profile-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.85rem; }
 .sp-small { font-size: 0.61rem; min-height: 2rem; padding: 0.35rem 0.55rem; }
 .sp-use { background: var(--sp-surface); }

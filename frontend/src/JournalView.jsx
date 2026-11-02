@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import MarketEvidence from './MarketEvidence.jsx'
+import StrategyScores from './StrategyScores.jsx'
 import { formatDay, isDateKey } from './journalCalendar.js'
-import { journalSections } from './journalPresentation.js'
+import { isShortSummary, journalSections } from './journalPresentation.js'
 import './JournalView.css'
 
 export default function JournalView({ preview, savedJournal, text, onChange, onSave,
@@ -9,6 +10,8 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
   const [mode, setMode] = useState('read')
   const headingRef = useRef(null)
   const sections = journalSections(text)
+  const shortSummary = isShortSummary(sections)
+  const showOutline = !shortSummary && sections.some((section) => section.title)
   const entry = preview.entry
   const pair = entry.pair.replace(/^EUR_?\/?USD$/, 'EUR/USD')
   const date = isDateKey(entry.journal_date) ? formatDay(entry.journal_date) : entry.journal_date
@@ -36,6 +39,7 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
     </header>
 
     <MarketEvidence snapshot={preview.market_data} />
+    <StrategyScores evaluation={preview.rule_evaluation} snapshot={preview.market_data} />
 
     <details className="jv-context">
       <summary><span>Strategy & observations</span><span className="jv-summary-hint">Your inputs for this session</span></summary>
@@ -47,14 +51,14 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
 
     <section className="jv-report" aria-labelledby="journal-report-heading">
       <header className="jv-report-header">
-        <div><p className="jv-eyebrow">SESSION REVIEW</p><h3 id="journal-report-heading">Your journal</h3></div>
+        <div><p className="jv-eyebrow">SESSION REVIEW</p><h3 id="journal-report-heading">{shortSummary ? 'Session summary' : 'Your journal'}</h3></div>
         <div className="jv-mode" role="group" aria-label="Journal view">
           <button type="button" aria-pressed={mode === 'read'} onClick={() => setMode('read')} disabled={busy}>Read</button>
           <button type="button" aria-pressed={mode === 'edit'} onClick={() => setMode('edit')} disabled={busy}>Edit</button>
         </div>
       </header>
-      {mode === 'read' ? <div className={`jv-reading-layout${sections.some((section) => section.title) ? '' : ' jv-no-outline'}`}>
-        {sections.some((section) => section.title) && <nav className="jv-outline" aria-label="Journal sections">
+      {mode === 'read' ? <div className={`jv-reading-layout${showOutline ? '' : ' jv-no-outline'}`}>
+        {showOutline && <nav className="jv-outline" aria-label="Journal sections">
           <span className="jv-eyebrow">IN THIS JOURNAL</span>
           {sections.map((section, index) => section.title && <a key={index} href={`#journal-section-${index}`}>{section.title}</a>)}
         </nav>}

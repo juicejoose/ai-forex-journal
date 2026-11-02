@@ -195,7 +195,7 @@ class JournalEvidenceTests(unittest.TestCase):
     def test_write_transaction_rolls_back_on_error(self):
         with self.assertRaises(RuntimeError):
             with db.get_connection(write=True) as connection:
-                connection.execute("INSERT INTO generated_drafts VALUES ('test', '{}', 'draft', '{}', 'today')")
+                connection.execute("INSERT INTO generated_drafts (id, entry_json, original_draft, market_data_json, created_at) VALUES ('test', '{}', 'draft', '{}', 'today')")
                 raise RuntimeError("rollback")
         with db.get_connection() as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM generated_drafts").fetchone()[0], 0)

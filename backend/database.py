@@ -80,6 +80,13 @@ def init_db():
                 updated_at TEXT NOT NULL
             )
         """)
+        for table in ("journals", "generated_drafts"):
+            columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+            if "rule_evaluation_json" not in columns:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN rule_evaluation_json TEXT")
+        profile_columns = {row["name"] for row in connection.execute("PRAGMA table_info(strategy_profiles)")}
+        if "rule_set_id" not in profile_columns:
+            connection.execute("ALTER TABLE strategy_profiles ADD COLUMN rule_set_id TEXT")
 
 
 def _journal_from_row(row):
@@ -88,23 +95,26 @@ def _journal_from_row(row):
     journal = dict(row)
     snapshot = journal.pop("market_data_json")
     journal["market_data"] = json.loads(snapshot) if snapshot is not None else None
+    evaluation = journal.pop("rule_evaluation_json")
+    journal["rule_evaluation"] = json.loads(evaluation) if evaluation is not None else None
     return journal
 
 
-def store_generated_draft(entry, original_draft, market_data):
+def store_generated_draft(entry, original_draft, market_data, rule_evaluation=None):
     """Keep the server's original evidence until the user saves the journal."""
     generation_id = str(uuid4())
     with get_connection(write=True) as connection:
         connection.execute(
             """
             INSERT INTO generated_drafts
-                (id, entry_json, original_draft, market_data_json, created_at)
-            VALUES (?, ?, ?, ?, ?)
+                (id, entry_json, original_draft, market_data_json, created_at, rule_evaluation_json)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 generation_id, json.dumps(entry, allow_nan=False), original_draft,
                 json.dumps(market_data, allow_nan=False),
                 datetime.now(timezone.utc).isoformat(),
+                json.dumps(rule_evaluation, allow_nan=False) if rule_evaluation is not None else None,
             ),
         )
     return generation_id
@@ -133,13 +143,13 @@ def save_generated_journal(generation_id, edited_draft):
             INSERT INTO journals (
                 pair, journal_date, timeframe, strategy, notes,
                 original_draft, edited_draft, created_at, updated_at,
-                market_data_json, generation_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                market_data_json, generation_id, rule_evaluation_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry["pair"], entry["journal_date"], entry["timeframe"],
                 entry["strategy"], entry["notes"], draft["original_draft"],
-                edited_draft, now, now, draft["market_data_json"], generation_id,
+                edited_draft, now, now, draft["market_data_json"], generation_id, draft["rule_evaluation_json"],
             ),
         )
         connection.execute("DELETE FROM generated_drafts WHERE id = ?", (generation_id,))
@@ -287,16 +297,16 @@ def delete_strategy_profile(profile_id):
         return cursor.rowcount == 1
 
 
-def insert_strategy_profile(name, rules):
+def insert_strategy_profile(name, rules, rule_set_id=None):
     now = datetime.now(timezone.utc).isoformat()
     try:
         with get_connection(write=True) as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO strategy_profiles (name, rules, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO strategy_profiles (name, rules, created_at, updated_at, rule_set_id)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (name, rules, now, now),
+                (name, rules, now, now, rule_set_id),
             )
             return dict(connection.execute(
                 "SELECT * FROM strategy_profiles WHERE id = ?", (cursor.lastrowid,),
@@ -307,16 +317,16 @@ def insert_strategy_profile(name, rules):
         raise
 
 
-def update_strategy_profile(profile_id, name, rules):
+def update_strategy_profile(profile_id, name, rules, rule_set_id=None):
     now = datetime.now(timezone.utc).isoformat()
     try:
         with get_connection(write=True) as connection:
             cursor = connection.execute(
                 """
-                UPDATE strategy_profiles SET name = ?, rules = ?, updated_at = ?
+                UPDATE strategy_profiles SET name = ?, rules = ?, updated_at = ?, rule_set_id = ?
                 WHERE id = ?
                 """,
-                (name, rules, now, profile_id),
+                (name, rules, now, rule_set_id, profile_id),
             )
             if cursor.rowcount == 0:
                 return None

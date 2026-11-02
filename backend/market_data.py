@@ -185,7 +185,9 @@ def get_market_data(journal_date: date) -> dict:
     )
 
     rows = []
-    for index in range(len(warmup), len(series)):
+    # Retain two preceding trading candles for the three-candle momentum rule.
+    # They supply context only; the session still contains exactly six candles.
+    for index in range(len(warmup) - 2, len(series)):
         candle = series[index]
         squeeze_values = {key: values[index] for key, values in squeeze.items()}
         if (ema_values[index] is None or sma_values[index] is None
@@ -213,7 +215,7 @@ def get_market_data(journal_date: date) -> dict:
 
     change = session[-1].close - session[0].open
     return {
-        "schema_version": 1,
+        "schema_version": 3,
         "source": "OANDA",
         "environment": "practice",
         "instrument": "EUR_USD",
@@ -258,5 +260,7 @@ def get_market_data(journal_date: date) -> dict:
             "change_percent": 100 * change / session[0].open,
             "price_direction": "up" if change > 0 else "down" if change < 0 else "unchanged",
         },
-        "candles": rows,
+        "previous_candle": rows[1],  # Compatibility for v1/v2 rules and earlier consumers.
+        "previous_candles": rows[:2],  # Oldest to newest; P-1 then P0.
+        "candles": rows[2:],
     }
