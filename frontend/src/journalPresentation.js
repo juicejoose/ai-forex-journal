@@ -6,7 +6,20 @@ const sectionTitles = new Set([
   '5. Trade concerns',
   '6. Overall directional bias',
   'Candle evidence — New York time; indicators at candle close',
+  '2. Strategy score',
+  '3. Candle-by-candle factors',
+  '4. AI session commentary',
+  '5. AI agreement and conflict',
+  '6. AI limitations and context',
+  'Rule definitions',
 ])
+
+const summaryTitles = ['Session recap', 'Agreement and conflict', 'Directional consensus', 'Concerns']
+
+export function isShortSummary(sections) {
+  return sections.length === summaryTitles.length &&
+    sections.every((section, index) => section.title === summaryTitles[index])
+}
 
 // Presentation only: the original text remains the editor/save source of truth.
 // Unknown formats stay readable as plain text; no HTML or links are executed.

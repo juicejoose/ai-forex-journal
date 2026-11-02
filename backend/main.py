@@ -22,6 +22,9 @@ from journal_grounding import (
     JOURNAL_INSTRUCTIONS, InvalidJournalEvidence, build_evidence_catalog,
     render_journal, response_format,
 )
+from strategy_rules import RULE_SET_ID, SUPPORTED_RULE_SET_IDS, RuleSetId, evaluate_strategy, rule_set_definition
+from scored_journal import (SCORED_JOURNAL_INSTRUCTIONS, scored_response_format,
+                            render_scored_journal, build_summary_context)
 
 load_dotenv(Path(__file__).with_name(".env"))
 
@@ -47,13 +50,14 @@ app.add_middleware(
 )
 
 class JournalInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     pair: str = Field(min_length=1, max_length=20)
     journal_date: date
     timeframe: Literal["15m", "1h", "4h", "1d"]
     strategy: str = Field(min_length=1, max_length=10000)
     notes: str = Field(default="", max_length=10000)
+    rule_set_id: RuleSetId | None = None
 
 class JournalSaveInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -71,6 +75,7 @@ class StrategyProfileInput(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     rules: str = Field(min_length=1, max_length=10000)
+    rule_set_id: RuleSetId | None = None
 
 @app.get("/")
 def home():
@@ -89,7 +94,9 @@ def read_market_data(
 
 @app.post("/journal/preview")
 def preview_journal(entry: JournalInput):
-    return entry.model_dump(mode="json")
+    if entry.rule_set_id:
+        entry = entry.model_copy(update={"strategy": rule_set_definition(entry.rule_set_id)["rules"]})
+    return entry.model_dump(mode="json", exclude_none=True)
 
 @app.post("/journal/generate")
 def generate_journal(entry: JournalInput):
@@ -101,20 +108,27 @@ def generate_journal(entry: JournalInput):
         )
     entry = entry.model_copy(update={"pair": "EURUSD"})
     market_data = read_market_data(entry.journal_date)
-    entry_data = entry.model_dump(mode="json")
+    if entry.rule_set_id:
+        entry = entry.model_copy(update={"strategy": rule_set_definition(entry.rule_set_id)["rules"]})
+    entry_data = entry.model_dump(mode="json", exclude_none=True)
+    evaluation = None
     try:
         evidence_catalog = build_evidence_catalog(market_data)
+        if entry.rule_set_id:
+            evaluation = evaluate_strategy(market_data, entry.rule_set_id)
     except InvalidJournalEvidence as exc:
         logger.warning("Journal market evidence rejected: %s", exc)
         raise HTTPException(status_code=502, detail="The market data could not be prepared for journal evidence.") from None
+    ai_input = {"entry": entry_data, "market_data": market_data, "evidence_catalog": evidence_catalog}
+    if evaluation is not None:
+        ai_input["rule_evaluation"] = evaluation
+        ai_input["summary_context"] = build_summary_context(market_data, evaluation)
     try:
         response = client.responses.create(
             model=os.getenv("OPENAI_MODEL", "gpt-6.1-sol"),
-            instructions=JOURNAL_INSTRUCTIONS,
-            input=json.dumps({
-                "entry": entry_data, "market_data": market_data, "evidence_catalog": evidence_catalog,
-            }, allow_nan=False),
-            text={"format": response_format()},
+            instructions=SCORED_JOURNAL_INSTRUCTIONS if evaluation is not None else JOURNAL_INSTRUCTIONS,
+            input=json.dumps(ai_input, allow_nan=False),
+            text={"format": scored_response_format() if evaluation is not None else response_format()},
             reasoning={"effort": "medium"},
             # This budget includes reasoning tokens as well as the structured draft.
             max_output_tokens=8000,
@@ -137,7 +151,8 @@ def generate_journal(entry: JournalInput):
         )
 
     try:
-        draft = render_journal(response.output_text, market_data, entry.strategy)
+        draft = (render_scored_journal(response.output_text, market_data, evaluation)
+                 if evaluation is not None else render_journal(response.output_text, market_data, entry.strategy))
     except InvalidJournalEvidence as exc:
         logger.warning("AI journal evidence rejected: %s", exc)
         raise HTTPException(
@@ -148,12 +163,13 @@ def generate_journal(entry: JournalInput):
             ),
         ) from None
 
-    generation_id = store_generated_draft(entry_data, draft, market_data)
+    generation_id = store_generated_draft(entry_data, draft, market_data, evaluation)
     return {
         "generation_id": generation_id,
         "entry": entry_data,
         "draft": draft,
         "market_data": market_data,
+        "rule_evaluation": evaluation,
     }
 
 @app.post("/journals", status_code=201)
@@ -212,6 +228,11 @@ def remove_journal(journal_id: int):
     return Response(status_code=204)
 
 
+@app.get("/strategy-rule-sets")
+def list_rule_sets():
+    return {"items": [rule_set_definition(rule_id) for rule_id in SUPPORTED_RULE_SET_IDS], "default_id": RULE_SET_ID}
+
+
 @app.get("/strategy-profiles")
 def list_strategy_profiles():
     return fetch_strategy_profiles()
@@ -228,7 +249,7 @@ def read_strategy_profile(profile_id: int):
 @app.post("/strategy-profiles", status_code=201)
 def create_strategy_profile(payload: StrategyProfileInput):
     try:
-        return insert_strategy_profile(payload.name, payload.rules)
+        return insert_strategy_profile(payload.name, rule_set_definition(payload.rule_set_id)["rules"] if payload.rule_set_id else payload.rules, payload.rule_set_id)
     except DuplicateStrategyProfileError:
         raise HTTPException(
             status_code=409,
@@ -246,7 +267,7 @@ def remove_strategy_profile(profile_id: int):
 @app.patch("/strategy-profiles/{profile_id}")
 def edit_strategy_profile(profile_id: int, payload: StrategyProfileInput):
     try:
-        profile = update_strategy_profile(profile_id, payload.name, payload.rules)
+        profile = update_strategy_profile(profile_id, payload.name, rule_set_definition(payload.rule_set_id)["rules"] if payload.rule_set_id else payload.rules, payload.rule_set_id)
     except DuplicateStrategyProfileError:
         raise HTTPException(
             status_code=409,

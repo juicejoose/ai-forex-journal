@@ -1,0 +1,7 @@
+.rule-choice { margin-bottom: 1rem; text-align: left; }
+.rule-choice > label { display: block; font-size: 0.75rem; font-weight: 550; color: var(--text-h); margin-bottom: 0.45rem; }
+.rule-choice > select { width: 100%; max-width: 100%; min-width: 0; min-height: 2.65rem; padding: 0.65rem 0.75rem; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text-h); font-family: inherit; font-size: 0.8rem; }
+.rule-choice > p, .rule-choice > div { margin-top: 0.5rem; font-size: 0.68rem; line-height: 1.7; }
+.rule-choice select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.rule-choice button { margin-top: 0.4rem; }
+@media (max-width: 440px) { .rule-choice > select { font-size: 1rem; } }

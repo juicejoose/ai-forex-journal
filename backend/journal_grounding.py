@@ -115,9 +115,10 @@ from those at session end using the appropriate evidence references.
 Squeeze ON is compression, not a breakout. Positive momentum can be falling.
 Lime is positive/increasing; green positive/not increasing; red nonpositive/
 decreasing; maroon nonpositive/not decreasing. Use the supplied released flag.
-A null RSI is undefined, not zero or neutral. Warmup metadata is not a history
-series: the preceding indicator values needed to establish a cross on the first
-session candle are unavailable. OHLC does not establish intrabar event order.
+A null RSI is undefined, not zero or neutral. This written-strategy review can
+cite only the session candles in evidence_catalog. Do not establish a cross on
+the first session candle using context outside that catalogue. Warmup metadata
+is not a history series. OHLC does not establish intrabar event order.
 Do not infer lower-timeframe signals, traded volume from price_updates, missing
 indicators, news, future outcomes, or buy/sell recommendations, entries, stops,
 or targets. This is retrospective analysis available only after candle close.

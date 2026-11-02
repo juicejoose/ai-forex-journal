@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
 import GenerateJournalForm from './GenerateJournalForm.jsx'
 import JournalView from './JournalView.jsx'
@@ -21,6 +21,10 @@ function App() {
   const [journalDate, setJournalDate] = useState('')
   const timeframe = '4h'
   const [strategy, setStrategy] = useState('')
+  const [ruleSetId, setRuleSetId] = useState('four_factor_v4')
+  const [ruleDefinitions, setRuleDefinitions] = useState([])
+  const [ruleError, setRuleError] = useState('')
+  const [ruleReload, setRuleReload] = useState(0)
   const [loadedProfile, setLoadedProfile] = useState(null)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileDirty, setProfileDirty] = useState(false)
@@ -38,10 +42,36 @@ function App() {
   const [deleteError, setDeleteError] = useState('')
   const [deleteMessage, setDeleteMessage] = useState('')
 
+  const ruleDefinition = ruleDefinitions.find((item) => item.id === ruleSetId)
   const busy = loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
     savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
+
+  useEffect(() => {
+    const controller = new AbortController()
+    async function loadRuleSet() {
+      try {
+        const response = await fetch('http://127.0.0.1:8000/strategy-rule-sets', { signal: controller.signal })
+        const data = await response.json()
+        if (!response.ok || !Array.isArray(data?.items) ||
+            !['four_factor_v4', 'four_factor_v3', 'four_factor_v2', 'four_factor_v1'].every((id) => data.items.some((item) =>
+              item.id === id && typeof item.rules === 'string' && item.factors?.length === 4))) {
+          throw new Error('Invalid strategy definition')
+        }
+        if (!controller.signal.aborted) setRuleDefinitions(data.items)
+      } catch {
+        if (!controller.signal.aborted) setRuleError('Could not load the scored strategy. Check that the updated backend is running, then retry.')
+      }
+    }
+    loadRuleSet()
+    return () => controller.abort()
+  }, [ruleReload])
+
+  function retryRuleSet() {
+    setRuleError('')
+    setRuleReload((value) => value + 1)
+  }
 
   function handleTabKeyDown(event, index) {
     if (busy) return
@@ -65,7 +95,8 @@ function App() {
       return
     }
     setStrategy(profile.rules)
-    setLoadedProfile({ id: profile.id, name: profile.name, rules: profile.rules })
+    setRuleSetId(profile.rule_set_id ?? '')
+    setLoadedProfile({ id: profile.id, name: profile.name, rules: profile.rules, rule_set_id: profile.rule_set_id ?? null })
     setError('')
     setActiveTab('generate')
     requestAnimationFrame(() => document.getElementById('strategy')?.focus())
@@ -82,7 +113,12 @@ function App() {
     setError('')
     const trimmedPair = pair.trim()
     const trimmedNotes = notes.trim()
-    const trimmedStrategy = strategy.trim()
+    const trimmedStrategy = (ruleSetId ? ruleDefinition?.rules ?? '' : strategy).trim()
+
+    if (ruleSetId && !ruleDefinition) {
+      setError('The scored strategy must finish loading before generating a journal.')
+      return
+    }
 
 
     if (!trimmedPair) {
@@ -124,6 +160,7 @@ function App() {
             timeframe,
             strategy: trimmedStrategy,
             notes: trimmedNotes,
+            rule_set_id: ruleSetId || null,
           }),
         }
       )
@@ -143,7 +180,8 @@ function App() {
         !data?.entry || typeof data?.draft !== 'string' || !data.draft.trim() ||
         typeof data.generation_id !== 'string' ||
         !data.market_data?.session?.complete ||
-        !Array.isArray(data.market_data?.candles) || data.market_data.candles.length !== 6
+        !Array.isArray(data.market_data?.candles) || data.market_data.candles.length !== 6 ||
+        (ruleSetId && (data.rule_evaluation?.rule_set?.id !== ruleSetId || data.rule_evaluation?.candles?.length !== 6))
       ) {
         throw new Error('The server did not return a journal draft.')
       }
@@ -265,10 +303,12 @@ function App() {
           timeframe: data.timeframe,
           strategy: data.strategy,
           notes: data.notes,
+          rule_set_id: data.rule_evaluation?.rule_set?.id ?? null,
         },
         draft: data.original_draft,
         generation_id: data.generation_id,
         market_data: data.market_data ?? null,
+        rule_evaluation: data.rule_evaluation ?? null,
       })
 
       setEditedDraft(data.edited_draft)
@@ -411,7 +451,13 @@ function App() {
           pair={pair}
           journalDate={journalDate}
           timeframe={timeframe}
-          strategy={strategy}
+          strategy={ruleSetId ? ruleDefinition?.rules ?? '' : strategy}
+          ruleSetId={ruleSetId}
+          ruleDefinition={ruleDefinition}
+          ruleDefinitions={ruleDefinitions}
+          ruleError={ruleError}
+          onRetryRules={retryRuleSet}
+          onRuleSetChange={(value) => { setRuleSetId(value); setLoadedProfile(null); setError('') }}
           notes={notes}
           loadedProfile={loadedProfile}
           busy={busy}
@@ -460,6 +506,9 @@ function App() {
         style={{ padding: '1rem' }}
       >
         <StrategyProfiles
+          ruleDefinitions={ruleDefinitions}
+          ruleError={ruleError}
+          onRetryRules={retryRuleSet}
           busy={busy}
           onUse={handleUseProfile}
           onDeleted={handleProfileDeleted}

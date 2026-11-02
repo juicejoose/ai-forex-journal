@@ -1,4 +1,5 @@
 import './GenerateJournalForm.css'
+import RuleSetSelect from './RuleSetSelect.jsx'
 
 function Arrow() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -6,8 +7,8 @@ function Arrow() {
 
 export default function GenerateJournalForm({ pair, journalDate, timeframe, strategy, notes,
   loadedProfile, busy, loading, error, onDateChange, onStrategyChange, onNotesChange,
-  onChooseProfile, onSubmit }) {
-  const customized = loadedProfile && strategy.trim() !== loadedProfile.rules.trim()
+  onChooseProfile, onSubmit, ruleSetId, ruleDefinition, ruleDefinitions, ruleError, onRetryRules, onRuleSetChange }) {
+  const customized = !ruleSetId && loadedProfile && strategy.trim() !== loadedProfile.rules.trim()
 
   return <section className="generate-form" aria-labelledby="generate-heading">
     <header className="gf-heading">
@@ -47,13 +48,14 @@ export default function GenerateJournalForm({ pair, journalDate, timeframe, stra
               <span className="gf-step" aria-hidden="true">02</span><h3 id="strategy-heading"><label htmlFor="strategy">Strategy rules</label></h3>
               <button className="gf-secondary" type="button" onClick={onChooseProfile} disabled={busy}>Saved strategies <Arrow /></button>
             </header>
-            <p id="strategy-help" className="gf-help gf-intro">Describe your bullish and bearish conditions, including any thresholds or timing that matter.</p>
+            <RuleSetSelect id="generation-rule-set" value={ruleSetId} onChange={onRuleSetChange} definitions={ruleDefinitions} error={ruleError} onRetry={onRetryRules} disabled={busy} />
+            <p id="strategy-help" className="gf-help gf-intro">{ruleSetId ? 'The saved rule definitions below are fixed for this version. Add session-specific context in Your observations.' : 'Describe your bullish and bearish conditions, including any thresholds or timing that matter.'}</p>
             {loadedProfile && <div className="gf-profile" role="status" id="loaded-profile-help">
               <p><span>Loaded profile</span><strong>{loadedProfile.name}</strong>{customized && <span className="gf-customized">Customized for this journal</span>}</p>
-              <p>Changes here apply to this journal. Save profile edits in the Strategy profiles tab.</p>
+              <p>{ruleSetId ? 'This profile uses the fixed four-factor scoring rules.' : 'Changes here apply to this journal. Save profile edits in the Strategy profiles tab.'}</p>
             </div>}
-            <textarea id="strategy" rows={8} value={strategy} onChange={(event) => onStrategyChange(event.target.value)} disabled={busy} maxLength={10000} aria-required="true" aria-describedby={loadedProfile ? 'strategy-help loaded-profile-help strategy-count' : 'strategy-help strategy-count'} placeholder={'Bullish factors:\nDescribe the conditions you want checked.\n\nBearish factors:\nDescribe the conditions you want checked.'} />
-            <div className="gf-field-footer"><span>Required</span><span id="strategy-count">{strategy.length.toLocaleString()} / 10,000 characters</span></div>
+            <textarea id="strategy" rows={8} value={strategy} onChange={(event) => onStrategyChange(event.target.value)} readOnly={Boolean(ruleSetId)} disabled={busy} maxLength={10000} aria-required="true" aria-describedby={loadedProfile ? 'strategy-help loaded-profile-help strategy-count' : 'strategy-help strategy-count'} placeholder={'Bullish factors:\nDescribe the conditions you want checked.\n\nBearish factors:\nDescribe the conditions you want checked.'} />
+            <div className="gf-field-footer"><span>{ruleSetId ? `Fixed rules · Version ${ruleDefinition?.version ?? '…'}` : 'Required'}</span><span id="strategy-count">{strategy.length.toLocaleString()} / 10,000 characters</span></div>
           </section>
           <section className="gf-card gf-notes" aria-labelledby="notes-heading">
             <header className="gf-card-header"><span className="gf-step" aria-hidden="true">03</span><h3 id="notes-heading"><label htmlFor="notes">Your observations <span className="gf-optional">(optional)</span></label></h3></header>
@@ -65,7 +67,7 @@ export default function GenerateJournalForm({ pair, journalDate, timeframe, stra
             {error && <div className="gf-error" role="alert"><strong>Could not generate journal</strong><p>{error}</p></div>}
             <div className="gf-submit-row">
               <p>Review and edit your draft<br />before saving it to your journal.</p>
-              <button className="gf-primary" type="submit" disabled={busy}>{loading ? <><span className="gf-spinner" aria-hidden="true" />Generating journal…</> : <>Generate journal <Arrow /></>}</button>
+              <button className="gf-primary" type="submit" disabled={busy || Boolean(ruleSetId && !ruleDefinition)}>{loading ? <><span className="gf-spinner" aria-hidden="true" />Generating journal…</> : <>Generate journal <Arrow /></>}</button>
             </div>
             {loading && <p className="gf-progress" role="status">Preparing your journal. This may take a moment.</p>}
           </div>
