@@ -9,6 +9,8 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 - **Generate journal:** choose a session date, select the scored four-factor strategy or a written strategy, add optional observations, then generate and edit a journal.
 - **Strategy scores:** inspect each candle's factor outcomes, bullish/bearish points and alignment, with v4 averaging all six candles and showing final-candle bias separately. Saved calculations remain separate from editable journal text.
 - **Saved journals:** browse a month calendar, select a session date to see its saved entries, then reopen, edit, restore the original draft, or delete after confirmation. Green/red days show the saved EUR/USD session's positive/negative price change.
+- **Custom range journal:** choose inclusive start and end dates for up to 31 calendar days, review all completed H4 candles with the four-factor v4 rules, and generate a short summary of the whole period.
+- **Saved custom journals:** browse a separate date-range library, reopen the original calculations, edit or restore the summary, and delete after confirmation.
 - **Strategy profiles:** save named rule sets, update them, copy their rules into the generation form, or delete a profile after confirmation.
 - **Market evidence:** inspect all six candles, including open/close times, open and close prices, candle change percentage, and indicators. Momentum displays five decimal places.
 
@@ -28,7 +30,21 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 
 For example, a journal dated **2026-10-20** covers **2026-10-19 at 5:00 p.m. through 2026-10-20 at 5:00 p.m. New York time**. Daylight saving time is handled using that timezone.
 
-Weekend dates and sessions whose closing cutoff has not passed are rejected. Holidays or missing provider data may also prevent a full session from being available. MACD is not included.
+Daily journals reject weekend dates and sessions whose closing cutoff has not passed. Custom ranges skip weekend session dates and require the selected end date's 5 p.m. cutoff to have passed. Holidays or missing provider data may also prevent a full session from being available. MACD is not included.
+
+## Custom date-range journals
+
+Open **Custom range journal**, choose a start and end date, and optionally add observations. Both dates are included. For example, **October 19–23, 2026** includes five trading sessions: **October 18 at 5 p.m. through October 23 at 5 p.m. New York time**, with **30 H4 candles**. Weekend dates are skipped; if an endpoint is a weekend, the actual analysis bounds use the first and last included weekday. A weekend-only range is rejected. The form previews the actual coverage before generation.
+
+The initial limit is **31 calendar days**, including both endpoints, to bound provider requests and AI input size. This is an application limit. Every included weekday must have all six completed H4 candles; partial holiday sessions, missing candles, and unfinished ranges are rejected rather than silently omitted. The selected end date's 5 p.m. New York cutoff must have passed even when it falls on a weekend.
+
+Range generation currently uses **EUR/USD, H4, and the built-in four-factor v4 strategy**. Written-strategy mode and versioned strategy profiles remain available in daily generation. Indicators are calculated continuously from 300 warmup candles through the entire range, without resetting at daily boundaries. The two earlier completed candles support the first candle's consecutive-close and momentum rules. Later days use the preceding candles in the range, including across regular weekend/DST breaks. Only data available by the range cutoff is used.
+
+Every completed H4 candle has equal weight. Average bullish points are total bullish points divided by the number of range candles; bearish points are averaged separately, each out of five. Because each accepted day has six candles, this equals averaging the daily scores equally. Missing factor inputs withhold the overall average instead of dropping candles from the denominator. The final candle's **Range-end bias** remains separate. Alignment measures how strongly the chosen rules agree, not a probability of a future price move. **Range change** uses the first candle's open and last candle's close; it is not an average of daily returns.
+
+The backend sends the full range snapshot, globally numbered candle evidence (`C1` through the final candle), all Python factor results, daily score summaries, and the official range average to OpenAI. The short journal uses **Range recap**, **Agreement and conflict**, **Directional consensus**, and **Concerns**. Its official figures and bias are rendered from Python results. The detailed tables show every range candle and scroll within bounded panels. The evaluation identifies this mode with `analysis_kind="custom_range"`, `rule_set.scope="custom_range"`, and `summary.method="range_average"`; the per-candle rule version remains v4.
+
+Click **Save journal** to add the result to **Saved custom journals**. That library lists date ranges and their stored market returns, with 20 entries per page. Opening an entry reuses its saved evidence without contacting either provider. Editing or restoring the text requires **Save changes**. The daily calendar and custom library have independent entries and deletion actions, while both use the existing SQLite database. Switching tabs preserves current form inputs and unsaved journal edits; refreshing the page loses unsaved browser state.
 
 ## Local setup
 
@@ -158,7 +174,7 @@ Version 1 retains RSI 30/70 and one point per factor (four possible points). Ver
 
 ## Data storage
 
-SQLite data lives at `backend/data/journal.db`. It contains saved journals, staged generated drafts, and strategy profiles. The database is local to this checkout and is ignored by Git; committing or pushing code does not back up your journals. To make a simple file backup, stop the backend and copy the database to a separate location.
+SQLite data lives at `backend/data/journal.db`. It contains saved daily and custom-range journals, staged generated drafts, and strategy profiles. Custom ranges use the separate `range_journals` and `range_generated_drafts` tables, created automatically on backend startup. Daily and custom IDs can overlap because they refer to different tables and API routes. Existing daily entries, profiles, and pending drafts remain intact. The database is local to this checkout and is ignored by Git; committing or pushing code does not back up your journals. To make a simple file backup, stop the backend and copy the database to a separate location.
 
 Drafts do not appear in **Saved journals** until you click **Save journal**. Unsaved editor changes are held in the browser and can be lost on refresh. Older journals created before market snapshots were added remain readable but have no stored candle evidence.
 
@@ -181,7 +197,7 @@ cd backend
 ./.venv/bin/python -B -m unittest discover -v
 ```
 
-The current backend suite contains **151 tests**:
+The current backend suite contains **174 tests**:
 
 | File | Tests | Coverage |
 | --- | ---: | --- |
@@ -197,8 +213,9 @@ The current backend suite contains **151 tests**:
 | `test_momentum_slowdown.py` | 14 | Three-candle deltas, half-points, mirrored bearish behavior, numeric equality, zero-crossing resets, missing history, weekend/DST continuity, old versions and no future influence |
 | `test_journal_summary.py` | 8 | Short output, canonical market facts, mismatched directions/method rejection, incomplete averages, word limit, mixed/neutral results and old-text preservation |
 | `test_session_average.py` | 14 | Equal averaging, late reversals, half points, missing data, mixed/neutral sessions, legacy methods, canonical AI inputs, profile upgrades and immutable saving |
+| `test_custom_range.py` | 23 | Inclusive dates and limits, full-session coverage, continuous indicators, weekends/DST, equal range averaging, global candle references, AI validation, immutable saving, daily/custom isolation, deletion, pagination and startup preservation |
 
-These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 151 tests` and `OK`.
+These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 174 tests` and `OK`.
 
 From the repository root, check the frontend:
 
@@ -209,7 +226,7 @@ npm run lint
 npm run build
 ```
 
-The 12 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage formatting, and preservation of journal text in the reading view. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
+The 17 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage formatting, range validation and preview mapping, and preservation of daily/range journal text in the reading view. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
 
 The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OpenAI check uses the configured model with medium reasoning and a smaller 2,048-token limit. It prints the requested and returned model, response status, and usage, and exits with an error for incomplete or empty replies. The OANDA check currently uses the fixed session date 2026-10-20.
 
@@ -217,6 +234,7 @@ The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are 
 
 - **Cannot connect / Failed to fetch:** confirm the backend is running on port 8000 and open the frontend on port 5173.
 - **Session not finished or incomplete:** choose a completed weekday session. Generation needs all six completed candles and enough earlier history.
+- **Custom range rejected:** use at most 31 calendar days, include a weekday, and wait until the selected end date's 5 p.m. New York cutoff. Every included weekday needs six completed candles; shorten or move a range that includes missing data or a shortened holiday session.
 - **OANDA access error:** check the practice account credentials and required practice API URL in `backend/.env`.
 - **AI request failed:** check API access, the configured model, and the error shown by the app. Failed generation does not create a saved journal.
 - **AI draft failed its evidence checks:** the generated response failed validation. No new draft was staged; you can try generating again.

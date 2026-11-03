@@ -26,6 +26,11 @@ from strategy_rules import RULE_SET_ID, SUPPORTED_RULE_SET_IDS, RuleSetId, evalu
 from scored_journal import (SCORED_JOURNAL_INSTRUCTIONS, scored_response_format,
                             render_scored_journal, build_summary_context)
 
+from date_range import (MAX_RANGE_DAYS, get_range_market_data, build_range_evidence_catalog,
+                        evaluate_range_strategy, range_rule_definition)
+from range_database import (init_range_db, store_range_draft, save_range_journal,
+                            fetch_range_journal, fetch_range_journals, update_range_journal, delete_range_journal)
+
 load_dotenv(Path(__file__).with_name(".env"))
 
 client = OpenAI(timeout=90.0, max_retries=0)
@@ -34,6 +39,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    init_range_db()
     yield
 
 
@@ -58,6 +64,16 @@ class JournalInput(BaseModel):
     strategy: str = Field(min_length=1, max_length=10000)
     notes: str = Field(default="", max_length=10000)
     rule_set_id: RuleSetId | None = None
+
+class RangeJournalInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    start_date: date
+    end_date: date
+    pair: Literal["EURUSD"] = "EURUSD"
+    timeframe: Literal["4h"] = "4h"
+    rule_set_id: Literal["four_factor_v4"] = "four_factor_v4"
+    notes: str = Field(default="", max_length=10000)
 
 class JournalSaveInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -119,6 +135,10 @@ def generate_journal(entry: JournalInput):
     except InvalidJournalEvidence as exc:
         logger.warning("Journal market evidence rejected: %s", exc)
         raise HTTPException(status_code=502, detail="The market data could not be prepared for journal evidence.") from None
+    return _generate_draft(entry_data, market_data, evidence_catalog, evaluation)
+
+
+def _generate_draft(entry_data, market_data, evidence_catalog, evaluation, *, custom_range=False):
     ai_input = {"entry": entry_data, "market_data": market_data, "evidence_catalog": evidence_catalog}
     if evaluation is not None:
         ai_input["rule_evaluation"] = evaluation
@@ -152,7 +172,7 @@ def generate_journal(entry: JournalInput):
 
     try:
         draft = (render_scored_journal(response.output_text, market_data, evaluation)
-                 if evaluation is not None else render_journal(response.output_text, market_data, entry.strategy))
+                 if evaluation is not None else render_journal(response.output_text, market_data, entry_data["strategy"]))
     except InvalidJournalEvidence as exc:
         logger.warning("AI journal evidence rejected: %s", exc)
         raise HTTPException(
@@ -163,7 +183,8 @@ def generate_journal(entry: JournalInput):
             ),
         ) from None
 
-    generation_id = store_generated_draft(entry_data, draft, market_data, evaluation)
+    store = store_range_draft if custom_range else store_generated_draft
+    generation_id = store(entry_data, draft, market_data, evaluation)
     return {
         "generation_id": generation_id,
         "entry": entry_data,
@@ -276,3 +297,64 @@ def edit_strategy_profile(profile_id: int, payload: StrategyProfileInput):
     if profile is None:
         raise HTTPException(status_code=404, detail="Strategy profile not found.")
     return profile
+
+
+@app.get("/range-journal/options")
+def range_journal_options():
+    return {"max_calendar_days": MAX_RANGE_DAYS, "rule_set": range_rule_definition()}
+
+
+@app.post("/range-journal/generate")
+def generate_range_journal(entry: RangeJournalInput):
+    try:
+        snapshot = get_range_market_data(entry.start_date, entry.end_date)
+    except MarketDataError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    try:
+        catalog = build_range_evidence_catalog(snapshot)
+        evaluation = evaluate_range_strategy(snapshot)
+    except InvalidJournalEvidence as exc:
+        logger.warning("Range evidence rejected: %s", exc)
+        raise HTTPException(status_code=502, detail="The market data could not support a complete custom range.") from None
+    entry_data = entry.model_dump(mode="json")
+    entry_data["strategy"] = evaluation["rule_set"]["rules"]
+    return _generate_draft(entry_data, snapshot, catalog, evaluation, custom_range=True)
+
+
+@app.post("/range-journals", status_code=201)
+def save_custom_journal(payload: JournalSaveInput):
+    try:
+        journal = save_range_journal(str(payload.generation_id), payload.edited_draft)
+    except DraftAlreadySavedError:
+        raise HTTPException(status_code=409, detail="This custom draft was already saved. Open it from Saved custom journals to edit it.") from None
+    if journal is None:
+        raise HTTPException(status_code=404, detail="Custom draft not found. Generate a new custom journal.")
+    return journal
+
+
+@app.get("/range-journals")
+def list_custom_journals(limit: int = Query(default=20, ge=1, le=100), offset: int = Query(default=0, ge=0)):
+    return fetch_range_journals(limit, offset)
+
+
+@app.get("/range-journals/{journal_id}")
+def read_custom_journal(journal_id: int):
+    journal = fetch_range_journal(journal_id)
+    if journal is None:
+        raise HTTPException(status_code=404, detail="Custom journal not found.")
+    return journal
+
+
+@app.patch("/range-journals/{journal_id}")
+def edit_custom_journal(journal_id: int, payload: JournalUpdateInput):
+    journal = update_range_journal(journal_id, payload.edited_draft)
+    if journal is None:
+        raise HTTPException(status_code=404, detail="Custom journal not found.")
+    return journal
+
+
+@app.delete("/range-journals/{journal_id}", status_code=204)
+def remove_custom_journal(journal_id: int):
+    if not delete_range_journal(journal_id):
+        raise HTTPException(status_code=404, detail="Custom journal not found.")
+    return Response(status_code=204)

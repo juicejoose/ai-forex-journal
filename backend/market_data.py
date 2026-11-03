@@ -59,7 +59,7 @@ def session_bounds(journal_date: date) -> tuple[datetime, datetime]:
     return start.astimezone(UTC), end.astimezone(UTC)
 
 
-def _fetch_candles(end: datetime) -> dict:
+def _fetch_candles(end: datetime, count: int = WARMUP_COUNT + 50) -> dict:
     token = os.getenv("OANDA_API_TOKEN", "").strip()
     account_id = os.getenv("OANDA_ACCOUNT_ID", "").strip()
     base_url = os.getenv("OANDA_API_URL", "").strip().rstrip("/")
@@ -71,7 +71,7 @@ def _fetch_candles(end: datetime) -> dict:
     params = urlencode({
         "granularity": "H4",
         "price": "M",
-        "count": WARMUP_COUNT + 50,
+        "count": count,
         "to": end.isoformat(),
         "dailyAlignment": 17,
         "alignmentTimezone": "America/New_York",
@@ -172,6 +172,11 @@ def get_market_data(journal_date: date) -> dict:
     if len(warmup) < WARMUP_COUNT:
         raise MarketDataError("Not enough earlier candles are available to initialize the indicators.", 422)
 
+    return _build_snapshot(journal_date, start, end, session, warmup, retrieved_at)
+
+
+def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
+    """Calculate indicators once over the complete history and requested candles."""
     series = warmup + session
     closes = [candle.close for candle in series]
     highs = [candle.high for candle in series]
@@ -186,7 +191,7 @@ def get_market_data(journal_date: date) -> dict:
 
     rows = []
     # Retain two preceding trading candles for the three-candle momentum rule.
-    # They supply context only; the session still contains exactly six candles.
+    # They supply context only and do not contribute to the requested period score.
     for index in range(len(warmup) - 2, len(series)):
         candle = series[index]
         squeeze_values = {key: values[index] for key, values in squeeze.items()}

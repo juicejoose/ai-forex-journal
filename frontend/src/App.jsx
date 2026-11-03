@@ -4,14 +4,19 @@ import GenerateJournalForm from './GenerateJournalForm.jsx'
 import JournalView from './JournalView.jsx'
 import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
+import CustomRangeJournals from './CustomRangeJournals.jsx'
 
 const tabs = [
   { id: 'generate', label: 'Generate journal' },
   { id: 'saved', label: 'Saved journals' },
+  { id: 'custom', label: 'Custom range journal' },
+  { id: 'custom-saved', label: 'Saved custom journals' },
   { id: 'profiles', label: 'Strategy profiles' },
 ]
 
 function App() {
+  const [rangeBusy, setRangeBusy] = useState(false)
+  const [rangeDirtyTab, setRangeDirtyTab] = useState(null)
   const [activeTab, setActiveTab] = useState('generate')
   const [editorTab, setEditorTab] = useState('generate')
   const pair = 'EURUSD'
@@ -43,7 +48,7 @@ function App() {
   const [deleteMessage, setDeleteMessage] = useState('')
 
   const ruleDefinition = ruleDefinitions.find((item) => item.id === ruleSetId)
-  const busy = loading || saving || opening || profileBusy || deletingId !== null
+  const busy = rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
     savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
@@ -367,7 +372,7 @@ function App() {
     }
   }
 
-  const journalEditor = preview && (
+  const journalEditor = preview && activeTab === editorTab && (
     <JournalView
       key={preview.generation_id || savedJournal?.id || 'draft'}
       preview={preview}
@@ -423,6 +428,7 @@ function App() {
             {tab.label}
             {preview && editorTab === tab.id && !isSaved && ' · Unsaved'}
             {tab.id === 'profiles' && profileDirty && ' · Unsaved'}
+            {tab.id === rangeDirtyTab && ' · Unsaved'}
           </button>
         ))}
       </div>
@@ -516,6 +522,8 @@ function App() {
           onDirtyChange={setProfileDirty}
         />
       </section>
+      <CustomRangeJournals activeTab={activeTab}
+        onBusyChange={setRangeBusy} onDirtyTabChange={setRangeDirtyTab} busy={busy} />
     </main>
   )
 }

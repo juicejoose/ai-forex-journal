@@ -27,7 +27,7 @@ export default function DeleteJournalDialog({ journal, hasUnsavedEdits, pending,
     >
       <h2 id="delete-journal-heading">Delete saved journal?</h2>
       <p id="delete-journal-details" style={{ marginTop: '1rem' }}>
-        Journal #{journal.id} · {journal.journal_date} · {journal.pair} ({journal.timeframe})
+        Journal #{journal.id} · {journal.start_date ? `${journal.start_date} – ${journal.end_date}` : journal.journal_date} · {journal.pair} ({journal.timeframe})
       </p>
       <p id="delete-journal-warning" style={{ marginTop: '1rem' }}>
         This permanently removes the original draft, saved edits, and market snapshot.
