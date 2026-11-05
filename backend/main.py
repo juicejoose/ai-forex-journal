@@ -30,6 +30,7 @@ from date_range import (MAX_RANGE_DAYS, get_range_market_data, build_range_evide
                         evaluate_range_strategy, range_rule_definition)
 from range_database import (init_range_db, store_range_draft, save_range_journal,
                             fetch_range_journal, fetch_range_journals, update_range_journal, delete_range_journal)
+from today import get_today_view, load_today_snapshot
 
 load_dotenv(Path(__file__).with_name(".env"))
 
@@ -73,6 +74,11 @@ class RangeJournalInput(BaseModel):
     pair: Literal["EURUSD"] = "EURUSD"
     timeframe: Literal["4h"] = "4h"
     rule_set_id: Literal["four_factor_v4"] = "four_factor_v4"
+    notes: str = Field(default="", max_length=10000)
+
+class TodayJournalInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    snapshot_id: UUID
     notes: str = Field(default="", max_length=10000)
 
 class JournalSaveInput(BaseModel):
@@ -302,6 +308,32 @@ def edit_strategy_profile(profile_id: int, payload: StrategyProfileInput):
 @app.get("/range-journal/options")
 def range_journal_options():
     return {"max_calendar_days": MAX_RANGE_DAYS, "rule_set": range_rule_definition()}
+
+
+@app.get("/today")
+def read_today(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return get_today_view()
+    except MarketDataError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    except InvalidJournalEvidence:
+        raise HTTPException(status_code=502, detail="Today's market evidence could not be validated.") from None
+
+
+@app.post("/today/generate")
+def generate_today_journal(entry: TodayJournalInput):
+    try:
+        view = load_today_snapshot(str(entry.snapshot_id))
+        snapshot, evaluation = view["market_data"], view["rule_evaluation"]
+        catalog = build_evidence_catalog(snapshot, allow_partial=True)
+    except MarketDataError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
+    except InvalidJournalEvidence:
+        raise HTTPException(status_code=502, detail="Today's market evidence could not be validated.") from None
+    entry_data = {"pair": "EURUSD", "timeframe": "4h", "journal_date": view["journal_date"],
+                  "rule_set_id": "four_factor_v4", "strategy": evaluation["rule_set"]["rules"], "notes": entry.notes}
+    return _generate_draft(entry_data, snapshot, catalog, evaluation)
 
 
 @app.post("/range-journal/generate")

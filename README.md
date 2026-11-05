@@ -6,6 +6,7 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 
 ## Current features
 
+- **Today:** follow the active New York session with automatic completed-candle updates, provisional strategy averages, pending candle slots, and a manually generated AI summary. Save a frozen intraday review into Saved journals.
 - **Generate journal:** choose a session date, select the scored four-factor strategy or a written strategy, add optional observations, then generate and edit a journal.
 - **Strategy scores:** inspect each candle's factor outcomes, bullish/bearish points and alignment, with v4 averaging all six candles and showing final-candle bias separately. Saved calculations remain separate from editable journal text.
 - **Saved journals:** browse a month calendar, select a session date to see its saved entries, then reopen, edit, restore the original draft, or delete after confirmation. Green/red days show the saved EUR/USD session's positive/negative price change.
@@ -31,6 +32,22 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 For example, a journal dated **2026-10-20** covers **2026-10-19 at 5:00 p.m. through 2026-10-20 at 5:00 p.m. New York time**. Daylight saving time is handled using that timezone.
 
 Daily journals reject weekend dates and sessions whose closing cutoff has not passed. Custom ranges skip weekend session dates and require the selected end date's 5 p.m. cutoff to have passed. Holidays or missing provider data may also prevent a full session from being available. MACD is not included.
+
+## Today and intraday reviews
+
+The **Today** tab follows the current EUR/USD trading session using the existing H4 alignment and four-factor v4 rules. It checks the backend once per minute while that tab and the browser page are visible, and refreshes when you return. **Refresh data** requests another check. Keep the backend running; this is a visible-page refresh workflow, not a background service or a tick-by-tick price stream. OANDA marks each candle as complete or incomplete in its [candlestick definition](https://developer.oanda.com/rest-live-v20/instrument-df/).
+
+Only completed candles contribute prices, indicators, and scores. All six slots remain visible: **Completed**, **Forming · score pending**, or **Upcoming · pending**. Before the first candle closes at 9 p.m. New York time, the page shows a waiting state and AI generation is disabled. Earlier candles initialize indicators and supply predecessor context, but do not earn points in the current session.
+
+The **session-to-date average** gives each completed candle equal weight. For example, three bullish scores of 3, 4 and 3 produce 3.33/5 average bullish points and 66.67% rule alignment. Coverage remains **3 of 6 candles**, a separate measure. Pending candles are not zeros, and no outcome is forecast for them. Missing factor inputs on a completed candle withhold the average instead of dropping that candle. The latest completed candle's bias is separate from the provisional average. At six candles, the calculation matches the existing full-session average. Rule alignment is not a calibrated probability of future movement.
+
+Session dates refer to the ending 5 p.m. New York cutoff. For example, Tuesday after 5 p.m. belongs to the session ending Wednesday. At the weekday 5 p.m. rollover, Today starts the next session; use normal daily generation to review the one that just finished. During the scheduled Friday 5 p.m.–Sunday 5 p.m. weekend closure, Today displays the latest Friday session and the next scheduled opening. DST is handled in New York local time. Holiday closures and provider delays are not treated as future pending slots: if a candle should already have closed but is absent, refresh fails visibly and any previous display is marked potentially outdated.
+
+**Generate AI summary** (or **Refresh AI summary**) is an explicit action. Ordinary data polling makes no AI calls and does not create saved journals. The summary uses a server-owned snapshot of the displayed completed candles and scores. A background refresh cannot alter its input. A new candle or revised evidence marks the existing summary as using older data, without replacing its text or your edits. The summary's cutoff and coverage stay visible. The AI receives the coverage and cannot cite a pending candle or substitute a full-session method for a partial review.
+
+**Save journal** saves that exact snapshot in the existing daily **Saved journals** library. Intraday entries are labeled with their cutoff and completed-candle count. Reopening, editing, restoring, or deleting them uses the existing daily-journal controls; their market evidence and scores never update automatically. Partial-session returns do not color a calendar day as though they were completed daily returns. A date with only partial entries still shows its entry count but has no full-session percentage; a completed saved snapshot can supply that day's percentage. Regenerating on Today creates a separate draft, not an overwrite of a saved review.
+
+The backend shares successful Today polls through a 55-second in-memory cache, invalidated at candle/session boundaries. A manual refresh can use this same cache. Up to 64 immutable generation snapshots are retained for 30 minutes, and generation accepts only their server IDs plus optional notes. If the ID expires or the backend restarts, refresh Today and generate again. Existing generated/saved journals remain in SQLite. No new database tables, dependencies, or credential settings are needed for Today. Old daily and custom-range generation still require their full completed sessions.
 
 ## Custom date-range journals
 
@@ -197,7 +214,7 @@ cd backend
 ./.venv/bin/python -B -m unittest discover -v
 ```
 
-The current backend suite contains **174 tests**:
+The current backend suite contains **193 tests**:
 
 | File | Tests | Coverage |
 | --- | ---: | --- |
@@ -214,8 +231,9 @@ The current backend suite contains **174 tests**:
 | `test_journal_summary.py` | 8 | Short output, canonical market facts, mismatched directions/method rejection, incomplete averages, word limit, mixed/neutral results and old-text preservation |
 | `test_session_average.py` | 14 | Equal averaging, late reversals, half points, missing data, mixed/neutral sessions, legacy methods, canonical AI inputs, profile upgrades and immutable saving |
 | `test_custom_range.py` | 23 | Inclusive dates and limits, full-session coverage, continuous indicators, weekends/DST, equal range averaging, global candle references, AI validation, immutable saving, daily/custom isolation, deletion, pagination and startup preservation |
+| `test_today.py` | 19 | Empty/partial/full sessions, close boundaries, rollover, weekend/DST history, future-data exclusion, delayed candles, partial grounding and averages, cache expiry, AI snapshot consistency, immutable saving and calendar semantics |
 
-These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 174 tests` and `OK`.
+These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 193 tests` and `OK`.
 
 From the repository root, check the frontend:
 
@@ -226,7 +244,7 @@ npm run lint
 npm run build
 ```
 
-The 17 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage formatting, range validation and preview mapping, and preservation of daily/range journal text in the reading view. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
+The 22 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage formatting, range validation and preview mapping, Today snapshot consistency/freshness and summary changes, and preservation of daily/range/intraday journal text. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
 
 The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OpenAI check uses the configured model with medium reasoning and a smaller 2,048-token limit. It prints the requested and returned model, response status, and usage, and exits with an error for incomplete or empty replies. The OANDA check currently uses the fixed session date 2026-10-20.
 
@@ -234,9 +252,11 @@ The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are 
 
 - **Cannot connect / Failed to fetch:** confirm the backend is running on port 8000 and open the frontend on port 5173.
 - **Session not finished or incomplete:** choose a completed weekday session. Generation needs all six completed candles and enough earlier history.
+- **Want an intraday review:** open Today. It scores the completed portion of the active session; daily and custom-range forms still require complete sessions.
+- **Today refresh failed or is outdated:** check the backend and retry. An overdue candle may be delayed or absent due to an early market close. A generation snapshot can also expire after 30 minutes or a backend restart; refresh the page's data before generating again.
 - **Custom range rejected:** use at most 31 calendar days, include a weekday, and wait until the selected end date's 5 p.m. New York cutoff. Every included weekday needs six completed candles; shorten or move a range that includes missing data or a shortened holiday session.
 - **OANDA access error:** check the practice account credentials and required practice API URL in `backend/.env`.
 - **AI request failed:** check API access, the configured model, and the error shown by the app. Failed generation does not create a saved journal.
 - **AI draft failed its evidence checks:** the generated response failed validation. No new draft was staged; you can try generating again.
 
-This version supports local use on one computer, without user accounts or authentication. It reviews completed sessions; it does not place orders, provide live entry signals, or run strategy backtests. Historical availability depends on the provider, and the automated tests do not establish that live provider access is working.
+This version supports local use on one computer, without user accounts or authentication. It reviews completed sessions and the completed candles within an ongoing session; it does not place orders, provide live entry signals, or run strategy backtests. Historical availability depends on the provider, and the automated tests do not establish that live provider access is working.

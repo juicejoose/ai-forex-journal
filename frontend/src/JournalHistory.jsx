@@ -208,7 +208,8 @@ export default function JournalHistory({ onOpen, onDelete, deletingId, busy, ref
               return <li key={journal.id} className="jh-entry-card">
                 <div className="jh-entry-title"><h4>Journal #{journal.id}</h4><span className="jh-pair">{journal.pair.replace(/^EURUSD$/, 'EUR/USD')} · {journal.timeframe}</span></div>
                 <p className="jh-saved-time">{Number.isFinite(saved.getTime()) ? `Saved ${savedTime.format(saved)} NY` : 'Saved time unavailable'}</p>
-                <p className="jh-entry-change">Session change <strong className={`jh-text-${changeTone(journal.change_percent)}`}>{Number.isFinite(journal.change_percent) ? formatChange(journal.change_percent) : 'Unavailable'}</strong></p>
+                {journal.session_complete === false && <p className="jh-saved-time">Intraday snapshot · {journal.completed_candles} of 6 candles · through {savedTime.format(new Date(journal.data_through))} NY</p>}
+                <p className="jh-entry-change">Session change <strong className={`jh-text-${changeTone(journal.change_percent)}`}>{Number.isFinite(journal.change_percent) ? formatChange(journal.change_percent) : journal.session_complete === false ? 'Session was in progress' : 'Unavailable'}</strong></p>
                 <div className="jh-entry-actions">
                   <button className="jh-button jh-open-button" type="button" onClick={() => onOpen(journal.id)} disabled={busy} aria-label={`Open journal #${journal.id}`}>Open journal <span aria-hidden="true">↗</span></button>
                   <button className="jh-delete-button" type="button" onClick={() => onDelete(journal)} disabled={busy} aria-label={`Delete journal #${journal.id} from ${journal.journal_date}`}>{deletingId === journal.id ? 'Deleting…' : 'Delete'}</button>

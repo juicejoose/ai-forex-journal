@@ -248,9 +248,9 @@ def _session_average(rows, max_points):
     return summary
 
 
-def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID):
+def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False):
     """Only current/past candles influence a score; missing history is explicit."""
-    catalog = build_evidence_catalog(snapshot)
+    catalog = build_evidence_catalog(snapshot, allow_partial=allow_partial)
     definition = rule_set_definition(rule_set_id)
     definitions = definition["factors"]
     max_points = definition["max_points"]
@@ -329,7 +329,7 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID):
                      "close_time_local": catalog[candle_id]["close_time_local"],
                      "factors": factors, **_score(factors, max_points)})
         older, previous = previous, candle
-    session_end = {"method": "final_candle", "candle_id": "C6", **_score(rows[-1]["factors"], max_points)}
+    session_end = {"method": "final_candle", "candle_id": rows[-1]["candle_id"], **_score(rows[-1]["factors"], max_points)}
     result = {"schema_version": 1, "rule_set": definition, "candles": rows, "summary": session_end}
     if rule_set_id == RULE_SET_ID:
         result.update(summary=_session_average(rows, max_points), session_end=session_end)

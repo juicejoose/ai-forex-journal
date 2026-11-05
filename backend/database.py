@@ -230,6 +230,14 @@ def fetch_journals(limit=20, offset=0, journal_date=None):
             item = dict(row)
             item.pop("market_data_json")
             item["change_percent"] = _session_change_percent(row)
+            try:
+                snapshot = json.loads(row["market_data_json"])
+                if snapshot.get("analysis_kind") == "intraday":
+                    item["session_complete"] = snapshot["session"]["complete"]
+                    item["completed_candles"] = len(snapshot["candles"])
+                    item["data_through"] = snapshot["data_through"]
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
             items.append(item)
         return {
             "items": items,

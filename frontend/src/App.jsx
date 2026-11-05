@@ -5,8 +5,10 @@ import JournalView from './JournalView.jsx'
 import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 import CustomRangeJournals from './CustomRangeJournals.jsx'
+import TodayPage from './TodayPage.jsx'
 
 const tabs = [
+  { id: 'today', label: 'Today' },
   { id: 'generate', label: 'Generate journal' },
   { id: 'saved', label: 'Saved journals' },
   { id: 'custom', label: 'Custom range journal' },
@@ -15,6 +17,8 @@ const tabs = [
 ]
 
 function App() {
+  const [todayBusy, setTodayBusy] = useState(false)
+  const [todayDirty, setTodayDirty] = useState(false)
   const [rangeBusy, setRangeBusy] = useState(false)
   const [rangeDirtyTab, setRangeDirtyTab] = useState(null)
   const [activeTab, setActiveTab] = useState('generate')
@@ -48,7 +52,7 @@ function App() {
   const [deleteMessage, setDeleteMessage] = useState('')
 
   const ruleDefinition = ruleDefinitions.find((item) => item.id === ruleSetId)
-  const busy = rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
+  const busy = todayBusy || rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
     savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
@@ -396,7 +400,7 @@ function App() {
   return (
     <main>
       <h1>Forex AI Journal</h1>
-      <p>Review a completed EUR/USD session against your strategy.</p>
+      <p>Review EUR/USD sessions against your strategy, as they unfold or after the close.</p>
 
       <div
         role="tablist"
@@ -429,6 +433,7 @@ function App() {
             {preview && editorTab === tab.id && !isSaved && ' · Unsaved'}
             {tab.id === 'profiles' && profileDirty && ' · Unsaved'}
             {tab.id === rangeDirtyTab && ' · Unsaved'}
+            {tab.id === 'today' && todayDirty && ' · Unsaved'}
           </button>
         ))}
       </div>
@@ -522,6 +527,8 @@ function App() {
           onDirtyChange={setProfileDirty}
         />
       </section>
+      <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
+        onSaved={() => setHistoryVersion(value => value + 1)} />
       <CustomRangeJournals activeTab={activeTab}
         onBusyChange={setRangeBusy} onDirtyTabChange={setRangeDirtyTab} busy={busy} />
     </main>
