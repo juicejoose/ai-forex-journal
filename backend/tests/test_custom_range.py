@@ -13,8 +13,8 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
-from test_market_data import ENVIRONMENT, main
-from test_scored_journal import valid_scored_commentary
+from tests.test_market_data import ENVIRONMENT, main
+from tests.test_scored_journal import valid_scored_commentary
 from scored_journal import build_summary_context, render_scored_journal
 from journal_grounding import InvalidJournalEvidence
 from strategy_rules import evaluate_strategy

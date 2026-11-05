@@ -7,8 +7,8 @@ import unittest
 from journal_grounding import InvalidJournalEvidence
 from strategy_rules import (RULE_SET_ID, RULES_TEXT, MOMENTUM_RULE_SET_ID,
                             SUPPORTED_RULE_SET_IDS, evaluate_strategy, rule_set_definition)
-from test_strategy_rules import scoring_snapshot
-from test_scored_journal import ScoredJournalTestCase, ENTRY
+from tests.test_strategy_rules import scoring_snapshot
+from tests.test_scored_journal import ScoredJournalTestCase, ENTRY
 
 
 def late_reversal(snapshot):
@@ -96,7 +96,7 @@ class SessionAverageTests(unittest.TestCase):
         summary = evaluate_strategy(self.snapshot)["summary"]
         self.assertEqual((summary["direction"], summary["bullish_points"], summary["bearish_points"], summary["net_score"]), ("mixed", 2, 2, 0))
 
-    def test_older_versions_keep_final_candle_summary_and_v3_rows_are_identical(self):
+    def test_older_versions_keep_final_candle_summary_and_far_gap_scores_match_v3(self):
         late_reversal(self.snapshot)
         current = evaluate_strategy(self.snapshot)
         for rule_id in SUPPORTED_RULE_SET_IDS[1:]:
@@ -105,6 +105,9 @@ class SessionAverageTests(unittest.TestCase):
             self.assertEqual((previous["summary"]["method"], previous["summary"]["candle_id"], previous["summary"]["direction"]), ("final_candle", "C6", "bearish"))
             self.assertNotIn("session_end", previous)
         old = evaluate_strategy(self.snapshot, MOMENTUM_RULE_SET_ID)
+        for row in current["candles"]:
+            row["factors"][1].pop("ema_sma_distance")
+            row["factors"][1]["reason"] = old["candles"][int(row["candle_id"][1:]) - 1]["factors"][1]["reason"]
         self.assertEqual(current["candles"], old["candles"])
         self.assertEqual(current["session_end"], old["summary"])
 
@@ -194,7 +197,7 @@ class SessionAverageJournalTests(ScoredJournalTestCase):
     def test_catalog_and_preview_offer_v4_without_provider_calls(self):
         catalog = self.client.get("/strategy-rule-sets").json()
         self.assertEqual(catalog["default_id"], RULE_SET_ID)
-        self.assertEqual([r["id"] for r in catalog["items"]], list(SUPPORTED_RULE_SET_IDS))
+        self.assertEqual([r["id"] for r in catalog["items"]], [RULE_SET_ID])
         preview = self.client.post("/journal/preview", json={**self.entry, "strategy": "Ignored"})
         self.assertEqual(preview.status_code, 200)
         self.assertEqual(preview.json()["strategy"], RULES_TEXT)

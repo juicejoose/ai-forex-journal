@@ -6,6 +6,7 @@ import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 import CustomRangeJournals from './CustomRangeJournals.jsx'
 import TodayPage from './TodayPage.jsx'
+import { CURRENT_RULE_SET_ID, isRetiredRuleSet } from './strategyChoices.js'
 
 const tabs = [
   { id: 'today', label: 'Today' },
@@ -30,7 +31,7 @@ function App() {
   const [journalDate, setJournalDate] = useState('')
   const timeframe = '4h'
   const [strategy, setStrategy] = useState('')
-  const [ruleSetId, setRuleSetId] = useState('four_factor_v4')
+  const [ruleSetId, setRuleSetId] = useState(CURRENT_RULE_SET_ID)
   const [ruleDefinitions, setRuleDefinitions] = useState([])
   const [ruleError, setRuleError] = useState('')
   const [ruleReload, setRuleReload] = useState(0)
@@ -64,8 +65,8 @@ function App() {
         const response = await fetch('http://127.0.0.1:8000/strategy-rule-sets', { signal: controller.signal })
         const data = await response.json()
         if (!response.ok || !Array.isArray(data?.items) ||
-            !['four_factor_v4', 'four_factor_v3', 'four_factor_v2', 'four_factor_v1'].every((id) => data.items.some((item) =>
-              item.id === id && typeof item.rules === 'string' && item.factors?.length === 4))) {
+            !data.items.some((item) => item.id === CURRENT_RULE_SET_ID && item.revision === 2 &&
+              typeof item.rules === 'string' && item.factors?.length === 4)) {
           throw new Error('Invalid strategy definition')
         }
         if (!controller.signal.aborted) setRuleDefinitions(data.items)
@@ -98,7 +99,7 @@ function App() {
   }
 
   function handleUseProfile(profile) {
-    if (busy) return
+    if (busy || isRetiredRuleSet(profile.rule_set_id)) return
     if (strategy.trim() && strategy.trim() !== profile.rules.trim() &&
         !window.confirm(`Replace the strategy rules in the generation form with “${profile.name}”?`)) {
       return
@@ -123,6 +124,11 @@ function App() {
     const trimmedPair = pair.trim()
     const trimmedNotes = notes.trim()
     const trimmedStrategy = (ruleSetId ? ruleDefinition?.rules ?? '' : strategy).trim()
+
+    if (isRetiredRuleSet(ruleSetId)) {
+      setError('Choose v4 or Written strategy before generating a journal.')
+      return
+    }
 
     if (ruleSetId && !ruleDefinition) {
       setError('The scored strategy must finish loading before generating a journal.')

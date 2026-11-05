@@ -1,6 +1,6 @@
 """Offline journal-saving regression tests using a temporary SQLite database.
 
-Run all tests from backend: python -m unittest discover -v
+Run all tests from backend: python -m unittest discover -s tests -t . -v
 Uses dummy credentials; no live provider requests or saved journal data.
 """
 
@@ -21,8 +21,8 @@ from fastapi.testclient import TestClient
 from openai import APIError
 
 # This helper imports main with dummy credentials and dotenv disabled.
-from test_market_data import ENVIRONMENT, FixedDateTime, payload
-from test_journal_grounding import valid_analysis
+from tests.test_market_data import ENVIRONMENT, FixedDateTime, payload
+from tests.test_journal_grounding import valid_analysis
 from journal_grounding import render_journal
 import database as db
 import main

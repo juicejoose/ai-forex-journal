@@ -12,9 +12,9 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from test_custom_range import range_payload
-from test_market_data import ENVIRONMENT
-from test_scored_journal import valid_scored_commentary
+from tests.test_custom_range import range_payload
+from tests.test_market_data import ENVIRONMENT
+from tests.test_scored_journal import valid_scored_commentary
 from journal_grounding import InvalidJournalEvidence, build_evidence_catalog
 from scored_journal import build_summary_context, render_scored_journal
 from strategy_rules import evaluate_strategy

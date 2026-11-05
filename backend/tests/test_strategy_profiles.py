@@ -1,6 +1,6 @@
 """Offline strategy-profile regression tests using a temporary SQLite database.
 
-Run all tests from backend: python -m unittest discover -v
+Run all tests from backend: python -m unittest discover -s tests -t . -v
 Uses dummy credentials; no live provider requests or saved journal data.
 """
 
@@ -14,7 +14,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 # Imports main with dummy credentials and dotenv disabled.
-from test_market_data import ENVIRONMENT
+from tests.test_market_data import ENVIRONMENT
 import database as db
 import main
 

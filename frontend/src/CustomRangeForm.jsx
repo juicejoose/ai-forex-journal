@@ -31,7 +31,7 @@ export default function CustomRangeForm({ start, end, notes, options, optionsErr
         <div className="gf-main-column">
           <section className="gf-card"><header className="gf-card-header"><span className="gf-step">02</span><h3>Strategy analysis</h3></header>
             <div className="cr-strategy-label"><strong>Four-factor strategy v4</strong><span>Average across the entire range</span></div>
-            <p className="gf-help">Every completed H4 candle has equal weight. EMA20 vs SMA190 earns up to 2 points; the other factors earn up to 1 each. Momentum slowdown can reduce its point to 0.5.</p>
+            <p className="gf-help">Every completed H4 candle has equal weight, out of 5 possible points. EMA20 vs SMA190 earns 1 point when its gap is 60 pips or less, and 2 when larger; equal values earn zero. The other factors earn up to 1 each. Momentum slowdown can reduce its point to 0.5.</p>
             <ul className="cr-factor-list"><li>Two closes vs EMA20</li><li>EMA20 vs SMA190</li><li>RSI14 · 40 / 60 thresholds</li><li>Momentum direction and pace</li></ul>
             {optionsError ? <p className="gf-error" role="alert">{optionsError} <button type="button" onClick={onRetry} disabled={busy}>Retry</button></p>
               : options ? <details className="cr-rules"><summary>View complete strategy rules</summary><p>{options.rule_set.rules}</p></details> : <p role="status">Loading strategy rules…</p>}

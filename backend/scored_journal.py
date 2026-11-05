@@ -54,8 +54,8 @@ candle_id/factor_id references from rule_evaluation:
   Price moving higher or lower is not the same as strategy bias. Do not infer
   intrabar event order, reversals, support/resistance or breakouts from OHLC alone.
 - conflicts: Which specific factors supported the same direction and which
-  opposed it across the session. Explain the greater weight of EMA20 vs SMA190
-  when relevant. Neutral factors are not opposing factors. If no opposing
+  opposed it across the session. Explain the actual awarded weight of EMA20 vs
+  SMA190 when relevant; its maximum is not always its awarded score. Neutral factors are not opposing factors. If no opposing
   factors exist, say so rather than inventing a conflict.
 - consensus: Briefly explain the official overall result, and any divergence
   at session end. Copy method, direction and session_end_direction exactly from
@@ -87,7 +87,10 @@ candle_id/factor_id references from rule_evaluation:
 
 Use the supplied rule version, thresholds and weights. RSI extremes are the
 user's reversal-oriented conditions, not confirmation of a reversal. When
-present, momentum_change is authoritative: slowing reduces directional support
+present, ema_sma_distance is authoritative: a reduced EMA/SMA result retains
+its bullish or bearish direction with weaker support. Never assume it earned
+its full maximum or apply this rule to older results without that metadata.
+When present, momentum_change is authoritative: slowing reduces directional support
 without confirming a reversal. Compare only the supplied consecutive deltas;
 never imply a longer slowing streak. A sign change or touch resets the pace
 comparison. Positive but falling and negative but rising momentum earn no

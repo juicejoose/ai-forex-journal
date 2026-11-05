@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import timedelta
+from decimal import Decimal
 from math import isclose, isfinite
 from typing import Literal
 
@@ -13,6 +14,7 @@ MOMENTUM_RULE_SET_ID = "four_factor_v3"
 WEIGHTED_RULE_SET_ID = "four_factor_v2"
 LEGACY_RULE_SET_ID = "four_factor_v1"
 SUPPORTED_RULE_SET_IDS = (RULE_SET_ID, MOMENTUM_RULE_SET_ID, WEIGHTED_RULE_SET_ID, LEGACY_RULE_SET_ID)
+ACTIVE_RULE_SET_IDS = (RULE_SET_ID,)
 RuleSetId = Literal["four_factor_v1", "four_factor_v2", "four_factor_v3", "four_factor_v4"]
 DELTA_REL_TOL = 1e-9
 DELTA_ABS_TOL = 1e-12
@@ -91,6 +93,23 @@ RULES_TEXT = MOMENTUM_RULES_TEXT.replace(
     "Store unrounded results and display session averages to two decimal places."
 )
 
+# Keep v3 definitions unchanged. Revision 2 is saved with every new v4 result;
+# historical v4 evaluations without a revision retain their stored scores.
+V4_FACTORS = deepcopy(FACTORS)
+V4_FACTORS[1].update(
+    bullish="EMA20 is strictly above SMA190. Award 1 bullish point when their absolute gap is at most 60 pips, including exactly 60; otherwise award 2.",
+    bearish="EMA20 is strictly below SMA190. Award 1 bearish point when their absolute gap is at most 60 pips, including exactly 60; otherwise award 2.",
+    distance_weighting={"pip_size": 0.0001, "threshold_pips": 60, "threshold_inclusive": True,
+                        "within_points": 1, "beyond_points": 2},
+)
+RULES_TEXT = RULES_TEXT.replace(
+    f"Bullish: {FACTORS[1]['bullish']} Bearish: {FACTORS[1]['bearish']}",
+    f"Bullish: {V4_FACTORS[1]['bullish']} Bearish: {V4_FACTORS[1]['bearish']}",
+).replace("EMA20 vs SMA190 is worth two points; each other factor is worth at most one.",
+    "EMA20 vs SMA190 is worth up to two points: one for an absolute gap of at most sixty pips, two for a larger gap. "
+    "For EUR/USD, one pip is 0.0001, so sixty pips is a price gap of 0.0060. Equal EMA/SMA values earn zero. "
+    "Each other factor is worth at most one. The maximum stays five points even when EMA/SMA earns only one; do not shrink the alignment denominator.")
+
 
 def rule_set_definition(rule_set_id=RULE_SET_ID):
     if rule_set_id not in SUPPORTED_RULE_SET_IDS:
@@ -100,9 +119,10 @@ def rule_set_definition(rule_set_id=RULE_SET_ID):
         LEGACY_RULE_SET_ID: (LEGACY_RULES_TEXT, LEGACY_FACTORS, 1),
         WEIGHTED_RULE_SET_ID: (WEIGHTED_RULES_TEXT, WEIGHTED_FACTORS, 2),
         MOMENTUM_RULE_SET_ID: (MOMENTUM_RULES_TEXT, FACTORS, 3),
-        RULE_SET_ID: (RULES_TEXT, FACTORS, 4),
+        RULE_SET_ID: (RULES_TEXT, V4_FACTORS, 4),
     }[rule_set_id]
     return {"id": rule_set_id, "version": version, "name": "Four-factor strategy",
+            **({"revision": 2} if rule_set_id == RULE_SET_ID else {}),
             "instrument": "EUR_USD", "timeframe": "H4", "rules": rules,
             "factors": deepcopy(list(factors)), "max_points": 4 if legacy else 5,
             "summary_method": "session_average" if rule_set_id == RULE_SET_ID else "final_candle",
@@ -153,6 +173,38 @@ def _result(factor, outcome, reason, evidence):
             "bullish_points": factor["points"] if outcome == "bullish" else 0,
             "bearish_points": factor["points"] if outcome == "bearish" else 0,
             "reason": reason, "evidence": evidence}
+
+
+def _ema_sma(factor, candle, candle_id):
+    values = _values(candle)
+    a, b = values["ema20"], values["sma190"]
+    settings = factor.get("distance_weighting")
+    gap, reduced = None, False
+    if a is None or b is None:
+        outcome, reason = "unavailable", "EMA20 or SMA190 is unavailable."
+    elif a == b:
+        outcome, reason, gap = "neutral", "EMA20 equals SMA190.", 0.0
+    else:
+        outcome = "bullish" if a > b else "bearish"
+        reason = "EMA20 is above SMA190." if a > b else "EMA20 is below SMA190."
+        if settings:
+            # Decimal conversion of the unrounded stored values avoids an
+            # artificial >60 result from binary subtraction at exactly 60.
+            distance = abs(Decimal(str(a)) - Decimal(str(b))) / Decimal(str(settings["pip_size"]))
+            gap = float(distance)
+            if not isfinite(gap):
+                outcome, reason, gap = "unavailable", "EMA/SMA distance is unavailable.", None
+            else:
+                reduced = distance <= Decimal(str(settings["threshold_pips"]))
+                reason += (" Gap is at most 60 pips; directional support is reduced to 1 point."
+                           if reduced else " Gap exceeds 60 pips; directional support earns 2 points.")
+    result = _result(factor, outcome, reason, [_evidence(candle, candle_id, ("ema20", "sma190"))])
+    if settings:
+        if reduced:
+            result["bullish_points"] = settings["within_points"] if outcome == "bullish" else 0
+            result["bearish_points"] = settings["within_points"] if outcome == "bearish" else 0
+        result["ema_sma_distance"] = {"gap_pips": gap, "threshold_pips": settings["threshold_pips"], "reduced": reduced}
+    return result
 
 
 def _momentum_with_pace(factor, older, previous, current, older_id, previous_id, current_id):
@@ -218,8 +270,9 @@ def _score(factors, max_points):
     else:
         direction = "bullish" if bullish > bearish else "bearish"
     extra = {}
-    if any("momentum_change" in f for f in factors):
-        extra["reduced_factors"] = sum(f.get("momentum_change", {}).get("pace") == "slowing" for f in factors)
+    if any("momentum_change" in f or "ema_sma_distance" in f for f in factors):
+        extra["reduced_factors"] = sum(f.get("momentum_change", {}).get("pace") == "slowing"
+                                      or f.get("ema_sma_distance", {}).get("reduced") is True for f in factors)
     return {"bullish_points": bullish, "bearish_points": bearish, "neutral_factors": neutral,
             "unavailable_factors": len(factors) - available, "evaluated_factors": available,
             "max_points": max_points, "net_score": bullish - bearish, "direction": direction,
@@ -286,16 +339,7 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
             outcome, reason = "neutral", "The closes are mixed or at least one equals its own EMA20."
         factors.append(_result(definitions[0], outcome, reason, evidence))
 
-        a, b = current["ema20"], current["sma190"]
-        if a is None or b is None:
-            outcome, reason = "unavailable", "EMA20 or SMA190 is unavailable."
-        elif a > b:
-            outcome, reason = "bullish", "EMA20 is above SMA190."
-        elif a < b:
-            outcome, reason = "bearish", "EMA20 is below SMA190."
-        else:
-            outcome, reason = "neutral", "EMA20 equals SMA190."
-        factors.append(_result(definitions[1], outcome, reason, [_evidence(candle, candle_id, ("ema20", "sma190"))]))
+        factors.append(_ema_sma(definitions[1], candle, candle_id))
 
         rsi = current["rsi14"]
         if rsi is None or not 0 <= rsi <= 100:

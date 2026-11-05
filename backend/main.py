@@ -22,7 +22,7 @@ from journal_grounding import (
     JOURNAL_INSTRUCTIONS, InvalidJournalEvidence, build_evidence_catalog,
     render_journal, response_format,
 )
-from strategy_rules import RULE_SET_ID, SUPPORTED_RULE_SET_IDS, RuleSetId, evaluate_strategy, rule_set_definition
+from strategy_rules import RULE_SET_ID, ACTIVE_RULE_SET_IDS, RuleSetId, evaluate_strategy, rule_set_definition
 from scored_journal import (SCORED_JOURNAL_INSTRUCTIONS, scored_response_format,
                             render_scored_journal, build_summary_context)
 
@@ -257,7 +257,7 @@ def remove_journal(journal_id: int):
 
 @app.get("/strategy-rule-sets")
 def list_rule_sets():
-    return {"items": [rule_set_definition(rule_id) for rule_id in SUPPORTED_RULE_SET_IDS], "default_id": RULE_SET_ID}
+    return {"items": [rule_set_definition(rule_id) for rule_id in ACTIVE_RULE_SET_IDS], "default_id": RULE_SET_ID}
 
 
 @app.get("/strategy-profiles")

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import DeleteStrategyProfileDialog from './DeleteStrategyProfileDialog.jsx'
 import './StrategyProfiles.css'
 import RuleSetSelect from './RuleSetSelect.jsx'
+import { isRetiredRuleSet } from './strategyChoices.js'
 
 const API_URL = 'http://127.0.0.1:8000/strategy-profiles'
 
@@ -138,6 +139,10 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
     const cleanRules = (ruleSetId ? ruleDefinition?.rules ?? '' : rules).trim()
     setSaveError('')
     setMessage('')
+    if (isRetiredRuleSet(ruleSetId)) {
+      setSaveError('Choose v4 or Written strategy before saving this profile.')
+      return
+    }
     if (ruleSetId && !ruleDefinition) {
       setSaveError('Load the scored strategy before saving this profile.')
       return
@@ -230,6 +235,7 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
                     {profile.rules.length > 160 ? `${profile.rules.slice(0, 160)}…` : profile.rules}
                   </p>
                   <p className="sp-evaluation-label">{profile.rule_set_id ? `Python scoring · ${{four_factor_v4: 'v4 · Session average', four_factor_v3: 'v3 · Momentum slowdown', four_factor_v2: 'v2 · 5 possible points', four_factor_v1: 'v1 · original rules'}[profile.rule_set_id]}` : 'Written strategy · AI review'}</p>
+                  {isRetiredRuleSet(profile.rule_set_id) && <p className="sp-help" id={`profile-retired-${profile.id}`}>Edit and choose v4 or Written strategy to reuse this profile.</p>}
                   <div className="sp-profile-actions">
                     <button className="sp-button sp-small" type="button" aria-label={`Edit ${profile.name}`} onClick={() => openEditor(profile)} disabled={blocked}>Edit</button>
                     <button
@@ -237,8 +243,8 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
                       type="button"
                       aria-label={`Use ${profile.name} in journal`}
                       onClick={() => onUse(profile)}
-                      disabled={blocked || (selected?.id === profile.id && dirty)}
-                      aria-describedby={selected?.id === profile.id && dirty ? 'profile-unsaved-help' : undefined}
+                      disabled={blocked || isRetiredRuleSet(profile.rule_set_id) || (selected?.id === profile.id && dirty)}
+                      aria-describedby={isRetiredRuleSet(profile.rule_set_id) ? `profile-retired-${profile.id}` : selected?.id === profile.id && dirty ? 'profile-unsaved-help' : undefined}
                     >Use in journal</button>
                     <button className="sp-button sp-small sp-danger sp-subtle" type="button" aria-label={`Delete ${profile.name}`} onClick={() => requestDeleteProfile(profile)} disabled={blocked}>Delete</button>
                   </div>
@@ -281,7 +287,7 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
                 aria-describedby="profile-rules-help profile-rules-count"
                 placeholder={'Bullish factors:\nDescribe the conditions you want checked.\n\nBearish factors:\nDescribe the conditions you want checked.\n\nTiming & context:\nState when the conditions should apply.'}
               />
-              <div className="sp-field-footer"><span>{ruleSetId ? `Fixed rules · Version ${ruleDefinition?.version ?? '…'}` : 'Your rules, in your own words'}</span><span id="profile-rules-count">{displayedRules.length.toLocaleString()} / 10,000 characters</span></div>
+              <div className="sp-field-footer"><span>{isRetiredRuleSet(ruleSetId) ? 'Saved rules · Older evaluation' : ruleSetId ? `Fixed rules · Version ${ruleDefinition?.version ?? '…'}` : 'Your rules, in your own words'}</span><span id="profile-rules-count">{displayedRules.length.toLocaleString()} / 10,000 characters</span></div>
             </div>
             {saveError && <div className="sp-alert sp-error" role="alert"><strong>Could not save profile</strong><p>{saveError}</p></div>}
             {message && <p className="sp-alert sp-feedback" role="status">{message}</p>}
@@ -290,7 +296,7 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
               {selected && (
                 <button className="sp-button sp-danger sp-subtle" type="button" onClick={() => requestDeleteProfile(selected)} disabled={blocked}>Delete profile</button>
               )}
-              <button className="sp-button sp-primary" type="submit" disabled={blocked || !dirty || Boolean(ruleSetId && !ruleDefinition)}>
+              <button className="sp-button sp-primary" type="submit" disabled={blocked || !dirty || isRetiredRuleSet(ruleSetId) || Boolean(ruleSetId && !ruleDefinition)}>
                 {saving ? <><span className="sp-spinner" aria-hidden="true" />Saving profile…</> : selected ? 'Save profile changes' : 'Save profile'}
               </button>
             </footer>

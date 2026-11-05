@@ -19,6 +19,9 @@ function factorDescription(factor) {
   if (factor.factor_id === 'momentum' && factor.momentum_change) {
     return paceLabels[factor.momentum_change.pace] || 'Review evidence'
   }
+  if (factor.factor_id === 'ema_sma' && factor.ema_sma_distance && ['bullish', 'bearish'].includes(factor.outcome)) {
+    return `${factor.outcome === 'bullish' ? 'Above' : 'Below'} SMA190 · ${factor.ema_sma_distance.reduced ? 'within 60 pips' : 'gap > 60 pips'}`
+  }
   const descriptions = {
     two_closes_ema: { bullish: 'Both above EMA20', bearish: 'Both below EMA20', neutral: 'Mixed or at EMA20' },
     ema_sma: { bullish: 'EMA20 above SMA190', bearish: 'EMA20 below SMA190', neutral: 'EMA20 equals SMA190' },
@@ -82,7 +85,7 @@ export default function StrategyScores({ evaluation, snapshot }) {
       <table>
         <caption>{partial ? `${candles.length} completed + ${pending.length} pending candles` : `All ${countLabel} candles`} · {ruleSet.max_points} possible points per candle · New York time · Price change compares each candle’s open and close.</caption>
         <thead><tr><th scope="col">Candle</th>{ruleSet.factors.map((factor) => <th scope="col" key={factor.id}>
-          <span className="ss-factor-heading"><span>{factor.name} · {factor.points} {factor.points === 1 ? 'pt' : 'pts'}</span>
+          <span className="ss-factor-heading"><span>{factor.name} · {factor.distance_weighting ? 'up to ' : ''}{factor.points} {factor.points === 1 ? 'pt' : 'pts'}</span>
             <StrategyRuleHelp factor={factor} open={activeHelp === factor.id}
               onOpen={() => setActiveHelp(factor.id)}
               onClose={() => setActiveHelp((current) => current === factor.id ? null : current)} />
@@ -106,6 +109,7 @@ export default function StrategyScores({ evaluation, snapshot }) {
         <h4>{candle.candle_id} · {stamp(candle.open_time)} – {stamp(candle.close_time)}</h4>
         {candle.factors.map((factor) => <div className="ss-factor" key={factor.factor_id}>
           <p><strong>{factor.name}</strong> · {outcomeLabel(factor)}</p><p>{factor.reason}</p>
+          {factor.ema_sma_distance && <p className="ss-values">EMA/SMA gap: {number('gap', factor.ema_sma_distance.gap_pips)} pips · Reduced-point threshold: ≤ {factor.ema_sma_distance.threshold_pips} pips. The comparison uses unrounded values; a displayed gap may be rounded.</p>}
           {factor.momentum_change && <p className="ss-values">{paceLabels[factor.momentum_change.pace]} · Previous delta: {number('momentum', factor.momentum_change.previous_delta)} · Current delta: {number('momentum', factor.momentum_change.current_delta)}. Each delta is the difference between successive momentum values.</p>}
           {factor.evidence.map((evidence) => <p className="ss-values" key={evidence.candle_id}>{evidence.candle_id} · {stamp(evidence.close_time, day)}, {stamp(evidence.close_time)}: {Object.entries(evidence.values).map(([name, value]) => `${name}: ${number(name, value)}`).join(' · ')}</p>)}
         </div>)}

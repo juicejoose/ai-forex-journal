@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  calendarCells, changeTone, formatChange, formatDay, formatMonth,
+  calendarCells, changeTone, formatChange, formatAverageNet, formatDay, formatMonth,
   isDateKey, isMonthKey, newYorkToday, shiftDate, shiftMonth,
 } from './journalCalendar.js'
 import './JournalHistory.css'
@@ -20,7 +20,8 @@ function validCalendar(data, month) {
     Number.isInteger(data.total_journals) && data.total_journals >= data.journal_count &&
     (data.latest_journal_date === null || isDateKey(data.latest_journal_date)) &&
     data.days.every((day) => isDateKey(day?.date) && day.date.startsWith(`${month}-`) &&
-      Number.isInteger(day.journal_count) && day.journal_count > 0 && validChange(day.change_percent)) &&
+      Number.isInteger(day.journal_count) && day.journal_count > 0 && validChange(day.change_percent) &&
+      validChange(day.average_net_score ?? null)) &&
     new Set(data.days.map((day) => day.date)).size === data.days.length &&
     data.days.reduce((total, day) => total + day.journal_count, 0) === data.journal_count
 }
@@ -158,9 +159,10 @@ export default function JournalHistory({ onOpen, onDelete, deletingId, busy, ref
                 if (!date) return <td key={`empty-${weekday}`} className="jh-empty-cell" />
                 const savedDay = days.get(date)
                 const change = savedDay?.change_percent
+                const averageNet = savedDay?.average_net_score
                 const tone = changeTone(change)
                 const count = savedDay?.journal_count ?? 0
-                const label = `${formatDay(date)}. ${loadingCalendar || calendar?.error ? 'Saved entries unavailable.' : `${countLabel(count)}.`}${count ? ` EUR/USD session change ${Number.isFinite(change) ? formatChange(change) : 'unavailable'}.` : ''}`
+                const label = `${formatDay(date)}. ${loadingCalendar || calendar?.error ? 'Saved entries unavailable.' : `${countLabel(count)}.`}${count ? ` EUR/USD session change ${Number.isFinite(change) ? formatChange(change) : 'unavailable'}. Strategy average net score ${Number.isFinite(averageNet) ? `${formatAverageNet(averageNet)} points` : 'unavailable'}.` : ''}`
                 return <td key={date}>
                   <button id={`journal-day-${date}`} type="button"
                     className={`jh-day jh-day-${tone}${view.date === date ? ' is-selected' : ''}${date === today ? ' is-today' : ''}`}
@@ -170,6 +172,10 @@ export default function JournalHistory({ onOpen, onDelete, deletingId, busy, ref
                     <span className="jh-day-number">{Number(date.slice(-2))}</span>
                     {count > 0 && <>
                       <span className="jh-day-change" aria-hidden="true">{formatChange(change)}</span>
+                      <span className="jh-day-net" aria-hidden="true"
+                        title={Number.isFinite(averageNet) ? `Average bullish minus average bearish points · Journal #${savedDay.source_journal_id}` : 'No complete session-average strategy score in this saved snapshot'}>
+                        <span>Avg net</span><span>{formatAverageNet(averageNet)}</span>
+                      </span>
                       <span className="jh-day-count" aria-hidden="true"><span className="jh-entry-dot" />{count}<span className="jh-count-word">{count === 1 ? 'entry' : 'entries'}</span></span>
                     </>}
                   </button>
@@ -184,6 +190,7 @@ export default function JournalHistory({ onOpen, onDelete, deletingId, busy, ref
               <span><i className="jh-dot-neutral" />Flat / unavailable</span>
             </div>
             <p>EUR/USD session change · 5 p.m. to 5 p.m. New York.<br />Colors use the latest available saved snapshot for each date.</p>
+            <p>Avg net = average bullish minus average bearish points, from the same saved journal as the percent change. — means no complete session-average score.</p>
           </footer>
         </section>
         <section id="journal-day-entries" className="jh-entries" aria-labelledby="selected-date-heading" aria-busy={loadingEntries}>

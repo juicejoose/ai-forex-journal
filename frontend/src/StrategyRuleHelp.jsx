@@ -91,6 +91,7 @@ export default function StrategyRuleHelp({ factor, open, onOpen, onClose }) {
       <p className="ss-tooltip-weight">Up to {factor.points} {factor.points === 1 ? 'point' : 'points'} per candle</p>
       <p><b>Bullish:</b> {factor.bullish}</p>
       <p><b>Bearish:</b> {factor.bearish}</p>
+      {factor.distance_weighting && <p className="ss-tooltip-note">One EUR/USD pip is 0.0001. Equal EMA/SMA values earn zero. The maximum stays 5 points per candle when this factor earns only 1.</p>}
       {factor.slowdown && <p className="ss-tooltip-note">Uses three consecutive completed candles. Touching or crossing zero resets the slowdown comparison. Missing history makes this factor unavailable.</p>}
       <p className="ss-tooltip-note">Unmet conditions earn no points. Missing inputs are unavailable.</p>
     </div>, document.body)}

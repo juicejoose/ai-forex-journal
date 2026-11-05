@@ -64,3 +64,10 @@ export function formatChange(value) {
   const magnitude = Math.abs(value)
   return `${value > 0 ? '+' : '−'}${magnitude < 0.005 ? '<0.01' : magnitude.toFixed(2)}%`
 }
+
+export function formatAverageNet(value) {
+  if (!Number.isFinite(value)) return '—'
+  if (value === 0) return '0.00'
+  const magnitude = Math.abs(value)
+  return `${value > 0 ? '+' : '−'}${magnitude < 0.005 ? '<0.01' : magnitude.toFixed(2)}`
+}

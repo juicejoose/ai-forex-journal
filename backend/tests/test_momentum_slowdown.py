@@ -5,7 +5,7 @@ import unittest
 
 from strategy_rules import (LEGACY_RULE_SET_ID, WEIGHTED_RULE_SET_ID, MOMENTUM_RULE_SET_ID, _momentum_with_pace,
                             evaluate_strategy, rule_set_definition)
-from test_strategy_rules import scoring_snapshot
+from tests.test_strategy_rules import scoring_snapshot
 
 
 class MomentumSlowdownTests(unittest.TestCase):
