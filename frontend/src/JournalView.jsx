@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import MarketEvidence from './MarketEvidence.jsx'
 import StrategyScores from './StrategyScores.jsx'
 import { formatDay, isDateKey } from './journalCalendar.js'
 import { isShortSummary, journalSections } from './journalPresentation.js'
 import './JournalView.css'
+import { JOURNAL_NAME_LIMIT } from './journalNames.js'
 
-export default function JournalView({ preview, savedJournal, text, onChange, onSave,
+export default function JournalView({ preview, savedJournal, text, onChange, onSave, name, onNameChange,
   onDelete, busy, saving, deleting, isSaved, error, onBack, backLabel = 'Back to calendar', showEvidence = true }) {
   const [mode, setMode] = useState('read')
   const headingRef = useRef(null)
+  const nameId = useId()
   const sections = journalSections(text)
   const shortSummary = isShortSummary(sections)
   const showOutline = !shortSummary && sections.some((section) => section.title)
@@ -32,7 +34,8 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
     <header className="jv-header">
       <div>
         <p className="jv-eyebrow">{partial ? 'INTRADAY SNAPSHOT' : customRange ? 'CUSTOM RANGE JOURNAL' : 'SESSION JOURNAL'} · {title}</p>
-        <h2 id="journal-view-title" ref={headingRef} tabIndex={-1}>{date}</h2>
+        <h2 id="journal-view-title" ref={headingRef} tabIndex={-1}>{name.trim() || date}</h2>
+        {name.trim() && <p className="jv-date-subtitle">{date}</p>}
         <div className="jv-tags">
           <span>{pair}</span><span>{entry.timeframe === '4h' ? '4-hour candles' : entry.timeframe}</span>
           <span className={`jv-save-state ${isSaved ? 'is-saved' : ''}`}>{isSaved ? 'Saved' : savedJournal ? 'Unsaved changes' : 'Unsaved draft'}</span>
@@ -42,6 +45,14 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
         {saving ? 'Saving…' : isSaved ? 'Saved' : savedJournal ? 'Save changes' : 'Save journal'}
       </button>
     </header>
+
+    <div className="jv-name-field">
+      <div className="jv-editor-label"><label htmlFor={nameId}>Journal name <span>(optional)</span></label><span>{name.length} / {JOURNAL_NAME_LIMIT}</span></div>
+      <input id={nameId} type="text" value={name} onChange={event => onNameChange(event.target.value)}
+        disabled={busy} maxLength={JOURNAL_NAME_LIMIT} aria-describedby={`${nameId}-help`}
+        placeholder="e.g. EUR/USD — trend and momentum review" />
+      <p id={`${nameId}-help`}>{savedJournal ? 'Rename this journal here, then choose Save changes. Clear the name to use its journal number.' : 'Add a name before saving, or leave it blank to use the journal number.'}</p>
+    </div>
 
     {partial && <p className="jv-session-window">Review data through: {cutoffText} · {preview.market_data.candles.length} of 6 candles · Remaining candles were pending. This snapshot does not update with the live page.</p>}
     {showEvidence && <><MarketEvidence snapshot={preview.market_data} />

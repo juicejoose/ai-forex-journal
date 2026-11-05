@@ -34,6 +34,7 @@ export default function MarketEvidence({ snapshot }) {
 
   const { session = {}, summary = {}, indicator_settings: settings = {} } = snapshot
   const candles = Array.isArray(snapshot.candles) ? snapshot.candles : []
+  const hasRsiMa = Boolean(settings.rsi_ma) || candles.some((candle) => Object.hasOwn(candle.indicators ?? {}, 'rsi14_sma14'))
   const customRange = snapshot.analysis_kind === 'custom_range'
   const partial = snapshot.analysis_kind === 'intraday' && !session.complete
   const sessionChange = change(summary.open, summary.close)
@@ -61,7 +62,7 @@ export default function MarketEvidence({ snapshot }) {
       <div className="jv-table-scroll" role="region" aria-label="Candle prices and indicators" tabIndex={0}>
         <table>
           <caption>New York time · Indicators at candle close · Change compares each candle’s open and close.</caption>
-          <thead><tr>{['Time range', 'Open', 'Close', 'Change (%)', 'EMA20', 'SMA190', 'RSI14', 'Squeeze', 'Momentum', 'Histogram', 'Released'].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+          <thead><tr>{['Time range', 'Open', 'Close', 'Change (%)', 'EMA20', 'SMA190', 'RSI14', ...(hasRsiMa ? ['RSI-based MA (SMA14)'] : []), 'Squeeze', 'Momentum', 'Histogram', 'Released'].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>{candles.map((candle) => {
             const indicators = candle.indicators ?? {}
             const squeeze = indicators.squeeze ?? {}
@@ -71,6 +72,7 @@ export default function MarketEvidence({ snapshot }) {
               <td>{number(candle.open)}</td><td>{number(candle.close)}</td>
               <td className={`jv-tone-${changeTone(candleChange)}`}>{formatChange(candleChange)}</td>
               <td>{number(indicators.ema20)}</td><td>{number(indicators.sma190)}</td><td>{number(indicators.rsi14, 2)}</td>
+              {hasRsiMa && <td>{number(indicators.rsi14_sma14, 2)}</td>}
               <td><span className="jv-table-badge">{squeeze.state ?? 'Unavailable'}</span></td>
               <td>{number(squeeze.momentum, 5)}</td><td>{squeeze.histogram_color ?? 'Unavailable'}</td>
               <td>{typeof squeeze.released === 'boolean' ? squeeze.released ? 'Yes' : 'No' : 'Unavailable'}</td>
@@ -80,6 +82,7 @@ export default function MarketEvidence({ snapshot }) {
       </div>
       <div className="jv-evidence-notes">
         <p>Closing-price indicators: EMA {settings.ema?.period ?? '—'} · SMA {settings.sma?.period ?? '—'} · Wilder RSI {settings.rsi?.period ?? '—'}. LazyBear Squeeze: BB {settings.squeeze?.bb_period ?? '—'} × {settings.squeeze?.bb_multiplier ?? '—'}, KC {settings.squeeze?.kc_period ?? '—'} × {settings.squeeze?.kc_multiplier ?? '—'}. True range: {typeof settings.squeeze?.use_true_range === 'boolean' ? settings.squeeze.use_true_range ? 'on' : 'off' : 'unavailable'}.</p>
+        {hasRsiMa && <p>RSI-based MA is the SMA of the latest 14 RSI14 readings. Strategies v6 and later use this smoothed value for thresholds and trend; raw RSI14 remains separate context.</p>}
         <p>Squeeze ON means compression. A green histogram has positive momentum that is not increasing; it does not by itself indicate a release.</p>
         <p>Retrieved {timestamp(snapshot.retrieved_at)}. Saving keeps these exact values with the journal; reopening it does not fetch new market data.</p>
       </div>

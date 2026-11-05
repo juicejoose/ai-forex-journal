@@ -73,7 +73,7 @@ class RangeJournalInput(BaseModel):
     end_date: date
     pair: Literal["EURUSD"] = "EURUSD"
     timeframe: Literal["4h"] = "4h"
-    rule_set_id: Literal["four_factor_v4"] = "four_factor_v4"
+    rule_set_id: Literal["four_factor_v7"] = RULE_SET_ID
     notes: str = Field(default="", max_length=10000)
 
 class TodayJournalInput(BaseModel):
@@ -86,11 +86,13 @@ class JournalSaveInput(BaseModel):
 
     generation_id: UUID
     edited_draft: str = Field(min_length=1, max_length=20000)
+    title: str = Field(default="", max_length=120)
 
 class JournalUpdateInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     edited_draft: str = Field(min_length=1, max_length=20000)
+    title: str = Field(default="", max_length=120)
 
 class StrategyProfileInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -202,7 +204,7 @@ def _generate_draft(entry_data, market_data, evidence_catalog, evaluation, *, cu
 @app.post("/journals", status_code=201)
 def save_journal(payload: JournalSaveInput):
     try:
-        journal = save_generated_journal(str(payload.generation_id), payload.edited_draft)
+        journal = save_generated_journal(str(payload.generation_id), payload.edited_draft, title=payload.title)
     except DraftAlreadySavedError:
         raise HTTPException(
             status_code=409,
@@ -240,7 +242,8 @@ def read_journal(journal_id: int):
 
 @app.patch("/journals/{journal_id}")
 def update_journal(journal_id: int, payload: JournalUpdateInput):
-    journal = update_journal_text(journal_id, payload.edited_draft)
+    journal = update_journal_text(journal_id, payload.edited_draft,
+                                  title=payload.title if "title" in payload.model_fields_set else None)
 
     if journal is None:
         raise HTTPException(status_code=404, detail="Journal not found.")
@@ -332,7 +335,7 @@ def generate_today_journal(entry: TodayJournalInput):
     except InvalidJournalEvidence:
         raise HTTPException(status_code=502, detail="Today's market evidence could not be validated.") from None
     entry_data = {"pair": "EURUSD", "timeframe": "4h", "journal_date": view["journal_date"],
-                  "rule_set_id": "four_factor_v4", "strategy": evaluation["rule_set"]["rules"], "notes": entry.notes}
+                  "rule_set_id": RULE_SET_ID, "strategy": evaluation["rule_set"]["rules"], "notes": entry.notes}
     return _generate_draft(entry_data, snapshot, catalog, evaluation)
 
 
@@ -356,7 +359,7 @@ def generate_range_journal(entry: RangeJournalInput):
 @app.post("/range-journals", status_code=201)
 def save_custom_journal(payload: JournalSaveInput):
     try:
-        journal = save_range_journal(str(payload.generation_id), payload.edited_draft)
+        journal = save_range_journal(str(payload.generation_id), payload.edited_draft, title=payload.title)
     except DraftAlreadySavedError:
         raise HTTPException(status_code=409, detail="This custom draft was already saved. Open it from Saved custom journals to edit it.") from None
     if journal is None:
@@ -379,7 +382,8 @@ def read_custom_journal(journal_id: int):
 
 @app.patch("/range-journals/{journal_id}")
 def edit_custom_journal(journal_id: int, payload: JournalUpdateInput):
-    journal = update_range_journal(journal_id, payload.edited_draft)
+    journal = update_range_journal(journal_id, payload.edited_draft,
+                                   title=payload.title if "title" in payload.model_fields_set else None)
     if journal is None:
         raise HTTPException(status_code=404, detail="Custom journal not found.")
     return journal

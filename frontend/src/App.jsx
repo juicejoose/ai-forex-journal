@@ -6,6 +6,7 @@ import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 import CustomRangeJournals from './CustomRangeJournals.jsx'
 import TodayPage from './TodayPage.jsx'
+import { journalEditsSaved } from './journalNames.js'
 import { CURRENT_RULE_SET_ID, isRetiredRuleSet } from './strategyChoices.js'
 
 const tabs = [
@@ -39,6 +40,7 @@ function App() {
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileDirty, setProfileDirty] = useState(false)
   const [editedDraft, setEditedDraft] = useState('')
+  const [journalTitle, setJournalTitle] = useState('')
 
   const [preview, setPreview] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -56,7 +58,7 @@ function App() {
   const busy = todayBusy || rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
-    savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
+    journalEditsSaved(savedJournal, editedDraft, journalTitle)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -65,7 +67,7 @@ function App() {
         const response = await fetch('http://127.0.0.1:8000/strategy-rule-sets', { signal: controller.signal })
         const data = await response.json()
         if (!response.ok || !Array.isArray(data?.items) ||
-            !data.items.some((item) => item.id === CURRENT_RULE_SET_ID && item.revision === 2 &&
+            !data.items.some((item) => item.id === CURRENT_RULE_SET_ID && item.version === 7 && item.revision === 1 &&
               typeof item.rules === 'string' && item.factors?.length === 4)) {
           throw new Error('Invalid strategy definition')
         }
@@ -126,7 +128,7 @@ function App() {
     const trimmedStrategy = (ruleSetId ? ruleDefinition?.rules ?? '' : strategy).trim()
 
     if (isRetiredRuleSet(ruleSetId)) {
-      setError('Choose v4 or Written strategy before generating a journal.')
+      setError('Choose v7 or Written strategy before generating a journal.')
       return
     }
 
@@ -203,6 +205,7 @@ function App() {
 
       setPreview(data)
       setEditedDraft(data.draft)
+      setJournalTitle('')
       setSavedJournal(null)
       setEditorTab('generate')
 
@@ -231,10 +234,11 @@ function App() {
       : 'http://127.0.0.1:8000/journals'
 
     const body = existingId
-      ? { edited_draft: text }
+      ? { edited_draft: text, title: journalTitle.trim() }
       : {
         generation_id: preview.generation_id,
         edited_draft: text,
+        title: journalTitle.trim(),
       }
 
     setSaving(true)
@@ -256,12 +260,13 @@ function App() {
         )
       }
 
-      if (!Number.isInteger(data?.id) || typeof data?.edited_draft !== 'string') {
+      if (!Number.isInteger(data?.id) || typeof data?.edited_draft !== 'string' || data.title !== journalTitle.trim()) {
         throw new Error('The server did not confirm the saved entry.')
       }
 
       setSavedJournal(data)
       setEditedDraft(data.edited_draft)
+      setJournalTitle(data.title ?? '')
       setHistoryVersion((value) => value + 1)
     } catch (err) {
       setSaveError(err.message)
@@ -327,6 +332,7 @@ function App() {
       })
 
       setEditedDraft(data.edited_draft)
+      setJournalTitle(data.title ?? '')
       setSavedJournal(data)
       setEditorTab('saved')
     } catch (err) {
@@ -366,6 +372,7 @@ function App() {
       if (isOpenJournal) {
         setPreview(null)
         setEditedDraft('')
+        setJournalTitle('')
         setSavedJournal(null)
         setSaveError('')
         setHistoryError('')
@@ -388,6 +395,8 @@ function App() {
       preview={preview}
       savedJournal={savedJournal}
       text={editedDraft}
+      name={journalTitle}
+      onNameChange={setJournalTitle}
       onChange={setEditedDraft}
       onSave={handleSave}
       onDelete={() => requestDeleteJournal(savedJournal)}

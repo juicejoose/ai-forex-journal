@@ -33,6 +33,24 @@ def sma(values: Sequence[float], period: int) -> list[float | None]:
     return result
 
 
+def sma_nullable(values: Sequence[float | None], period: int) -> list[float | None]:
+    """SMA of complete, consecutive indicator windows; never fill missing RSI.
+
+    Keep source alignment and full precision. A missing observation requires a
+    fresh complete window, so unavailable history cannot silently become a score.
+    """
+    _validate_period(period)
+    result: list[float | None] = [None] * len(values)
+    for value in values:
+        if value is not None and (type(value) not in (int, float) or not isfinite(value)):
+            raise ValueError("Smoothing inputs must be finite numbers or None.")
+    for index in range(period - 1, len(values)):
+        window = values[index - period + 1:index + 1]
+        if all(value is not None for value in window):
+            result[index] = fsum(window) / period
+    return result
+
+
 def ema(values: Sequence[float], period: int) -> list[float | None]:
     """Use alpha=2/(period+1), seeded with the first `period` closes' SMA."""
     prices = _validated_prices(values, period)

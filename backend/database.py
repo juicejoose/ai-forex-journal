@@ -54,6 +54,8 @@ def init_db():
             connection.execute("ALTER TABLE journals ADD COLUMN market_data_json TEXT")
         if "generation_id" not in columns:
             connection.execute("ALTER TABLE journals ADD COLUMN generation_id TEXT")
+        if "title" not in columns:
+            connection.execute("ALTER TABLE journals ADD COLUMN title TEXT NOT NULL DEFAULT ''")
         connection.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS journals_generation_id
             ON journals(generation_id)
@@ -120,14 +122,14 @@ def store_generated_draft(entry, original_draft, market_data, rule_evaluation=No
     return generation_id
 
 
-def save_generated_journal(generation_id, edited_draft):
+def save_generated_journal(generation_id, edited_draft, *, title=""):
     now = datetime.now(timezone.utc).isoformat()
     with get_connection(write=True) as connection:
         existing = connection.execute(
             "SELECT * FROM journals WHERE generation_id = ?", (generation_id,),
         ).fetchone()
         if existing is not None:
-            if existing["edited_draft"] != edited_draft:
+            if existing["edited_draft"] != edited_draft or existing["title"] != title:
                 raise DraftAlreadySavedError
             return _journal_from_row(existing)
 
@@ -143,13 +145,13 @@ def save_generated_journal(generation_id, edited_draft):
             INSERT INTO journals (
                 pair, journal_date, timeframe, strategy, notes,
                 original_draft, edited_draft, created_at, updated_at,
-                market_data_json, generation_id, rule_evaluation_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                market_data_json, generation_id, rule_evaluation_json, title
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry["pair"], entry["journal_date"], entry["timeframe"],
                 entry["strategy"], entry["notes"], draft["original_draft"],
-                edited_draft, now, now, draft["market_data_json"], generation_id, draft["rule_evaluation_json"],
+                edited_draft, now, now, draft["market_data_json"], generation_id, draft["rule_evaluation_json"], title,
             ),
         )
         connection.execute("DELETE FROM generated_drafts WHERE id = ?", (generation_id,))
@@ -167,12 +169,12 @@ def fetch_journal(journal_id):
         return _journal_from_row(row)
 
 
-def update_journal_text(journal_id, edited_draft):
+def update_journal_text(journal_id, edited_draft, *, title=None):
     now = datetime.now(timezone.utc).isoformat()
     with get_connection(write=True) as connection:
         cursor = connection.execute(
-            "UPDATE journals SET edited_draft = ?, updated_at = ? WHERE id = ?",
-            (edited_draft, now, journal_id),
+            "UPDATE journals SET edited_draft = ?, updated_at = ?, title = COALESCE(?, title) WHERE id = ?",
+            (edited_draft, now, title, journal_id),
         )
         if cursor.rowcount == 0:
             return None
@@ -218,7 +220,7 @@ def fetch_journals(limit=20, offset=0, journal_date=None):
     with get_connection() as connection:
         total = connection.execute("SELECT COUNT(*) FROM journals" + where, parameters).fetchone()[0]
         rows = connection.execute(
-            """SELECT id, pair, journal_date, timeframe, created_at, updated_at, market_data_json
+            """SELECT id, title, pair, journal_date, timeframe, created_at, updated_at, market_data_json, rule_evaluation_json
             FROM journals""" + where + """
             ORDER BY created_at DESC, id DESC
             LIMIT ? OFFSET ?
@@ -229,7 +231,9 @@ def fetch_journals(limit=20, offset=0, journal_date=None):
         for row in rows:
             item = dict(row)
             item.pop("market_data_json")
+            item.pop("rule_evaluation_json")
             item["change_percent"] = _session_change_percent(row)
+            item["average_net_score"] = _session_average_net_score(row, allow_partial=True)
             try:
                 snapshot = json.loads(row["market_data_json"])
                 if snapshot.get("analysis_kind") == "intraday":
@@ -247,17 +251,34 @@ def fetch_journals(limit=20, offset=0, journal_date=None):
         }
 
 
-def _session_average_net_score(row):
-    """Read the saved average for the calendar's selected full-session snapshot."""
+def _session_average_net_score(row, *, allow_partial=False):
+    """Read stored averages; only entry cards may include a provisional average."""
     try:
         evaluation = json.loads(row["rule_evaluation_json"])
         if not isinstance(evaluation, dict) or evaluation.get("schema_version") != 1:
             return None
         definition, summary = evaluation.get("rule_set"), evaluation.get("summary")
-        if (not isinstance(definition, dict) or definition.get("id") != "four_factor_v4"
-                or not isinstance(summary, dict) or summary.get("method") != "session_average"
-                or summary.get("complete") is not True or summary.get("candle_count") != 6):
+        if (not isinstance(definition, dict) or definition.get("id") not in ("four_factor_v4", "four_factor_v5", "four_factor_v6", "four_factor_v7")
+                or not isinstance(summary, dict) or summary.get("complete") is not True):
             return None
+        method, count = summary.get("method"), summary.get("candle_count")
+        full = method == "session_average" and count == 6
+        partial = (allow_partial and method == "session_to_date" and evaluation.get("analysis_kind") == "intraday"
+                   and type(count) is int and 1 <= count < 6)
+        if not full and not partial:
+            return None
+        if allow_partial:
+            # Entry cards must agree with their own market snapshot's identity and coverage.
+            snapshot = json.loads(row["market_data_json"])
+            if (not isinstance(snapshot, dict) or snapshot.get("instrument") != "EUR_USD"
+                    or snapshot.get("timeframe") != "H4" or row["timeframe"] != "4h"
+                    or row["pair"].upper().replace("/", "").replace("_", "") != "EURUSD"
+                    or snapshot.get("journal_date") != row["journal_date"]
+                    or not isinstance(snapshot.get("session"), dict)
+                    or snapshot["session"].get("complete") is not full):
+                return None
+            if partial and (snapshot.get("analysis_kind") != "intraday" or len(snapshot.get("candles", [])) != count):
+                return None
         value, maximum = summary.get("net_score"), summary.get("max_points")
         if (any(type(number) not in (int, float) or not math.isfinite(number) for number in (value, maximum))
                 or maximum <= 0 or abs(value) > maximum):

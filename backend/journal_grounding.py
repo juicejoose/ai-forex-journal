@@ -19,12 +19,13 @@ NY = ZoneInfo("America/New_York")
 CandleId = Literal["C1", "C2", "C3", "C4", "C5", "C6"]
 Metric = Literal[
     "open", "high", "low", "close", "change_percent", "ema20", "sma190",
-    "rsi14", "momentum", "squeeze_state", "histogram_color", "released",
+    "rsi14", "rsi14_sma14", "momentum", "squeeze_state", "histogram_color", "released",
 ]
 METRICS = {
     "open": ("Open", 5), "high": ("High", 5), "low": ("Low", 5),
     "close": ("Close", 5), "change_percent": ("Change (%)", 2),
     "ema20": ("EMA20", 5), "sma190": ("SMA190", 5), "rsi14": ("RSI14", 2),
+    "rsi14_sma14": ("RSI14 SMA14", 2),
     "momentum": ("Momentum", 5), "squeeze_state": ("Squeeze", None),
     "histogram_color": ("Histogram", None), "released": ("Released", None),
 }
@@ -94,7 +95,7 @@ relevant excerpt, mark insufficient_data, and explain the limitation.
 
 Every explanation must be qualitative: NO numerical values, percentages, dates,
 clock times, timezones, spelled-out numbers, or candle IDs. The ONLY allowed
-numerals in explanations are in the names EMA20, SMA190, RSI14, and H4. To discuss
+numerals in explanations are in the names EMA20, SMA190, RSI14, RSI14 SMA14, and H4. To discuss
 a threshold, say 'the strategy threshold'; its exact number belongs in rule_quote.
 Refer to 'the cited candle(s)' instead of clock times. Avoid temporal labels such
 as morning/evening or calendar dates. Put candle IDs only in evidence.candle_id.
@@ -105,7 +106,10 @@ Select the fields that support each explanation. Cite each candle at most once
 per explanation and each field at most once per candle. The server supplies the
 quoted figures. Unsupported raw figures or references make the entire draft fail.
 
-Only EMA20, SMA190, RSI14 and the supplied LazyBear Squeeze are available. For
+Only the supplied indicators are available: EMA20, SMA190, raw RSI14, RSI14 SMA14
+(the simple moving average of RSI14, when present), and LazyBear Squeeze.
+Keep raw RSI14 and its MA distinct. Cite rsi14_sma14 for an RSI-based MA rule;
+never substitute raw rsi14 if the MA is absent or undefined. For
 simultaneous conditions, all conditions must hold on the SAME candle. Do not join
 different candles into a signal. Respect the user's timing: cross, any candle,
 all candles, or session-end conditions. Explain missing thresholds, periods,
@@ -177,6 +181,9 @@ def build_evidence_catalog(snapshot: dict, *, allow_partial=False) -> dict:
             for key in ("ema20", "sma190"):
                 values[key] = _number(indicators[key])
             values["rsi14"] = None if indicators["rsi14"] is None else _number(indicators["rsi14"])
+            if "rsi14_sma14" in indicators:
+                value = indicators["rsi14_sma14"]
+                values["rsi14_sma14"] = None if value is None else _number(value)
             squeeze = indicators["squeeze"]
             values["momentum"] = _number(squeeze["momentum"])
             if squeeze["state"] not in ("ON", "OFF", "NEUTRAL"):
@@ -198,7 +205,7 @@ def build_evidence_catalog(snapshot: dict, *, allow_partial=False) -> dict:
         raise InvalidJournalEvidence("The market snapshot cannot support candle citations.") from exc
 
 
-_INDICATOR_NAMES = re.compile(r"\b(?:EMA\s*20|SMA\s*190|RSI\s*14|H4)\b", re.IGNORECASE)
+_INDICATOR_NAMES = re.compile(r"\b(?:RSI\s*14\s+SMA\s*14|EMA\s*20|SMA\s*190|RSI\s*14|H4)\b", re.IGNORECASE)
 _NUMBER_WORDS = re.compile(
     r"\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
     r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|"
@@ -314,6 +321,8 @@ def render_journal(raw: str, snapshot: dict, strategy: str) -> str:
         for key, (label, places) in METRICS.items():
             if key not in fields:
                 continue
+            if key not in row["values"]:
+                raise InvalidJournalEvidence("The cited indicator is absent from this saved snapshot.")
             value = row["values"][key]
             formatted = _fixed(value, places) if places is not None else (
                 "yes" if value is True else "no" if value is False else str(value)

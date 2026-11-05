@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import CustomRangeForm from './CustomRangeForm.jsx'
 import CustomRangeHistory from './CustomRangeHistory.jsx'
 import JournalView from './JournalView.jsx'
+import { CURRENT_RULE_SET_ID } from './strategyChoices.js'
+import { journalEditsSaved } from './journalNames.js'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 import { customRangeDetails, rangePreview, validRangePreview } from './customRange.js'
 import './CustomRangeJournals.css'
@@ -22,6 +24,7 @@ export default function CustomRangeJournals({ activeTab, onBusyChange, onDirtyTa
   const [preview, setPreview] = useState(null)
   const [saved, setSaved] = useState(null)
   const [text, setText] = useState('')
+  const [journalTitle, setJournalTitle] = useState('')
   const [editorTab, setEditorTab] = useState('custom')
   const [action, setAction] = useState('')
   const [error, setError] = useState('')
@@ -33,7 +36,7 @@ export default function CustomRangeJournals({ activeTab, onBusyChange, onDirtyTa
   const [message, setMessage] = useState('')
   const options = optionsResult?.retry === retry ? optionsResult.data : null
   const optionsError = optionsResult?.retry === retry ? optionsResult.error : null
-  const isSaved = saved !== null && text.trim() === saved.edited_draft
+  const isSaved = journalEditsSaved(saved, text, journalTitle)
   const dirty = preview !== null && !isSaved
 
   useEffect(() => { onDirtyTabChange(dirty ? editorTab : null) }, [dirty, editorTab, onDirtyTabChange])
@@ -68,10 +71,10 @@ export default function CustomRangeJournals({ activeTab, onBusyChange, onDirtyTa
     setError(''); setPending('generate')
     try {
       const response = await fetch(`${API}/range-journal/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ start_date: start, end_date: end, pair: 'EURUSD', timeframe: '4h', rule_set_id: 'four_factor_v4', notes: notes.trim() }) })
+        body: JSON.stringify({ start_date: start, end_date: end, pair: 'EURUSD', timeframe: '4h', rule_set_id: CURRENT_RULE_SET_ID, notes: notes.trim() }) })
       const data = await readResponse(response, 'Could not generate a custom journal. Please try again.')
       if (!validRangePreview(data)) throw new Error('The server did not return a complete custom journal.')
-      setPreview(data); setSaved(null); setText(data.draft); setEditorTab('custom'); setSaveError(''); setMessage('')
+      setPreview(data); setSaved(null); setText(data.draft); setJournalTitle(''); setEditorTab('custom'); setSaveError(''); setMessage('')
     } catch (err) { setError(err.message) } finally { setPending('') }
   }
 
@@ -81,12 +84,12 @@ export default function CustomRangeJournals({ activeTab, onBusyChange, onDirtyTa
     try {
       const response = await fetch(`${API}/range-journals${saved ? `/${saved.id}` : ''}`, { method: saved ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saved
-          ? { edited_draft: text.trim() } : { generation_id: preview.generation_id, edited_draft: text.trim() }) })
+          ? { edited_draft: text.trim(), title: journalTitle.trim() } : { generation_id: preview.generation_id, edited_draft: text.trim(), title: journalTitle.trim() }) })
       const data = await readResponse(response, 'Could not save the custom journal. Your draft is still here.')
-      if (!Number.isInteger(data?.id) || typeof data.edited_draft !== 'string' || !validRangePreview(rangePreview(data))) {
+      if (!Number.isInteger(data?.id) || data.title !== journalTitle.trim() || typeof data.edited_draft !== 'string' || !validRangePreview(rangePreview(data))) {
         throw new Error('The server returned an invalid saved custom journal. Refresh the saved library before retrying.')
       }
-      setSaved(data); setText(data.edited_draft); setHistoryVersion(v => v + 1)
+      setSaved(data); setText(data.edited_draft); setJournalTitle(data.title ?? ''); setHistoryVersion(v => v + 1)
     } catch (err) { setSaveError(err.message) } finally { setPending('') }
   }
 
@@ -99,7 +102,7 @@ export default function CustomRangeJournals({ activeTab, onBusyChange, onDirtyTa
       if (data?.id !== id || typeof data.edited_draft !== 'string' || !validRangePreview(rangePreview(data))) {
         throw new Error('The saved custom journal has an unsupported format.')
       }
-      setPreview(rangePreview(data)); setSaved(data); setText(data.edited_draft); setEditorTab('custom-saved'); setSaveError(''); setMessage('')
+      setPreview(rangePreview(data)); setSaved(data); setText(data.edited_draft); setJournalTitle(data.title ?? ''); setEditorTab('custom-saved'); setSaveError(''); setMessage('')
     } catch (err) { setHistoryError(err.message) } finally { setPending('') }
   }
 
@@ -116,14 +119,14 @@ export default function CustomRangeJournals({ activeTab, onBusyChange, onDirtyTa
         await readResponse(response, 'Could not delete the custom journal.')
         throw new Error('The server did not confirm deletion. Refresh the custom library to check its status.')
       }
-      if (saved?.id === deleteTarget.id) { setPreview(null); setSaved(null); setText(''); setSaveError('') }
+      if (saved?.id === deleteTarget.id) { setPreview(null); setSaved(null); setText(''); setJournalTitle(''); setSaveError('') }
       setMessage(`Custom journal #${deleteTarget.id} ${response.status === 404 ? 'was already deleted' : 'deleted'}.`)
       setDeleteTarget(null); setHistoryVersion(v => v + 1)
     } catch (err) { setDeleteError(err.message) } finally { setPending('') }
   }
 
   const editor = preview && editorTab === activeTab && <JournalView key={preview.generation_id} preview={preview}
-    savedJournal={saved} text={text} onChange={setText} onSave={save} onDelete={() => requestDelete(saved)}
+    savedJournal={saved} text={text} name={journalTitle} onNameChange={setJournalTitle} onChange={setText} onSave={save} onDelete={() => requestDelete(saved)}
     busy={busy} saving={action === 'save'} deleting={action === 'delete'} isSaved={isSaved} error={saveError}
     backLabel="Back to custom journals" onBack={editorTab === 'custom-saved' ? () => {
       document.getElementById('custom-history-heading')?.focus()

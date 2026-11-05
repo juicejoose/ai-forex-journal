@@ -92,6 +92,9 @@ export default function StrategyRuleHelp({ factor, open, onOpen, onClose }) {
       <p><b>Bullish:</b> {factor.bullish}</p>
       <p><b>Bearish:</b> {factor.bearish}</p>
       {factor.distance_weighting && <p className="ss-tooltip-note">One EUR/USD pip is 0.0001. Equal EMA/SMA values earn zero. The maximum stays 5 points per candle when this factor earns only 1.</p>}
+      {factor.smoothing && <p className="ss-tooltip-note">Uses the simple average of the latest 14 RSI14 readings, including this completed candle. Both thresholds and trend use this MA; raw RSI is separate context.</p>}
+      {factor.trend_reduction && <p className="ss-tooltip-note">Trend points reduce to {factor.trend_reduction.reduced_points} near a threshold: rising MA from {factor.trend_reduction.bullish_min} to below {factor.trend.upper_threshold}, or falling MA above {factor.trend.lower_threshold} through {factor.trend_reduction.bearish_max}. At and beyond the thresholds, the full threshold point takes priority. Nearing a threshold does not confirm a reversal.</p>}
+      {factor.trend && <p className="ss-tooltip-note">Only the current {factor.source === 'rsi14_sma14' ? 'RSI-based MA' : 'RSI'} needs to be between 40 and 60 for trend scoring; the two earlier readings may be outside that band. Comparisons are strict. Mixed or equal readings earn zero. This is a three-reading trend, not a swing pattern.</p>}
       {factor.slowdown && <p className="ss-tooltip-note">Uses three consecutive completed candles. Touching or crossing zero resets the slowdown comparison. Missing history makes this factor unavailable.</p>}
       <p className="ss-tooltip-note">Unmet conditions earn no points. Missing inputs are unavailable.</p>
     </div>, document.body)}

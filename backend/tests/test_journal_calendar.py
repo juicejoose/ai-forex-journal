@@ -130,7 +130,7 @@ class JournalCalendarTests(unittest.TestCase):
         self.assertEqual(self.calendar()["days"][0]["journal_count"], 25)
         self.assertEqual(self.client.get("/journals").json()["total"], 26)
         for item in first["items"]:
-            self.assertEqual(set(item), {"id", "pair", "journal_date", "timeframe", "created_at", "updated_at", "change_percent"})
+            self.assertEqual(set(item), {"id", "title", "pair", "journal_date", "timeframe", "created_at", "updated_at", "change_percent", "average_net_score"})
             self.assertEqual(item["change_percent"], 1.0)
 
     def test_invalid_month_queries_are_rejected(self):

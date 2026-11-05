@@ -27,6 +27,7 @@ export default function DeleteJournalDialog({ journal, hasUnsavedEdits, pending,
     >
       <h2 id="delete-journal-heading">Delete saved journal?</h2>
       <p id="delete-journal-details" style={{ marginTop: '1rem' }}>
+        {journal.title && <><strong style={{ overflowWrap: 'anywhere' }}>{journal.title}</strong><br /></>}
         Journal #{journal.id} · {journal.start_date ? `${journal.start_date} – ${journal.end_date}` : journal.journal_date} · {journal.pair} ({journal.timeframe})
       </p>
       <p id="delete-journal-warning" style={{ marginTop: '1rem' }}>

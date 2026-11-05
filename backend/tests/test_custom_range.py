@@ -156,13 +156,13 @@ class RangeScoringTests(unittest.TestCase):
     def setUp(self):
         self.snapshot = range_snapshot(date(2026, 10, 16), date(2026, 10, 19))
         for i, candle in enumerate([*self.snapshot["previous_candles"], *self.snapshot["candles"]]):
-            candle["indicators"].update(ema20=1, sma190=.9, rsi14=30)
+            candle["indicators"].update(ema20=1, sma190=.9, rsi14=30, rsi14_sma14=30)
             candle["indicators"]["squeeze"]["momentum"] = .001 * (i + 1)
         self.snapshot["previous_candle"] = self.snapshot["previous_candles"][-1]
 
     def test_whole_range_average_and_end_bias_are_distinct(self):
         for i, candle in enumerate(self.snapshot["candles"][-6:]):
-            candle["indicators"].update(ema20=1.3, sma190=1.4, rsi14=70)
+            candle["indicators"].update(ema20=1.3, sma190=1.4, rsi14=70, rsi14_sma14=70)
             candle["indicators"]["squeeze"]["momentum"] = -.001 * (i + 1)
         original = copy.deepcopy(self.snapshot)
         result = dr.evaluate_range_strategy(self.snapshot)
@@ -193,6 +193,7 @@ class RangeScoringTests(unittest.TestCase):
 
     def test_missing_indicator_anywhere_withholds_overall_average(self):
         self.snapshot["candles"][2]["indicators"]["rsi14"] = None
+        self.snapshot["candles"][2]["indicators"]["rsi14_sma14"] = None
         result = dr.evaluate_range_strategy(self.snapshot)
         self.assertEqual(result["summary"]["evaluated_factors"], 47)
         self.assertEqual(result["summary"]["direction"], "insufficient_data")

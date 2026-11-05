@@ -5,7 +5,7 @@ import json
 import unittest
 
 from journal_grounding import InvalidJournalEvidence
-from strategy_rules import (RULE_SET_ID, RULES_TEXT, MOMENTUM_RULE_SET_ID,
+from strategy_rules import (RULE_SET_ID, RULES_TEXT, MOMENTUM_RULE_SET_ID, SESSION_RULE_SET_ID,
                             SUPPORTED_RULE_SET_IDS, evaluate_strategy, rule_set_definition)
 from tests.test_strategy_rules import scoring_snapshot
 from tests.test_scored_journal import ScoredJournalTestCase, ENTRY
@@ -13,7 +13,7 @@ from tests.test_scored_journal import ScoredJournalTestCase, ENTRY
 
 def late_reversal(snapshot):
     for candle, momentum in zip(snapshot["candles"][-2:], [-0.001, -0.002]):
-        candle["indicators"].update(ema20=1.3, sma190=1.35, rsi14=70)
+        candle["indicators"].update(ema20=1.3, sma190=1.35, rsi14=70, rsi14_sma14=70)
         candle["indicators"]["squeeze"]["momentum"] = momentum
 
 
@@ -42,6 +42,7 @@ class SessionAverageTests(unittest.TestCase):
     def test_single_early_change_updates_average_without_changing_session_end(self):
         before = evaluate_strategy(self.snapshot)
         self.snapshot["candles"][0]["indicators"]["rsi14"] = 60
+        self.snapshot["candles"][0]["indicators"]["rsi14_sma14"] = 60
         after = evaluate_strategy(self.snapshot)
         self.assertEqual(after["summary"]["bullish_points"], 29 / 6)
         self.assertEqual(after["summary"]["bearish_points"], 1 / 6)
@@ -51,13 +52,14 @@ class SessionAverageTests(unittest.TestCase):
         for candle, momentum in zip(self.snapshot["candles"][-3:], [0.001, 0.0018, 0.0023]):
             candle["indicators"]["squeeze"]["momentum"] = momentum
         self.snapshot["candles"][-1]["indicators"]["rsi14"] = 50
+        self.snapshot["candles"][-1]["indicators"]["rsi14_sma14"] = 50
         result = evaluate_strategy(self.snapshot)
         self.assertEqual([c["bullish_points"] for c in result["candles"]], [5, 5, 5, 4, 5, 3.5])
         summary = result["summary"]
         self.assertEqual(summary["bullish_points"], 27.5 / 6)
         self.assertNotEqual(summary["bullish_points"], round(27.5 / 6, 2))
         self.assertAlmostEqual(summary["bullish_alignment_percent"], 100 * 27.5 / 30)
-        self.assertEqual((summary["neutral_factors"], summary["reduced_factors"]), (2, 1))
+        self.assertEqual((summary["neutral_factors"], summary["reduced_factors"]), (1, 1))
         self.assertEqual(result["session_end"]["bullish_points"], 3.5)
 
     def test_missing_input_on_any_candle_withholds_all_session_numbers(self):
@@ -66,6 +68,7 @@ class SessionAverageTests(unittest.TestCase):
             with self.subTest(candle=index + 1):
                 snapshot = copy.deepcopy(base)
                 snapshot["candles"][index]["indicators"]["rsi14"] = None
+                snapshot["candles"][index]["indicators"]["rsi14_sma14"] = None
                 result = evaluate_strategy(snapshot)
                 summary = result["summary"]
                 self.assertEqual((summary["direction"], summary["evaluated_factors"], summary["unavailable_factors"]), ("insufficient_data", 23, 1))
@@ -86,20 +89,20 @@ class SessionAverageTests(unittest.TestCase):
 
     def test_all_neutral_and_equal_opposing_averages_are_distinct(self):
         for candle in [*self.snapshot["previous_candles"], *self.snapshot["candles"]]:
-            candle["indicators"].update(ema20=1.25, sma190=1.25, rsi14=50)
+            candle["indicators"].update(ema20=1.25, sma190=1.25, rsi14=50, rsi14_sma14=50)
             candle["indicators"]["squeeze"]["momentum"] = 0
         summary = evaluate_strategy(self.snapshot)["summary"]
         self.assertEqual((summary["direction"], summary["bullish_points"], summary["bearish_points"], summary["neutral_factors"]), ("neutral", 0, 0, 24))
         for i, candle in enumerate([*self.snapshot["previous_candles"], *self.snapshot["candles"]]):
-            candle["indicators"].update(sma190=1.2, rsi14=60)
+            candle["indicators"].update(sma190=1.2, rsi14=60, rsi14_sma14=60)
             candle["indicators"]["squeeze"]["momentum"] = -0.001 * (i + 1)
         summary = evaluate_strategy(self.snapshot)["summary"]
         self.assertEqual((summary["direction"], summary["bullish_points"], summary["bearish_points"], summary["net_score"]), ("mixed", 2, 2, 0))
 
     def test_older_versions_keep_final_candle_summary_and_far_gap_scores_match_v3(self):
         late_reversal(self.snapshot)
-        current = evaluate_strategy(self.snapshot)
-        for rule_id in SUPPORTED_RULE_SET_IDS[1:]:
+        current = evaluate_strategy(self.snapshot, SESSION_RULE_SET_ID)
+        for rule_id in (r for r in SUPPORTED_RULE_SET_IDS if rule_set_definition(r)["summary_method"] == "final_candle"):
             previous = evaluate_strategy(self.snapshot, rule_id)
             self.assertEqual(previous["rule_set"]["summary_method"], "final_candle")
             self.assertEqual((previous["summary"]["method"], previous["summary"]["candle_id"], previous["summary"]["direction"]), ("final_candle", "C6", "bearish"))
@@ -113,7 +116,7 @@ class SessionAverageTests(unittest.TestCase):
 
     def test_default_definition_documents_session_method_and_is_not_shared(self):
         definition = rule_set_definition()
-        self.assertEqual((definition["id"], definition["version"], definition["summary_method"]), (RULE_SET_ID, 4, "session_average"))
+        self.assertEqual((definition["id"], definition["version"], definition["summary_method"]), (RULE_SET_ID, 7, "session_average"))
         self.assertEqual([f["points"] for f in definition["factors"]], [1, 2, 1, 1])
         self.assertIn("all six completed H4 candles", definition["rules"])
         self.assertIn("twenty-four factor checks", definition["rules"])
@@ -125,6 +128,7 @@ class SessionAverageTests(unittest.TestCase):
         before = evaluate_strategy(self.snapshot)
         self.assertEqual(self.snapshot, original)
         self.snapshot["candles"][-1]["indicators"]["rsi14"] = 60
+        self.snapshot["candles"][-1]["indicators"]["rsi14_sma14"] = 60
         after = evaluate_strategy(self.snapshot)
         self.assertEqual(before["candles"][:-1], after["candles"][:-1])
         self.assertNotEqual(before["summary"], after["summary"])
@@ -157,6 +161,7 @@ class SessionAverageJournalTests(ScoredJournalTestCase):
 
     def test_incomplete_average_renders_and_persists_nulls_without_misleading_zeros(self):
         self.snapshot["candles"][0]["indicators"]["rsi14"] = None
+        self.snapshot["candles"][0]["indicators"]["rsi14_sma14"] = None
         draft = self.generate()
         self.assertIn("Session-average bias: Incomplete", draft["draft"])
         self.assertIn("Session-end bias: Bullish", draft["draft"])
@@ -194,7 +199,7 @@ class SessionAverageJournalTests(ScoredJournalTestCase):
         self.market.assert_not_called()
         self.ai.assert_not_called()
 
-    def test_catalog_and_preview_offer_v4_without_provider_calls(self):
+    def test_catalog_and_preview_offer_v7_without_provider_calls(self):
         catalog = self.client.get("/strategy-rule-sets").json()
         self.assertEqual(catalog["default_id"], RULE_SET_ID)
         self.assertEqual([r["id"] for r in catalog["items"]], [RULE_SET_ID])

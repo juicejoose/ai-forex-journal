@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { changeTone, formatChange, formatDay, isDateKey } from './journalCalendar.js'
 import './JournalHistory.css'
+import { journalName } from './journalNames.js'
 
 const PAGE_SIZE = 20
 export default function CustomRangeHistory({ active, refreshVersion, onOpen, onDelete, busy }) {
@@ -19,7 +20,8 @@ export default function CustomRangeHistory({ active, refreshVersion, onOpen, onD
         if (!response.ok || !Array.isArray(data?.items) || !Number.isInteger(data.total) || data.total < 0 ||
             data.offset !== offset || data.limit !== PAGE_SIZE || data.items.length > PAGE_SIZE ||
             !data.items.every(item => Number.isInteger(item.id) && item.id > 0 && isDateKey(item.start_date) &&
-              isDateKey(item.end_date) && item.start_date <= item.end_date && Number.isFinite(item.change_percent))) {
+              isDateKey(item.end_date) && item.start_date <= item.end_date && Number.isFinite(item.change_percent) &&
+              (item.title == null || typeof item.title === 'string'))) {
           throw new Error('Could not load custom journals. Refresh to try again.')
         }
         if (controller.signal.aborted) return
@@ -42,7 +44,8 @@ export default function CustomRangeHistory({ active, refreshVersion, onOpen, onD
       <p className="cr-list-count" role="status">{current.data.total} saved custom {current.data.total === 1 ? 'journal' : 'journals'}</p>
       {!current.data.total && <div className="jh-empty-state"><h3>No custom journals yet</h3><p>Generate a date-range journal and save it to add it here.</p></div>}
       <ul className="cr-history-grid">{current.data.items.map(journal => <li className="jh-entry-card" key={journal.id}>
-        <div className="jh-entry-title"><h3>Custom journal #{journal.id}</h3><span className="jh-pair">EUR/USD · H4</span></div>
+        <div className="jh-entry-title"><h3>{journalName(journal, true)}</h3><span className="jh-pair">EUR/USD · H4</span></div>
+        {journal.title && <p className="jh-saved-time">Custom journal #{journal.id}</p>}
         <p className="cr-date-label">{formatDay(journal.start_date)}<br /><span>through</span> {formatDay(journal.end_date)}</p>
         <p className="jh-entry-change">Range change <strong className={`jh-text-${changeTone(journal.change_percent)}`}>{formatChange(journal.change_percent)}</strong></p>
         <div className="jh-entry-actions"><button className="jh-button jh-open-button" type="button" disabled={busy} onClick={() => onOpen(journal.id)} aria-label={`Open custom journal #${journal.id}`}>Open journal ↗</button>

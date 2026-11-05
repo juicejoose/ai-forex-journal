@@ -10,7 +10,7 @@ function isProfile(value) {
   return Number.isInteger(value?.id) && value.id > 0 &&
     typeof value.name === 'string' && value.name.trim() !== '' &&
     typeof value.rules === 'string' && value.rules.trim() !== '' &&
-    (value.rule_set_id == null || ['four_factor_v1', 'four_factor_v2', 'four_factor_v3', 'four_factor_v4'].includes(value.rule_set_id))
+    (value.rule_set_id == null || ['four_factor_v1', 'four_factor_v2', 'four_factor_v3', 'four_factor_v4', 'four_factor_v5', 'four_factor_v6', 'four_factor_v7'].includes(value.rule_set_id))
 }
 
 export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange, onDirtyChange,
@@ -140,7 +140,7 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
     setSaveError('')
     setMessage('')
     if (isRetiredRuleSet(ruleSetId)) {
-      setSaveError('Choose v4 or Written strategy before saving this profile.')
+      setSaveError('Choose v7 or Written strategy before saving this profile.')
       return
     }
     if (ruleSetId && !ruleDefinition) {
@@ -234,8 +234,8 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
                   <p className="sp-rule-preview">
                     {profile.rules.length > 160 ? `${profile.rules.slice(0, 160)}…` : profile.rules}
                   </p>
-                  <p className="sp-evaluation-label">{profile.rule_set_id ? `Python scoring · ${{four_factor_v4: 'v4 · Session average', four_factor_v3: 'v3 · Momentum slowdown', four_factor_v2: 'v2 · 5 possible points', four_factor_v1: 'v1 · original rules'}[profile.rule_set_id]}` : 'Written strategy · AI review'}</p>
-                  {isRetiredRuleSet(profile.rule_set_id) && <p className="sp-help" id={`profile-retired-${profile.id}`}>Edit and choose v4 or Written strategy to reuse this profile.</p>}
+                  <p className="sp-evaluation-label">{profile.rule_set_id ? `Python scoring · ${{four_factor_v7: 'v7 · RSI threshold proximity', four_factor_v6: 'v6 · RSI-based MA', four_factor_v5: 'v5 · RSI trend + momentum direction', four_factor_v4: 'v4 · Session average', four_factor_v3: 'v3 · Momentum slowdown', four_factor_v2: 'v2 · 5 possible points', four_factor_v1: 'v1 · original rules'}[profile.rule_set_id]}` : 'Written strategy · AI review'}</p>
+                  {isRetiredRuleSet(profile.rule_set_id) && <p className="sp-help" id={`profile-retired-${profile.id}`}>Edit and choose v7 or Written strategy to reuse this profile.</p>}
                   <div className="sp-profile-actions">
                     <button className="sp-button sp-small" type="button" aria-label={`Edit ${profile.name}`} onClick={() => openEditor(profile)} disabled={blocked}>Edit</button>
                     <button

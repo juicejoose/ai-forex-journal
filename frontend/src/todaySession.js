@@ -1,3 +1,5 @@
+import { CURRENT_RULE_SET_ID } from './strategyChoices.js'
+
 export function validTodayView(view) {
   const count = view?.session?.candle_count
   if (view?.schema_version !== 1 || !Number.isInteger(count) || count < 0 || count > 6 ||
@@ -5,7 +7,7 @@ export function validTodayView(view) {
       view.session.complete !== (count === 6) || view.session.expected_candle_count !== 6) return false
   if (count === 0) return view.market_data === null && view.rule_evaluation === null && view.snapshot_id === null
   return typeof view.snapshot_id === 'string' && validTodayEvidence(view.market_data, view.rule_evaluation) &&
-    view.market_data.candles.length === count && view.market_data.journal_date === view.journal_date
+    view.rule_evaluation.rule_set.id === CURRENT_RULE_SET_ID && view.market_data.candles.length === count && view.market_data.journal_date === view.journal_date
 }
 
 export function validTodayEvidence(snapshot, evaluation) {
@@ -14,7 +16,7 @@ export function validTodayEvidence(snapshot, evaluation) {
     snapshot.session?.complete === (count === 6) && snapshot.session?.candle_count === count &&
     typeof snapshot.data_key === 'string' && Number.isFinite(Date.parse(snapshot.data_through)) &&
     evaluation?.analysis_kind === 'intraday' && evaluation.candles?.length === count &&
-    evaluation.rule_set?.id === 'four_factor_v4' && evaluation.summary?.method === (count === 6 ? 'session_average' : 'session_to_date')
+    ['four_factor_v4', 'four_factor_v5', 'four_factor_v6', 'four_factor_v7'].includes(evaluation.rule_set?.id) && evaluation.summary?.method === (count === 6 ? 'session_average' : 'session_to_date')
 }
 
 export function summaryIsBehind(preview, view) {

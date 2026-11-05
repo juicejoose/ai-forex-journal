@@ -1,3 +1,4 @@
+import { factorDescription, paceLabels } from './strategyDescriptions.js'
 import { useState } from 'react'
 import './StrategyScores.css'
 import StrategyRuleHelp from './StrategyRuleHelp.jsx'
@@ -6,30 +7,14 @@ import { changeTone, formatChange } from './journalCalendar.js'
 const clock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })
 const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' })
 const labels = { bullish: 'Bullish lean', bearish: 'Bearish lean', mixed: 'Mixed', neutral: 'Neutral', insufficient_data: 'Insufficient data' }
-const paceLabels = { slowing: 'Slowing', accelerating: 'Accelerating', steady: 'Steady pace', transition: 'Zero-crossing reset', new_move: 'New directional move', not_directional: 'No directional point', unavailable: 'Insufficient history' }
+
 const outcomeLabel = (factor) => ({
   bullish: `+${factor.bullish_points} Bull`, bearish: `+${factor.bearish_points} Bear`,
   neutral: 'Neither', unavailable: 'Unavailable',
 })[factor.outcome]
 const stamp = (value, format = clock) => format.format(new Date(value))
-const number = (name, value) => Number.isFinite(value) ? value.toFixed(name === 'rsi14' ? 2 : 5) : 'unavailable'
+const number = (name, value) => Number.isFinite(value) ? value.toFixed(['rsi14', 'rsi14_sma14'].includes(name) ? 2 : 5) : 'unavailable'
 
-function factorDescription(factor) {
-  if (factor.outcome === 'unavailable') return 'Insufficient data'
-  if (factor.factor_id === 'momentum' && factor.momentum_change) {
-    return paceLabels[factor.momentum_change.pace] || 'Review evidence'
-  }
-  if (factor.factor_id === 'ema_sma' && factor.ema_sma_distance && ['bullish', 'bearish'].includes(factor.outcome)) {
-    return `${factor.outcome === 'bullish' ? 'Above' : 'Below'} SMA190 · ${factor.ema_sma_distance.reduced ? 'within 60 pips' : 'gap > 60 pips'}`
-  }
-  const descriptions = {
-    two_closes_ema: { bullish: 'Both above EMA20', bearish: 'Both below EMA20', neutral: 'Mixed or at EMA20' },
-    ema_sma: { bullish: 'EMA20 above SMA190', bearish: 'EMA20 below SMA190', neutral: 'EMA20 equals SMA190' },
-    rsi_extreme: { bullish: 'Oversold', bearish: 'Overbought', neutral: 'Between thresholds' },
-    momentum: { bullish: 'Positive and rising', bearish: 'Negative and falling', neutral: 'Sign / change not met' },
-  }
-  return descriptions[factor.factor_id]?.[factor.outcome] || 'Review evidence'
-}
 
 function priceChange(candle) {
   if (!Number.isFinite(candle?.open) || !Number.isFinite(candle?.close) || candle.open <= 0) return null
@@ -111,7 +96,7 @@ export default function StrategyScores({ evaluation, snapshot }) {
           <p><strong>{factor.name}</strong> · {outcomeLabel(factor)}</p><p>{factor.reason}</p>
           {factor.ema_sma_distance && <p className="ss-values">EMA/SMA gap: {number('gap', factor.ema_sma_distance.gap_pips)} pips · Reduced-point threshold: ≤ {factor.ema_sma_distance.threshold_pips} pips. The comparison uses unrounded values; a displayed gap may be rounded.</p>}
           {factor.momentum_change && <p className="ss-values">{paceLabels[factor.momentum_change.pace]} · Previous delta: {number('momentum', factor.momentum_change.previous_delta)} · Current delta: {number('momentum', factor.momentum_change.current_delta)}. Each delta is the difference between successive momentum values.</p>}
-          {factor.evidence.map((evidence) => <p className="ss-values" key={evidence.candle_id}>{evidence.candle_id} · {stamp(evidence.close_time, day)}, {stamp(evidence.close_time)}: {Object.entries(evidence.values).map(([name, value]) => `${name}: ${number(name, value)}`).join(' · ')}</p>)}
+          {factor.evidence.map((evidence) => <p className="ss-values" key={evidence.candle_id}>{evidence.candle_id} · {stamp(evidence.close_time, day)}, {stamp(evidence.close_time)}: {Object.entries(evidence.values).map(([name, value]) => `${({ rsi14: 'RSI14', rsi14_sma14: 'RSI14 SMA14' })[name] || name}: ${number(name, value)}`).join(' · ')}</p>)}
         </div>)}
       </section>)}
       <h4>Saved rule definitions</h4><p className="ss-rule-text">{ruleSet.rules}</p>
