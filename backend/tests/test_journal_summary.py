@@ -6,8 +6,8 @@ import json
 from journal_grounding import InvalidJournalEvidence
 from scored_journal import build_summary_context, parse_commentary, render_scored_journal
 from strategy_rules import RULE_SET_ID, evaluate_strategy
-from test_scored_journal import ENTRY, ScoredJournalTestCase, valid_scored_commentary
-from test_session_average import late_reversal
+from tests.test_scored_journal import ENTRY, ScoredJournalTestCase, valid_scored_commentary
+from tests.test_session_average import late_reversal
 import database as db
 
 

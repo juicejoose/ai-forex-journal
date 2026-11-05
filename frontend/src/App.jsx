@@ -4,14 +4,24 @@ import GenerateJournalForm from './GenerateJournalForm.jsx'
 import JournalView from './JournalView.jsx'
 import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
+import CustomRangeJournals from './CustomRangeJournals.jsx'
+import TodayPage from './TodayPage.jsx'
+import { CURRENT_RULE_SET_ID, isRetiredRuleSet } from './strategyChoices.js'
 
 const tabs = [
+  { id: 'today', label: 'Today' },
   { id: 'generate', label: 'Generate journal' },
   { id: 'saved', label: 'Saved journals' },
+  { id: 'custom', label: 'Custom range journal' },
+  { id: 'custom-saved', label: 'Saved custom journals' },
   { id: 'profiles', label: 'Strategy profiles' },
 ]
 
 function App() {
+  const [todayBusy, setTodayBusy] = useState(false)
+  const [todayDirty, setTodayDirty] = useState(false)
+  const [rangeBusy, setRangeBusy] = useState(false)
+  const [rangeDirtyTab, setRangeDirtyTab] = useState(null)
   const [activeTab, setActiveTab] = useState('generate')
   const [editorTab, setEditorTab] = useState('generate')
   const pair = 'EURUSD'
@@ -21,7 +31,7 @@ function App() {
   const [journalDate, setJournalDate] = useState('')
   const timeframe = '4h'
   const [strategy, setStrategy] = useState('')
-  const [ruleSetId, setRuleSetId] = useState('four_factor_v4')
+  const [ruleSetId, setRuleSetId] = useState(CURRENT_RULE_SET_ID)
   const [ruleDefinitions, setRuleDefinitions] = useState([])
   const [ruleError, setRuleError] = useState('')
   const [ruleReload, setRuleReload] = useState(0)
@@ -43,7 +53,7 @@ function App() {
   const [deleteMessage, setDeleteMessage] = useState('')
 
   const ruleDefinition = ruleDefinitions.find((item) => item.id === ruleSetId)
-  const busy = loading || saving || opening || profileBusy || deletingId !== null
+  const busy = todayBusy || rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
     savedJournal !== null && editedDraft.trim() === savedJournal.edited_draft
@@ -55,8 +65,8 @@ function App() {
         const response = await fetch('http://127.0.0.1:8000/strategy-rule-sets', { signal: controller.signal })
         const data = await response.json()
         if (!response.ok || !Array.isArray(data?.items) ||
-            !['four_factor_v4', 'four_factor_v3', 'four_factor_v2', 'four_factor_v1'].every((id) => data.items.some((item) =>
-              item.id === id && typeof item.rules === 'string' && item.factors?.length === 4))) {
+            !data.items.some((item) => item.id === CURRENT_RULE_SET_ID && item.revision === 2 &&
+              typeof item.rules === 'string' && item.factors?.length === 4)) {
           throw new Error('Invalid strategy definition')
         }
         if (!controller.signal.aborted) setRuleDefinitions(data.items)
@@ -89,7 +99,7 @@ function App() {
   }
 
   function handleUseProfile(profile) {
-    if (busy) return
+    if (busy || isRetiredRuleSet(profile.rule_set_id)) return
     if (strategy.trim() && strategy.trim() !== profile.rules.trim() &&
         !window.confirm(`Replace the strategy rules in the generation form with “${profile.name}”?`)) {
       return
@@ -114,6 +124,11 @@ function App() {
     const trimmedPair = pair.trim()
     const trimmedNotes = notes.trim()
     const trimmedStrategy = (ruleSetId ? ruleDefinition?.rules ?? '' : strategy).trim()
+
+    if (isRetiredRuleSet(ruleSetId)) {
+      setError('Choose v4 or Written strategy before generating a journal.')
+      return
+    }
 
     if (ruleSetId && !ruleDefinition) {
       setError('The scored strategy must finish loading before generating a journal.')
@@ -367,7 +382,7 @@ function App() {
     }
   }
 
-  const journalEditor = preview && (
+  const journalEditor = preview && activeTab === editorTab && (
     <JournalView
       key={preview.generation_id || savedJournal?.id || 'draft'}
       preview={preview}
@@ -391,7 +406,7 @@ function App() {
   return (
     <main>
       <h1>Forex AI Journal</h1>
-      <p>Review a completed EUR/USD session against your strategy.</p>
+      <p>Review EUR/USD sessions against your strategy, as they unfold or after the close.</p>
 
       <div
         role="tablist"
@@ -423,6 +438,8 @@ function App() {
             {tab.label}
             {preview && editorTab === tab.id && !isSaved && ' · Unsaved'}
             {tab.id === 'profiles' && profileDirty && ' · Unsaved'}
+            {tab.id === rangeDirtyTab && ' · Unsaved'}
+            {tab.id === 'today' && todayDirty && ' · Unsaved'}
           </button>
         ))}
       </div>
@@ -516,6 +533,10 @@ function App() {
           onDirtyChange={setProfileDirty}
         />
       </section>
+      <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
+        onSaved={() => setHistoryVersion(value => value + 1)} />
+      <CustomRangeJournals activeTab={activeTab}
+        onBusyChange={setRangeBusy} onDirtyTabChange={setRangeDirtyTab} busy={busy} />
     </main>
   )
 }

@@ -1,18 +1,18 @@
 """Short AI summaries grounded in immutable Python-calculated results."""
 
 import json
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, ValidationError
 
-from journal_grounding import (CandleId, InvalidJournalEvidence, StrictModel,
+from journal_grounding import (InvalidJournalEvidence, StrictModel,
                                _check_explanation, _fixed)
 
 Direction = Literal["bullish", "bearish", "mixed", "neutral", "insufficient_data"]
 
 
 class ResultReference(StrictModel):
-    candle_id: CandleId
+    candle_id: Annotated[str, Field(pattern=r"^C[1-9][0-9]{0,2}$")]
     factor_id: Literal["two_closes_ema", "ema_sma", "rsi_extreme", "momentum"]
 
 
@@ -26,7 +26,7 @@ class SessionReview(ScoredComment):
 
 
 class Consensus(ScoredComment):
-    method: Literal["session_average", "final_candle"]
+    method: Literal["session_average", "range_average", "session_to_date", "final_candle"]
     direction: Direction
     session_end_direction: Direction
 
@@ -54,8 +54,8 @@ candle_id/factor_id references from rule_evaluation:
   Price moving higher or lower is not the same as strategy bias. Do not infer
   intrabar event order, reversals, support/resistance or breakouts from OHLC alone.
 - conflicts: Which specific factors supported the same direction and which
-  opposed it across the session. Explain the greater weight of EMA20 vs SMA190
-  when relevant. Neutral factors are not opposing factors. If no opposing
+  opposed it across the session. Explain the actual awarded weight of EMA20 vs
+  SMA190 when relevant; its maximum is not always its awarded score. Neutral factors are not opposing factors. If no opposing
   factors exist, say so rather than inventing a conflict.
 - consensus: Briefly explain the official overall result, and any divergence
   at session end. Copy method, direction and session_end_direction exactly from
@@ -63,6 +63,20 @@ candle_id/factor_id references from rule_evaluation:
   candles with equal weight; final_candle uses only the final candle. For
   session_average, session_end is separate context and can disagree with the
   session bias. Never substitute session_end for a missing session average.
+  range_average is the equal-weight average of EVERY H4 candle across the custom
+  date range. Treat this as a range review, not a single trading day. Weekend
+  closures are excluded; all supplied weekday sessions must be complete. Use
+  daily_summaries to explain progression across dates without replacing the
+  range average with a selected day or final candle. session_end means the final
+  candle of the entire range. Never substitute it for a missing range average.
+  session_to_date reviews an unfinished session using ONLY completed candles.
+  Pending candles have no observations, factors, points or predicted outcomes.
+  Clearly say the review is provisional and based on the session so far; never
+  describe the day as finished. session_end_direction is latest completed candle
+  context in this mode, not an end-of-day prediction. Do not project the current
+  lean onto the pending candles. coverage distinguishes elapsed data from a
+  completed day; alignment is not certainty or probability. If all six candles
+  are present, session_average is again the full-session method.
   If the average is incomplete, say the overall consensus is unavailable;
   do not infer a lean from partial results. A mixed result is opposing support
   tied; neutral means neither side earned points.
@@ -73,7 +87,10 @@ candle_id/factor_id references from rule_evaluation:
 
 Use the supplied rule version, thresholds and weights. RSI extremes are the
 user's reversal-oriented conditions, not confirmation of a reversal. When
-present, momentum_change is authoritative: slowing reduces directional support
+present, ema_sma_distance is authoritative: a reduced EMA/SMA result retains
+its bullish or bearish direction with weaker support. Never assume it earned
+its full maximum or apply this rule to older results without that metadata.
+When present, momentum_change is authoritative: slowing reduces directional support
 without confirming a reversal. Compare only the supplied consecutive deltas;
 never imply a longer slowing streak. A sign change or touch resets the pace
 comparison. Positive but falling and negative but rising momentum earn no
@@ -131,7 +148,7 @@ def build_summary_context(snapshot, evaluation):
     opened, closed = candles[0]["open"], candles[-1]["close"]
     summary = evaluation["summary"]
     end = evaluation.get("session_end", summary)
-    return {
+    context = {
         "market": {
             "open": opened, "close": closed,
             "high": max(c["high"] for c in candles),
@@ -144,12 +161,19 @@ def build_summary_context(snapshot, evaluation):
         "direction": summary["direction"],
         "session_end_direction": end["direction"],
     }
+    if snapshot.get("analysis_kind") == "intraday":
+        context["coverage"] = {"completed_candles": len(candles), "expected_candles": 6,
+                               "session_complete": snapshot["session"]["complete"],
+                               "as_of": snapshot["as_of"], "data_through": snapshot["data_through"]}
+    return context
 
 
 def _consensus_text(evaluation):
     summary = evaluation["summary"]
-    average = summary["method"] == "session_average"
-    label = "Session-average bias" if average else "Session-end bias"
+    custom_range = summary["method"] == "range_average"
+    partial = summary["method"] == "session_to_date"
+    average = summary["method"] in ("session_average", "range_average", "session_to_date")
+    label = "Session-to-date bias" if partial else "Range-average bias" if custom_range else "Session-average bias" if average else "Session-end bias"
     direction = summary["direction"].replace("_", " ").capitalize()
     if summary["direction"] == "insufficient_data":
         text = f"{label}: Incomplete; required inputs are missing."
@@ -161,7 +185,7 @@ def _consensus_text(evaluation):
         text = f"{label}: {direction} ({points} out of {maximum}; {basis})."
     if average:
         end = evaluation["session_end"]["direction"].replace("_", " ").capitalize()
-        text += f" Session-end bias: {end}."
+        text += f" {'Latest completed candle' if partial else 'Range-end' if custom_range else 'Session-end'} bias: {end}."
     return text
 
 
@@ -182,10 +206,18 @@ def render_scored_journal(raw, snapshot, evaluation):
 
     market = context["market"]
     movement = {"up": "higher", "down": "lower", "unchanged": "unchanged"}[market["price_direction"]]
+    period = "range" if snapshot.get("analysis_kind") == "custom_range" else "session"
     facts = (f"EUR/USD closed {movement}: {_fixed(market['change_percent'], 2)}% "
-             f"({_fixed(market['change_pips'], 1)} pips) from the session open.")
+             f"({_fixed(market['change_pips'], 1)} pips) from the {period} open.")
+    partial = evaluation["summary"]["method"] == "session_to_date"
+    if partial:
+        from journal_grounding import _utc, NY
+        cutoff = _utc(snapshot["data_through"]).astimezone(NY).strftime("%b %d, %Y at %I:%M %p %Z")
+        facts = (f"Session in progress: {len(snapshot['candles'])} of 6 candles completed, through {cutoff}. "
+                 f"At that close, EUR/USD was {movement}: {_fixed(market['change_percent'], 2)}% "
+                 f"({_fixed(market['change_pips'], 1)} pips) from the session open. Remaining candles are pending.")
     sections = [
-        "## Session recap\n" + facts + " " + commentary.session_review.explanation,
+        ("## Session so far\n" if partial else "## Range recap\n" if period == "range" else "## Session recap\n") + facts + " " + commentary.session_review.explanation,
         "## Agreement and conflict\n" + commentary.conflicts.explanation,
         "## Directional consensus\n" + _consensus_text(evaluation) + " " + commentary.consensus.explanation,
         "## Concerns\n" + commentary.limitations.explanation

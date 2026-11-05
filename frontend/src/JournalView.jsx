@@ -6,15 +6,20 @@ import { isShortSummary, journalSections } from './journalPresentation.js'
 import './JournalView.css'
 
 export default function JournalView({ preview, savedJournal, text, onChange, onSave,
-  onDelete, busy, saving, deleting, isSaved, error, onBack }) {
+  onDelete, busy, saving, deleting, isSaved, error, onBack, backLabel = 'Back to calendar', showEvidence = true }) {
   const [mode, setMode] = useState('read')
   const headingRef = useRef(null)
   const sections = journalSections(text)
   const shortSummary = isShortSummary(sections)
   const showOutline = !shortSummary && sections.some((section) => section.title)
   const entry = preview.entry
+  const customRange = preview.market_data?.analysis_kind === 'custom_range'
+  const partial = preview.rule_evaluation?.summary?.method === 'session_to_date'
+  const cutoff = preview.market_data?.data_through
+  const cutoffText = cutoff ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(cutoff)) : ''
   const pair = entry.pair.replace(/^EUR_?\/?USD$/, 'EUR/USD')
-  const date = isDateKey(entry.journal_date) ? formatDay(entry.journal_date) : entry.journal_date
+  const date = customRange ? `${formatDay(entry.start_date)} – ${formatDay(entry.end_date)}`
+    : isDateKey(entry.journal_date) ? formatDay(entry.journal_date) : entry.journal_date
   const title = savedJournal ? `Journal #${savedJournal.id}` : 'AI journal draft'
 
   useEffect(() => {
@@ -23,10 +28,10 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
   }, [preview])
 
   return <article className="journal-view" aria-labelledby="journal-view-title">
-    {onBack && <button type="button" className="jv-back" onClick={onBack} disabled={busy}>← Back to calendar</button>}
+    {onBack && <button type="button" className="jv-back" onClick={onBack} disabled={busy}>← {backLabel}</button>}
     <header className="jv-header">
       <div>
-        <p className="jv-eyebrow">SESSION JOURNAL · {title}</p>
+        <p className="jv-eyebrow">{partial ? 'INTRADAY SNAPSHOT' : customRange ? 'CUSTOM RANGE JOURNAL' : 'SESSION JOURNAL'} · {title}</p>
         <h2 id="journal-view-title" ref={headingRef} tabIndex={-1}>{date}</h2>
         <div className="jv-tags">
           <span>{pair}</span><span>{entry.timeframe === '4h' ? '4-hour candles' : entry.timeframe}</span>
@@ -38,11 +43,12 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
       </button>
     </header>
 
-    <MarketEvidence snapshot={preview.market_data} />
-    <StrategyScores evaluation={preview.rule_evaluation} snapshot={preview.market_data} />
+    {partial && <p className="jv-session-window">Review data through: {cutoffText} · {preview.market_data.candles.length} of 6 candles · Remaining candles were pending. This snapshot does not update with the live page.</p>}
+    {showEvidence && <><MarketEvidence snapshot={preview.market_data} />
+    <StrategyScores evaluation={preview.rule_evaluation} snapshot={preview.market_data} /></>}
 
     <details className="jv-context">
-      <summary><span>Strategy & observations</span><span className="jv-summary-hint">Your inputs for this session</span></summary>
+      <summary><span>Strategy & observations</span><span className="jv-summary-hint">Your inputs for this {customRange ? 'range' : 'session'}</span></summary>
       <div className="jv-context-grid">
         <section><h3>Strategy rules</h3><p>{entry.strategy}</p></section>
         <section><h3>Your observations</h3><p>{entry.notes || 'None provided.'}</p></section>
@@ -51,7 +57,7 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
 
     <section className="jv-report" aria-labelledby="journal-report-heading">
       <header className="jv-report-header">
-        <div><p className="jv-eyebrow">SESSION REVIEW</p><h3 id="journal-report-heading">{shortSummary ? 'Session summary' : 'Your journal'}</h3></div>
+        <div><p className="jv-eyebrow">{customRange ? 'RANGE REVIEW' : 'SESSION REVIEW'}</p><h3 id="journal-report-heading">{shortSummary ? customRange ? 'Range summary' : 'Session summary' : 'Your journal'}</h3></div>
         <div className="jv-mode" role="group" aria-label="Journal view">
           <button type="button" aria-pressed={mode === 'read'} onClick={() => setMode('read')} disabled={busy}>Read</button>
           <button type="button" aria-pressed={mode === 'edit'} onClick={() => setMode('edit')} disabled={busy}>Edit</button>
@@ -87,7 +93,7 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
     </section>
     <footer className="jv-bottom">
       <p>Switching tabs keeps your journal here. Unsaved changes are lost if you refresh the page.</p>
-      {savedJournal && <button type="button" className="jv-delete" onClick={onDelete} disabled={busy}>{deleting ? 'Deleting…' : 'Delete journal'}</button>}
+      {savedJournal && onDelete && <button type="button" className="jv-delete" onClick={onDelete} disabled={busy}>{deleting ? 'Deleting…' : 'Delete journal'}</button>}
     </footer>
   </article>
 }

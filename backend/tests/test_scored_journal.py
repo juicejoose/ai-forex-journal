@@ -11,9 +11,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from test_market_data import ENVIRONMENT
-from test_strategy_rules import scoring_snapshot
-from strategy_rules import (RULE_SET_ID, SUPPORTED_RULE_SET_IDS, MOMENTUM_RULE_SET_ID, MOMENTUM_RULES_TEXT, LEGACY_RULE_SET_ID, LEGACY_RULES_TEXT,
+from tests.test_market_data import ENVIRONMENT
+from tests.test_strategy_rules import scoring_snapshot
+from strategy_rules import (RULE_SET_ID, ACTIVE_RULE_SET_IDS, RULES_TEXT, MOMENTUM_RULE_SET_ID, MOMENTUM_RULES_TEXT, LEGACY_RULE_SET_ID, LEGACY_RULES_TEXT,
                             WEIGHTED_RULE_SET_ID, WEIGHTED_RULES_TEXT, evaluate_strategy)
 from scored_journal import build_summary_context, parse_commentary, render_scored_journal
 from journal_grounding import InvalidJournalEvidence
@@ -160,7 +160,7 @@ class ScoredJournalTests(ScoredJournalTestCase):
     def test_rule_catalog_needs_no_provider_and_preview_is_canonical(self):
         response = self.client.get("/strategy-rule-sets")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(next(item for item in response.json()["items"] if item["id"] == MOMENTUM_RULE_SET_ID)["rules"], MOMENTUM_RULES_TEXT)
+        self.assertEqual(response.json()["items"][0]["rules"], RULES_TEXT)
         preview = self.client.post("/journal/preview", json={**ENTRY, "strategy": "different"}).json()
         self.assertEqual(preview["strategy"], MOMENTUM_RULES_TEXT)
         self.market.assert_not_called()
@@ -231,7 +231,7 @@ class ScoredJournalTests(ScoredJournalTestCase):
         self.assertEqual(preview["strategy"], LEGACY_RULES_TEXT)
         catalog = self.client.get("/strategy-rule-sets").json()
         self.assertEqual(catalog["default_id"], RULE_SET_ID)
-        self.assertEqual([item["id"] for item in catalog["items"]], list(SUPPORTED_RULE_SET_IDS))
+        self.assertEqual([item["id"] for item in catalog["items"]], list(ACTIVE_RULE_SET_IDS))
 
     def test_half_points_and_deltas_reach_ai_and_survive_saving_and_editing(self):
         for candle, momentum in zip(self.snapshot["candles"][-3:], [0.001, 0.0018, 0.0023]):

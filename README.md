@@ -6,9 +6,12 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 
 ## Current features
 
+- **Today:** follow the active New York session with automatic completed-candle updates, provisional strategy averages, pending candle slots, and a manually generated AI summary. Save a frozen intraday review into Saved journals.
 - **Generate journal:** choose a session date, select the scored four-factor strategy or a written strategy, add optional observations, then generate and edit a journal.
 - **Strategy scores:** inspect each candle's factor outcomes, bullish/bearish points and alignment, with v4 averaging all six candles and showing final-candle bias separately. Saved calculations remain separate from editable journal text.
 - **Saved journals:** browse a month calendar, select a session date to see its saved entries, then reopen, edit, restore the original draft, or delete after confirmation. Green/red days show the saved EUR/USD session's positive/negative price change.
+- **Custom range journal:** choose inclusive start and end dates for up to 31 calendar days, review all completed H4 candles with the four-factor v4 rules, and generate a short summary of the whole period.
+- **Saved custom journals:** browse a separate date-range library, reopen the original calculations, edit or restore the summary, and delete after confirmation.
 - **Strategy profiles:** save named rule sets, update them, copy their rules into the generation form, or delete a profile after confirmation.
 - **Market evidence:** inspect all six candles, including open/close times, open and close prices, candle change percentage, and indicators. Momentum displays five decimal places.
 
@@ -28,7 +31,37 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 
 For example, a journal dated **2026-10-20** covers **2026-10-19 at 5:00 p.m. through 2026-10-20 at 5:00 p.m. New York time**. Daylight saving time is handled using that timezone.
 
-Weekend dates and sessions whose closing cutoff has not passed are rejected. Holidays or missing provider data may also prevent a full session from being available. MACD is not included.
+Daily journals reject weekend dates and sessions whose closing cutoff has not passed. Custom ranges skip weekend session dates and require the selected end date's 5 p.m. cutoff to have passed. Holidays or missing provider data may also prevent a full session from being available. MACD is not included.
+
+## Today and intraday reviews
+
+The **Today** tab follows the current EUR/USD trading session using the existing H4 alignment and four-factor v4 rules. It checks the backend once per minute while that tab and the browser page are visible, and refreshes when you return. **Refresh data** requests another check. Keep the backend running; this is a visible-page refresh workflow, not a background service or a tick-by-tick price stream. OANDA marks each candle as complete or incomplete in its [candlestick definition](https://developer.oanda.com/rest-live-v20/instrument-df/).
+
+Only completed candles contribute prices, indicators, and scores. All six slots remain visible: **Completed**, **Forming · score pending**, or **Upcoming · pending**. Before the first candle closes at 9 p.m. New York time, the page shows a waiting state and AI generation is disabled. Earlier candles initialize indicators and supply predecessor context, but do not earn points in the current session.
+
+The **session-to-date average** gives each completed candle equal weight. For example, three bullish scores of 3, 4 and 3 produce 3.33/5 average bullish points and 66.67% rule alignment. Coverage remains **3 of 6 candles**, a separate measure. Pending candles are not zeros, and no outcome is forecast for them. Missing factor inputs on a completed candle withhold the average instead of dropping that candle. The latest completed candle's bias is separate from the provisional average. At six candles, the calculation matches the existing full-session average. Rule alignment is not a calibrated probability of future movement.
+
+Session dates refer to the ending 5 p.m. New York cutoff. For example, Tuesday after 5 p.m. belongs to the session ending Wednesday. At the weekday 5 p.m. rollover, Today starts the next session; use normal daily generation to review the one that just finished. During the scheduled Friday 5 p.m.–Sunday 5 p.m. weekend closure, Today displays the latest Friday session and the next scheduled opening. DST is handled in New York local time. Holiday closures and provider delays are not treated as future pending slots: if a candle should already have closed but is absent, refresh fails visibly and any previous display is marked potentially outdated.
+
+**Generate AI summary** (or **Refresh AI summary**) is an explicit action. Ordinary data polling makes no AI calls and does not create saved journals. The summary uses a server-owned snapshot of the displayed completed candles and scores. A background refresh cannot alter its input. A new candle or revised evidence marks the existing summary as using older data, without replacing its text or your edits. The summary's cutoff and coverage stay visible. The AI receives the coverage and cannot cite a pending candle or substitute a full-session method for a partial review.
+
+**Save journal** saves that exact snapshot in the existing daily **Saved journals** library. Intraday entries are labeled with their cutoff and completed-candle count. Reopening, editing, restoring, or deleting them uses the existing daily-journal controls; their market evidence and scores never update automatically. Partial-session returns do not color a calendar day as though they were completed daily returns. A date with only partial entries still shows its entry count but has no full-session percentage; a completed saved snapshot can supply that day's percentage. Regenerating on Today creates a separate draft, not an overwrite of a saved review.
+
+The backend shares successful Today polls through a 55-second in-memory cache, invalidated at candle/session boundaries. A manual refresh can use this same cache. Up to 64 immutable generation snapshots are retained for 30 minutes, and generation accepts only their server IDs plus optional notes. If the ID expires or the backend restarts, refresh Today and generate again. Existing generated/saved journals remain in SQLite. No new database tables, dependencies, or credential settings are needed for Today. Old daily and custom-range generation still require their full completed sessions.
+
+## Custom date-range journals
+
+Open **Custom range journal**, choose a start and end date, and optionally add observations. Both dates are included. For example, **October 19–23, 2026** includes five trading sessions: **October 18 at 5 p.m. through October 23 at 5 p.m. New York time**, with **30 H4 candles**. Weekend dates are skipped; if an endpoint is a weekend, the actual analysis bounds use the first and last included weekday. A weekend-only range is rejected. The form previews the actual coverage before generation.
+
+The initial limit is **31 calendar days**, including both endpoints, to bound provider requests and AI input size. This is an application limit. Every included weekday must have all six completed H4 candles; partial holiday sessions, missing candles, and unfinished ranges are rejected rather than silently omitted. The selected end date's 5 p.m. New York cutoff must have passed even when it falls on a weekend.
+
+Range generation currently uses **EUR/USD, H4, and the built-in four-factor v4 strategy**. Written-strategy mode and versioned strategy profiles remain available in daily generation. Indicators are calculated continuously from 300 warmup candles through the entire range, without resetting at daily boundaries. The two earlier completed candles support the first candle's consecutive-close and momentum rules. Later days use the preceding candles in the range, including across regular weekend/DST breaks. Only data available by the range cutoff is used.
+
+Every completed H4 candle has equal weight. Average bullish points are total bullish points divided by the number of range candles; bearish points are averaged separately, each out of five. Because each accepted day has six candles, this equals averaging the daily scores equally. Missing factor inputs withhold the overall average instead of dropping candles from the denominator. The final candle's **Range-end bias** remains separate. Alignment measures how strongly the chosen rules agree, not a probability of a future price move. **Range change** uses the first candle's open and last candle's close; it is not an average of daily returns.
+
+The backend sends the full range snapshot, globally numbered candle evidence (`C1` through the final candle), all Python factor results, daily score summaries, and the official range average to OpenAI. The short journal uses **Range recap**, **Agreement and conflict**, **Directional consensus**, and **Concerns**. Its official figures and bias are rendered from Python results. The detailed tables show every range candle and scroll within bounded panels. The evaluation identifies this mode with `analysis_kind="custom_range"`, `rule_set.scope="custom_range"`, and `summary.method="range_average"`; the per-candle rule version remains v4.
+
+Click **Save journal** to add the result to **Saved custom journals**. That library lists date ranges and their stored market returns, with 20 entries per page. Opening an entry reuses its saved evidence without contacting either provider. Editing or restoring the text requires **Save changes**. The daily calendar and custom library have independent entries and deletion actions, while both use the existing SQLite database. Switching tabs preserves current form inputs and unsaved journal edits; refreshing the page loses unsaved browser state.
 
 ## Local setup
 
@@ -113,7 +146,7 @@ Generation disables the form controls and shows a waiting message. Required-fiel
 
 Reopening a saved journal uses its stored snapshot without fetching OANDA data or generating another AI response. Updating a strategy profile does not change the strategy stored in an older journal. Candle labels are generated for each session; they are not separate database candle IDs.
 
-The **Strategy profiles** page places the saved-profile library beside a larger rule editor. Each profile explicitly stores its evaluation method. Existing profiles retain their saved method and rule version. Select Four-factor strategy v4 and save to adopt the session average; v1, v2 and v3 remain selectable with their original rules and final-candle summaries. The selected profile is highlighted, character counts show the existing limits, and an unsaved-changes label distinguishes edits from saved rules. **New profile** and **Edit** move focus to the editor. On smaller screens the library and form stack vertically. Save feedback appears beside the form actions; switching tabs keeps your edits, and **Use in journal** copies only saved rules and their evaluation method.
+The **Strategy profiles** page places the saved-profile library beside a larger rule editor. Each profile explicitly stores its evaluation method. Existing profiles retain their saved method and rule version. The evaluation selector offers only **Four-factor strategy v4 · Session average** and **Written strategy · AI review**. Existing v1/v2/v3 profiles remain visible and retain their saved rules. Edit one and explicitly choose a current method before saving or reusing it; it is never silently converted. The backend retains legacy handling for existing clients and stored records, while its current preset catalogue lists only v4. The selected profile is highlighted, character counts show the existing limits, and an unsaved-changes label distinguishes edits from saved rules. **New profile** and **Edit** move focus to the editor. On smaller screens the library and form stack vertically. Save feedback appears beside the form actions; switching tabs keeps your edits, and **Use in journal** copies only saved rules and their evaluation method.
 
 Generated and saved journals share a reading view with a dated session header, market price summary, and clearly separated journal sections. Use **Edit** to change the original text and **Read** to preview it; switching modes does not save or rewrite the journal. **Save journal** saves a new draft, while **Save changes** updates an existing entry. **Restore AI draft** restores the original text in the editor and still requires saving. Opening a journal brings its header into view; **Back to calendar** returns to the selected saved date without discarding edits.
 
@@ -125,14 +158,16 @@ The scored mode calculates the official decisions deterministically. AI prose re
 
 ## Four-factor strategy v4
 
-Each factor awards up to its weight to at most one side per completed candle. All comparisons use unrounded values. The default scored preset is `four_factor_v4`. Per-candle rules match v3; the session summary now averages all six candles equally. EMA20 vs SMA190 is worth two points; each of the other three factors is worth at most one point. The momentum factor is reduced to half a point during a qualifying slowdown.
+Each factor awards up to its weight to at most one side per completed candle. All comparisons use unrounded values. The default scored preset is `four_factor_v4`. New v4 results use rule revision 2; the session summary averages all six candles equally. EMA20 vs SMA190 earns **1 directional point when its absolute gap is 60 pips or less**, including exactly 60, and **2 points when larger**; each of the other three factors is worth at most one point. The momentum factor is reduced to half a point during a qualifying slowdown.
 
 | Factor | Weight | Bullish condition | Bearish condition |
 | --- | ---: | --- | --- |
 | Two closes vs EMA20 | 1 | Current and previous completed trading candles each close strictly above their own EMA20 | Both close strictly below their own EMA20 |
-| EMA20 vs SMA190 | 2 | EMA20 > SMA190 | EMA20 < SMA190 |
+| EMA20 vs SMA190 | Up to 2 | EMA20 > SMA190: 1 point for a gap ≤60 pips; 2 for >60 | EMA20 < SMA190: 1 point for a gap ≤60 pips; 2 for >60 |
 | RSI14 extremes | 1 | RSI14 ≤ 40 (strategy-defined oversold) | RSI14 ≥ 60 (strategy-defined overbought) |
 | Momentum direction and pace | Up to 1 | Positive and rising: 1 point; 0.5 if slowing | Negative and falling: 1 point; 0.5 if slowing |
+
+For EUR/USD, one pip is 0.0001, so 60 pips is an absolute price gap of 0.0060. The comparison uses the full stored indicator values, converted to decimal before subtracting to avoid binary subtraction artifacts at exactly 60. Display rounding does not decide the result. Equal EMA/SMA values earn zero; missing inputs are unavailable. The five-point maximum and alignment denominator stay fixed when EMA/SMA is reduced. The table labels the gap condition and shows its value in factor evidence; the information icon explains the saved rule. This revision applies to newly generated daily, Today and custom-range results.
 
 Equality, mixed consecutive closes, RSI strictly between 40 and 60, positive/falling momentum, and negative/rising momentum earn neither side a point. Zero or unchanged momentum is neutral. A sign crossing can meet the momentum rule only when both its sign and change requirements hold. The proposed ±0.0025/near-zero factor is not included.
 
@@ -144,9 +179,9 @@ A numerical equality tolerance (`rel_tol=1e-9`, `abs_tol=1e-12`) avoids false sl
 
 The consecutive-close rule uses a rolling pair: a longer streak still earns only one point on each candle. A previous candle must directly precede the current candle, except for the regular Friday 5 p.m. to Sunday 5 p.m. New York market break. Missing or invalid predecessor context makes affected factors unavailable; no missing bars are invented.
 
-For each candle, bullish and bearish totals are each shown out of **five possible points**, across **four factors**. Alignment is `weighted points / 5 × 100`, with neutral and unavailable factor counts shown separately. For example, bullish EMA/SMA and consecutive closes with bearish RSI and neutral momentum give 3 bullish points, 1 bearish point and 1 neutral factor: 60% bullish alignment and 20% bearish alignment. A bullish EMA/SMA condition (2), bullish consecutive closes (1), slowing bullish momentum (0.5), and neutral RSI produce 3.5/5 = 70% bullish alignment. The four-factor coverage count is separate from the five-point maximum; reduced-point factors are reported separately from neutral or unavailable factors. Net score is bullish minus bearish. With all four factors evaluated, the larger total sets the directional lean; an equal nonzero total is mixed and zero/zero is neutral. Incomplete coverage withholds the directional label. These percentages measure rule alignment, not a calibrated likelihood of future price movement.
+For each candle, bullish and bearish totals are each shown out of **five possible points**, across **four factors**. Alignment is `weighted points / 5 × 100`, with neutral and unavailable factor counts shown separately. For example, with an EMA/SMA gap greater than 60 pips, bullish EMA/SMA and consecutive closes with bearish RSI and neutral momentum give 3 bullish points, 1 bearish point and 1 neutral factor: 60% bullish alignment and 20% bearish alignment. A bullish EMA/SMA condition with a gap greater than 60 pips (2), bullish consecutive closes (1), slowing bullish momentum (0.5), and neutral RSI produce 3.5/5 = 70% bullish alignment. With the same conditions but an EMA/SMA gap of 60 pips or less, the total is 2.5/5 = 50%. The four-factor coverage count is separate from the five-point maximum; reduced-point factors are reported separately from neutral or unavailable factors. Net score is bullish minus bearish. With all four factors evaluated, the larger total sets the directional lean; an equal nonzero total is mixed and zero/zero is neutral. Incomplete coverage withholds the directional label. These percentages measure rule alignment, not a calibrated likelihood of future price movement.
 
-Every session shows all six individual candle scores. In v4, **session-average bullish points** are the sum of C1–C6 bullish points divided by six; bearish points are averaged separately. Each candle has equal weight, including half-point momentum outcomes. The maximum average remains **5**, and alignment is average points divided by five, multiplied by 100. Net is the session's bullish-minus-bearish total divided by six. The larger average sets the overall lean; equal nonzero averages are mixed and zero/zero is neutral. Calculations and stored values stay unrounded; summary points, net and alignment display two decimals.
+Every session shows all six individual candle scores. In v4, **session-average bullish points** are the sum of C1–C6 bullish points divided by six; bearish points are averaged separately. Each candle has equal weight, including reduced EMA/SMA and half-point momentum outcomes. The maximum average remains **5**, and alignment is average points divided by five, multiplied by 100. Net is the session's bullish-minus-bearish total divided by six. The larger average sets the overall lean; equal nonzero averages are mixed and zero/zero is neutral. Calculations and stored values stay unrounded; summary points, net and alignment display two decimals.
 
 The smaller **Session-end bias** label reports **C6 only**, separately from the session average. For example, candle scores of 5/0, 5/0, 5/0, 5/0, 0/4 and 0/5 produce average bullish 3.33/5 (66.67%), average bearish 1.50/5 (30.00%), net +1.83 and a bullish session lean, while the session-end label is bearish. This preserves the late change in direction without giving the final candle extra weight. Price direction remains the observed session return.
 
@@ -154,17 +189,19 @@ Session coverage counts **24 factor checks** (four on each of six candles). Neut
 
 The v4 evaluation retains schema version 1 with `summary.method="session_average"`, session coverage metadata, and a separate `session_end` object. Existing final-candle summaries keep their original shape. The evidence disclosure shows the required current and preceding inputs; momentum, deltas and prices display five decimals. The Price change % column after Bias uses each candle’s stored open-to-close price change. Scores and raw inputs are stored with the full rule definition/version and are not recalculated when a journal is reopened.
 
-Version 1 retains RSI 30/70 and one point per factor (four possible points). Version 2 retains RSI 40/60 and two-point EMA/SMA weighting, with full momentum points and no slowdown adjustment. Version 3 adds the momentum slowdown rule. All three older versions retain C6-only summaries. Existing profiles and saved journals are not automatically upgraded. Changing a profile to **v4 · Session average** affects future generations; stored v1/v2/v3 journals and pending drafts keep their original evaluation and method. The panel and journal renderer use the saved version, weights and fractional points. Short descriptions below factor badges and information icons in the headers use each journal's saved outcomes and definitions.
+Version 1 retains RSI 30/70 and one point per factor (four possible points). Version 2 retains RSI 40/60 and two-point EMA/SMA weighting, with full momentum points and no slowdown adjustment. Version 3 adds the momentum slowdown rule. All three older versions retain C6-only summaries. Existing profiles and saved journals are not automatically upgraded. Changing a profile to **v4 · Session average** affects future generations; stored v1/v2/v3 journals and pending drafts keep their original evaluation and method. Older v4 journals and pending drafts without `rule_set.revision` also keep their original two-point EMA/SMA calculations and text. New v4 definitions store `revision: 2` and the distance settings with each journal. Existing v4 profiles use the current canonical revision for new generations; past journal snapshots are never recalculated. The panel and journal renderer use the saved version, weights and fractional points. Short descriptions below factor badges and information icons in the headers use each journal's saved outcomes and definitions.
 
 ## Data storage
 
-SQLite data lives at `backend/data/journal.db`. It contains saved journals, staged generated drafts, and strategy profiles. The database is local to this checkout and is ignored by Git; committing or pushing code does not back up your journals. To make a simple file backup, stop the backend and copy the database to a separate location.
+SQLite data lives at `backend/data/journal.db`. It contains saved daily and custom-range journals, staged generated drafts, and strategy profiles. Custom ranges use the separate `range_journals` and `range_generated_drafts` tables, created automatically on backend startup. Daily and custom IDs can overlap because they refer to different tables and API routes. Existing daily entries, profiles, and pending drafts remain intact. The database is local to this checkout and is ignored by Git; committing or pushing code does not back up your journals. To make a simple file backup, stop the backend and copy the database to a separate location.
 
 Drafts do not appear in **Saved journals** until you click **Save journal**. Unsaved editor changes are held in the browser and can be lost on refresh. Older journals created before market snapshots were added remain readable but have no stored candle evidence.
 
 Backend startup adds nullable score columns to saved journals and staged drafts, and a nullable rule-set identifier to strategy profiles. Existing journals and pending drafts remain readable, with no invented historical scores. Profile changes, deletion, and journal-text edits do not change an already saved rule evaluation.
 
 The calendar groups entries by **journal session date**, not the date you saved them. Its percentage is `(session close - session open) / session open * 100`, using the stored EUR/USD H4 snapshot for the 5 p.m.–5 p.m. New York window. This is market price change, not trade profit or loss. If multiple journals share a date, the day uses the most recently saved usable snapshot; their percentages are never added together. Flat sessions and entries without usable snapshots stay neutral. Dates without saved journals have no percentage, and viewing the calendar makes no OANDA or OpenAI requests.
+
+Each marked date also shows **Avg net** below the percentage: the saved session-average bullish points minus saved session-average bearish points, displayed to two decimals with a sign. The score comes from the **same journal as the percentage**; multiple journals are never averaged together, and a newer written-AI entry does not borrow an older entry’s score. Positive/negative day colors still represent market price change. Zero displays as `0.00`; `—` means no complete session-average score. Written-AI reviews, older final-candle methods, incomplete averages and partial Today snapshots do not supply a daily average. A fully completed Today snapshot can supply it. Older v4 averages remain valid with their recorded rule revision; viewing the calendar never recalculates them. Deleting the source entry selects the next usable snapshot for both fields.
 
 Use the month arrows or **Jump to month** to browse, **Today** to return to the current New York date, and **Latest saved date** to find your most recent journal session. Select a date to see all its entries, with pagination when there are more than 20. The calendar shows every saved date in the month, regardless of that list's page. Calendar days support arrow keys plus Home/End. **Refresh calendar** reloads the displayed month and date after changes in another browser tab or a failed request.
 
@@ -178,27 +215,36 @@ From the repository root, run the backend tests:
 
 ```bash
 cd backend
-./.venv/bin/python -B -m unittest discover -v
+./.venv/bin/python -B -m unittest discover -s tests -t . -v
 ```
 
-The current backend suite contains **151 tests**:
+All automated backend tests live in `backend/tests/`. Run discovery from `backend` so the application modules and shared test helpers can be imported. To run one file, use its package name, for example:
+
+```bash
+./.venv/bin/python -B -m unittest -v tests.test_journal_calendar
+```
+
+The current backend suite contains **210 tests**:
 
 | File | Tests | Coverage |
 | --- | ---: | --- |
-| `test_market_data.py` | 14 | Session boundaries, candle validation, history cutoff, and provider errors |
-| `test_journal_evidence.py` | 13 | Saving, immutable original evidence, repeated saves, and older database migration |
-| `test_journal_grounding.py` | 19 | Candle references, rendered values/times, structured output, rejected drafts, and the Sol/medium request sent by the SDK |
-| `test_journal_deletion.py` | 9 | Deletion, stale requests, isolation, persistence, rollback, pagination, and browser access |
-| `test_journal_calendar.py` | 10 | Monthly counts, date filtering, leap days, saved percentages, duplicate sessions, missing snapshots, validation, and deletion refresh |
-| `test_strategy_profiles.py` | 10 | Profile creation, updates, validation, persistence, and journal independence |
-| `test_strategy_profile_deletion.py` | 9 | Profile deletion, copied-rule preservation, stale edits, name reuse, rollback, persistence, concurrency, and browser access |
-| `test_strategy_rules.py` | 16 | Versioned weights and RSI boundaries, exact comparisons, momentum sign/change, rolling pairs, predecessor context, weekend/DST continuity, missing data, final-candle bias and no future influence |
-| `test_scored_journal.py` | 15 | Version upgrades, weighted rendering, canonical presets, AI result boundaries, immutable scores, profile mode changes, migrations, saved/reopened results and concise score rendering |
-| `test_momentum_slowdown.py` | 14 | Three-candle deltas, half-points, mirrored bearish behavior, numeric equality, zero-crossing resets, missing history, weekend/DST continuity, old versions and no future influence |
-| `test_journal_summary.py` | 8 | Short output, canonical market facts, mismatched directions/method rejection, incomplete averages, word limit, mixed/neutral results and old-text preservation |
-| `test_session_average.py` | 14 | Equal averaging, late reversals, half points, missing data, mixed/neutral sessions, legacy methods, canonical AI inputs, profile upgrades and immutable saving |
+| `tests/test_market_data.py` | 14 | Session boundaries, candle validation, history cutoff, and provider errors |
+| `tests/test_journal_evidence.py` | 13 | Saving, immutable original evidence, repeated saves, and older database migration |
+| `tests/test_journal_grounding.py` | 19 | Candle references, rendered values/times, structured output, rejected drafts, and the Sol/medium request sent by the SDK |
+| `tests/test_journal_deletion.py` | 9 | Deletion, stale requests, isolation, persistence, rollback, pagination, and browser access |
+| `tests/test_journal_calendar.py` | 16 | Monthly counts, date filtering, leap days, saved percentages and average net scores, same-entry selection, zero/missing/invalid scores, historical revisions, partial sessions, pagination and deletion fallback |
+| `tests/test_strategy_profiles.py` | 10 | Profile creation, updates, validation, persistence, and journal independence |
+| `tests/test_strategy_profile_deletion.py` | 9 | Profile deletion, copied-rule preservation, stale edits, name reuse, rollback, persistence, concurrency, and browser access |
+| `tests/test_strategy_rules.py` | 16 | Versioned weights and RSI boundaries, exact comparisons, momentum sign/change, rolling pairs, predecessor context, weekend/DST continuity, missing data, final-candle bias and no future influence |
+| `tests/test_scored_journal.py` | 15 | Version upgrades, weighted rendering, canonical presets, AI result boundaries, immutable scores, profile mode changes, migrations, saved/reopened results and concise score rendering |
+| `tests/test_momentum_slowdown.py` | 14 | Three-candle deltas, half-points, mirrored bearish behavior, numeric equality, zero-crossing resets, missing history, weekend/DST continuity, old versions and no future influence |
+| `tests/test_journal_summary.py` | 8 | Short output, canonical market facts, mismatched directions/method rejection, incomplete averages, word limit, mixed/neutral results and old-text preservation |
+| `tests/test_session_average.py` | 14 | Equal averaging, late reversals, half points, missing data, mixed/neutral sessions, legacy methods, canonical AI inputs, profile upgrades and immutable saving |
+| `tests/test_custom_range.py` | 23 | Inclusive dates and limits, full-session coverage, continuous indicators, weekends/DST, equal range averaging, global candle references, AI validation, immutable saving, daily/custom isolation, deletion, pagination and startup preservation |
+| `tests/test_ema_distance.py` | 11 | Inclusive 60-pip boundaries in both directions, full precision, missing inputs, fixed denominator, combined reductions, daily/range/Today reuse, AI inputs and immutable historical v4 revisions |
+| `tests/test_today.py` | 19 | Empty/partial/full sessions, close boundaries, rollover, weekend/DST history, future-data exclusion, delayed candles, partial grounding and averages, cache expiry, AI snapshot consistency, immutable saving and calendar semantics |
 
-These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 151 tests` and `OK`.
+These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 210 tests` and `OK`.
 
 From the repository root, check the frontend:
 
@@ -209,7 +255,7 @@ npm run lint
 npm run build
 ```
 
-The 12 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage formatting, and preservation of journal text in the reading view. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
+The 26 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage and signed average-net formatting, range validation and preview mapping, Today snapshot consistency/freshness and summary changes, current strategy choices and retired-profile handling, and preservation of daily/range/intraday journal text. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
 
 The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OpenAI check uses the configured model with medium reasoning and a smaller 2,048-token limit. It prints the requested and returned model, response status, and usage, and exits with an error for incomplete or empty replies. The OANDA check currently uses the fixed session date 2026-10-20.
 
@@ -217,8 +263,11 @@ The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are 
 
 - **Cannot connect / Failed to fetch:** confirm the backend is running on port 8000 and open the frontend on port 5173.
 - **Session not finished or incomplete:** choose a completed weekday session. Generation needs all six completed candles and enough earlier history.
+- **Want an intraday review:** open Today. It scores the completed portion of the active session; daily and custom-range forms still require complete sessions.
+- **Today refresh failed or is outdated:** check the backend and retry. An overdue candle may be delayed or absent due to an early market close. A generation snapshot can also expire after 30 minutes or a backend restart; refresh the page's data before generating again.
+- **Custom range rejected:** use at most 31 calendar days, include a weekday, and wait until the selected end date's 5 p.m. New York cutoff. Every included weekday needs six completed candles; shorten or move a range that includes missing data or a shortened holiday session.
 - **OANDA access error:** check the practice account credentials and required practice API URL in `backend/.env`.
 - **AI request failed:** check API access, the configured model, and the error shown by the app. Failed generation does not create a saved journal.
 - **AI draft failed its evidence checks:** the generated response failed validation. No new draft was staged; you can try generating again.
 
-This version supports local use on one computer, without user accounts or authentication. It reviews completed sessions; it does not place orders, provide live entry signals, or run strategy backtests. Historical availability depends on the provider, and the automated tests do not establish that live provider access is working.
+This version supports local use on one computer, without user accounts or authentication. It reviews completed sessions and the completed candles within an ongoing session; it does not place orders, provide live entry signals, or run strategy backtests. Historical availability depends on the provider, and the automated tests do not establish that live provider access is working.

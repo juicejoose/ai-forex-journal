@@ -1,5 +1,6 @@
 """Calendar and date filtering use saved snapshots and temporary databases only."""
 import copy
+import json
 import os
 import tempfile
 import unittest
@@ -7,9 +8,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from test_market_data import ENVIRONMENT
+from tests.test_market_data import ENVIRONMENT
 import database as db
 import main
+
+
+def saved_score(net, *, method="session_average", complete=True, revision=2):
+    return {"schema_version": 1, "rule_set": {"id": "four_factor_v4", "version": 4, "revision": revision},
+            "summary": {"method": method, "complete": complete, "candle_count": 6,
+                        "net_score": net, "max_points": 5}}
 
 
 class JournalCalendarTests(unittest.TestCase):
@@ -25,13 +32,13 @@ class JournalCalendarTests(unittest.TestCase):
         self.market.assert_not_called()
         self.ai.assert_not_called()
 
-    def save(self, day="2026-10-20", opened=100, closed=101, snapshot="default", pair="EURUSD", timeframe="4h"):
+    def save(self, day="2026-10-20", opened=100, closed=101, snapshot="default", pair="EURUSD", timeframe="4h", evaluation=None):
         entry = {"pair": pair, "journal_date": day, "timeframe": timeframe,
                  "strategy": "Private strategy", "notes": "Private notes"}
         if snapshot == "default":
             snapshot = {"instrument": "EUR_USD", "timeframe": "H4", "journal_date": day,
                         "session": {"complete": True}, "summary": {"open": opened, "close": closed, "change_percent": 999}}
-        generation = db.store_generated_draft(entry, "Private original draft", snapshot)
+        generation = db.store_generated_draft(entry, "Private original draft", snapshot, evaluation)
         return db.save_generated_journal(generation, "Private saved edits")
 
     def calendar(self, month="2026-10"):
@@ -52,8 +59,8 @@ class JournalCalendarTests(unittest.TestCase):
         self.assertEqual(data["total_journals"], 4)
         self.assertEqual(data["latest_journal_date"], "2026-10-21")
         self.assertEqual(data["days"], [
-            {"date": "2026-10-20", "journal_count": 2, "change_percent": 1.0, "source_journal_id": latest["id"]},
-            {"date": "2026-10-21", "journal_count": 1, "change_percent": -1.0, "source_journal_id": latest["id"] + 1},
+            {"date": "2026-10-20", "journal_count": 2, "change_percent": 1.0, "average_net_score": None, "source_journal_id": latest["id"]},
+            {"date": "2026-10-21", "journal_count": 1, "change_percent": -1.0, "average_net_score": None, "source_journal_id": latest["id"] + 1},
         ])
         # The repeated session is 1%, not 2%; cached summary percentages and AI prose are not used.
         self.assertEqual(db.fetch_journal(first["id"]), first)
@@ -157,6 +164,78 @@ class JournalCalendarTests(unittest.TestCase):
         self.assertEqual(data["days"], [])
         self.assertEqual(data["total_journals"], 1)
         self.assertEqual(data["latest_journal_date"], "2026-09-30")
+
+    def test_average_net_uses_same_journal_as_percent_never_combines_strategies(self):
+        self.save(closed=102, evaluation=saved_score(4))
+        selected = self.save(closed=99, evaluation=saved_score(-1.5))
+        day = self.calendar()["days"][0]
+        self.assertEqual((day["change_percent"], day["average_net_score"], day["source_journal_id"]), (-1, -1.5, selected["id"]))
+        # A newer written-only journal supplies prices, but must not borrow an older score.
+        written = self.save(closed=103)
+        day = self.calendar()["days"][0]
+        self.assertEqual((day["change_percent"], day["source_journal_id"]), (3, written["id"]))
+        self.assertIsNone(day["average_net_score"])
+
+    def test_saved_average_keeps_zero_sign_and_full_precision_without_mutation(self):
+        for value in (0, 11 / 6, -11 / 6, -5, 5):
+            with self.subTest(value=value):
+                journal = self.save(evaluation=saved_score(value))
+                day = self.calendar()["days"][0]
+                self.assertEqual(day["average_net_score"], value)
+                self.assertEqual(db.fetch_journal(journal["id"]), journal)
+                self.assertNotIn("rule_evaluation", day)
+                self.assertNotIn("market_data", day)
+
+    def test_incomplete_final_candle_or_missing_scores_are_unavailable(self):
+        cases = [None, {}, [], saved_score(None), saved_score(2, complete=False),
+                 saved_score(2, method="final_candle"), saved_score(2, method="session_to_date"),
+                 saved_score(2, method="range_average")]
+        for key, value in (("rule_set", None), ("rule_set", {"id": "four_factor_v3"}), ("summary", None)):
+            cases.append({**saved_score(2), key: value})
+        wrong_count = saved_score(2)
+        wrong_count["summary"]["candle_count"] = 3
+        cases.append(wrong_count)
+        for evaluation in cases:
+            with self.subTest(evaluation=evaluation):
+                self.save(evaluation=evaluation)
+                self.assertIsNone(self.calendar()["days"][0]["average_net_score"])
+
+    def test_malformed_saved_scores_do_not_break_the_calendar_or_become_zero(self):
+        journal = self.save(evaluation=saved_score(2))
+        raw_values = ['not-json', 'null', '[]']
+        for value in (True, '2', float('nan'), float('inf'), -float('inf'), 6, -6):
+            raw_values.append(json.dumps(saved_score(value)))
+        for raw in raw_values:
+            with db.get_connection(write=True) as connection:
+                connection.execute('UPDATE journals SET rule_evaluation_json = ? WHERE id = ?', (raw, journal['id']))
+            day = self.calendar()["days"][0]
+            self.assertEqual(day["change_percent"], 1)
+            self.assertIsNone(day["average_net_score"])
+
+    def test_partial_snapshot_cannot_replace_full_session_average(self):
+        full = self.save(evaluation=saved_score(1.5))
+        partial = {"instrument": "EUR_USD", "timeframe": "H4", "journal_date": "2026-10-20",
+                   "session": {"complete": False}, "summary": {"open": 100, "close": 102}}
+        self.save(snapshot=partial, evaluation=saved_score(4, method="session_to_date"))
+        day = self.calendar()["days"][0]
+        self.assertEqual((day["source_journal_id"], day["average_net_score"]), (full["id"], 1.5))
+        db.delete_journal(full["id"])
+        day = self.calendar()["days"][0]
+        self.assertIsNone(day["change_percent"])
+        self.assertIsNone(day["average_net_score"])
+
+    def test_older_v4_revision_is_preserved_and_deletion_restores_its_saved_score(self):
+        original_evaluation = saved_score(3.5)
+        original_evaluation['rule_set'].pop('revision')
+        original = self.save(evaluation=original_evaluation)
+        latest = self.save(evaluation=saved_score(2.5))
+        # Editing older journal text does not move its score ahead of a newer save.
+        db.update_journal_text(original['id'], 'My edited notes')
+        self.assertEqual(self.calendar()["days"][0]["average_net_score"], 2.5)
+        db.delete_journal(latest['id'])
+        day = self.calendar()["days"][0]
+        self.assertEqual((day["source_journal_id"], day["average_net_score"]), (original['id'], 3.5))
+        self.assertEqual(db.fetch_journal(original['id'])['rule_evaluation'], original_evaluation)
 
 
 if __name__ == "__main__":

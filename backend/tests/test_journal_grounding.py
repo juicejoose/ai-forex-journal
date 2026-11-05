@@ -1,6 +1,6 @@
 """Offline regression checks: dummy credentials, fake AI, temporary SQLite only.
 
-Run from backend: python -m unittest -v test_journal_grounding
+Run from backend: python -m unittest -v tests.test_journal_grounding
 """
 
 import copy

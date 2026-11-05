@@ -1,24 +1,20 @@
 import './RuleSetSelect.css'
+import { STRATEGY_CHOICES, isRetiredRuleSet } from './strategyChoices.js'
 
 export default function RuleSetSelect({ id, value, onChange, definitions, error, onRetry, disabled }) {
   const loaded = definitions.length > 0
+  const retired = isRetiredRuleSet(value)
   return <div className="rule-choice">
     <label htmlFor={id}>Strategy evaluation</label>
-    <select id={id} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-describedby={`${id}-help`}>
-      <option value="four_factor_v4" disabled={!definitions.some((item) => item.id === 'four_factor_v4')}>Four-factor strategy v4 · Session average</option>
-      <option value="four_factor_v3" disabled={!definitions.some((item) => item.id === 'four_factor_v3')}>Four-factor strategy v3 · Momentum slowdown</option>
-      <option value="four_factor_v2" disabled={!definitions.some((item) => item.id === 'four_factor_v2')}>Four-factor strategy v2 · Full momentum points</option>
-      <option value="four_factor_v1" disabled={!definitions.some((item) => item.id === 'four_factor_v1')}>Four-factor strategy v1 · Original rules</option>
-      <option value="">Written strategy · AI review</option>
+    <select id={id} value={retired ? 'retired' : value} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-describedby={`${id}-help`}>
+      {retired && <option value="retired" disabled hidden>Choose a current evaluation</option>}
+      {STRATEGY_CHOICES.map((choice) => <option key={choice.value} value={choice.value}
+        disabled={Boolean(choice.value) && !definitions.some((item) => item.id === choice.value)}>{choice.label}</option>)}
     </select>
-    <p id={`${id}-help`}>{value
-      ? value === 'four_factor_v4'
-        ? 'All six H4 candles contribute equally to the session average, out of five possible points. Keeps weighted EMA/SMA, RSI 40/60, and momentum slowdown. Session-end bias is shown separately.'
-        : value === 'four_factor_v3'
-        ? 'Five possible points. EMA/SMA earns two; RSI uses 40/60. Momentum earns half a point when three consecutive candles show a smaller same-direction change. The final candle sets the bias.'
-        : value === 'four_factor_v2'
-          ? 'Previous rules: five possible points, EMA/SMA worth two, RSI thresholds 40/60. Momentum uses only sign and change, with no slowdown reduction.'
-          : 'Original rules: RSI ≤30 is bullish and RSI ≥70 is bearish; each factor earns one point. Choose v4 for weighted EMA/SMA, momentum slowdown, and a session average.'
+    <p id={`${id}-help`}>{retired
+      ? 'This profile uses an older scoring method. Choose v4 or Written strategy before saving or reusing it. Past journals keep their saved scores.'
+      : value
+        ? 'All six H4 candles contribute equally to the session average, out of five possible points. EMA/SMA earns 1 point when its gap is 60 pips or less, and 2 when larger; equal values earn zero. Keeps RSI 40/60 and momentum slowdown. Session-end bias is shown separately.'
       : 'AI interprets your written rules. This mode has no calculated strategy score.'}</p>
     {!loaded && !error && <p role="status">Loading scored strategy…</p>}
     {error && <div role="alert"><p>{error}</p><button type="button" onClick={onRetry} disabled={disabled}>Retry loading strategy</button></div>}

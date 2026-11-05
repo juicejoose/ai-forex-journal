@@ -143,13 +143,26 @@ def _number(value) -> float:
     return value
 
 
-def build_evidence_catalog(snapshot: dict) -> dict:
+def build_evidence_catalog(snapshot: dict, *, allow_partial=False) -> dict:
     """Derive IDs, values, and local times from one immutable market snapshot."""
     try:
-        if snapshot["session"]["complete"] is not True or len(snapshot["candles"]) != 6:
+        count = len(snapshot["candles"])
+        if not allow_partial and (snapshot["session"]["complete"] is not True or count != 6):
             raise ValueError("Expected a completed session")
         start = _utc(snapshot["session"]["start_utc"])
         end = _utc(snapshot["session"]["end_utc"])
+        if allow_partial:
+            from market_data import session_bounds
+            from datetime import date
+            label = date.fromisoformat(snapshot["journal_date"])
+            as_of = _utc(snapshot["as_of"])
+            expected = int((min(as_of, end) - start).total_seconds() // 14400)
+            if (snapshot.get("analysis_kind") != "intraday" or label.weekday() >= 5
+                    or (start, end) != session_bounds(label) or not 1 <= count <= 6
+                    or count != expected or snapshot["session"]["candle_count"] != count
+                    or snapshot["session"]["complete"] is not (count == 6)
+                    or _utc(snapshot["data_through"]) != start + timedelta(hours=4 * count)):
+                raise ValueError("Invalid session-to-date coverage")
         catalog = {}
         for index, candle in enumerate(snapshot["candles"]):
             opened = _utc(candle["open_time"])
@@ -178,7 +191,7 @@ def build_evidence_catalog(snapshot: dict) -> dict:
                 "close_time_local": closed.astimezone(NY).isoformat(),
                 "values": values,
             }
-        if closed != end:
+        if closed != (start + timedelta(hours=4 * count) if allow_partial else end):
             raise ValueError("Session end mismatch")
         return catalog
     except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as exc:

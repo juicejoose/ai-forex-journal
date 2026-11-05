@@ -230,6 +230,14 @@ def fetch_journals(limit=20, offset=0, journal_date=None):
             item = dict(row)
             item.pop("market_data_json")
             item["change_percent"] = _session_change_percent(row)
+            try:
+                snapshot = json.loads(row["market_data_json"])
+                if snapshot.get("analysis_kind") == "intraday":
+                    item["session_complete"] = snapshot["session"]["complete"]
+                    item["completed_candles"] = len(snapshot["candles"])
+                    item["data_through"] = snapshot["data_through"]
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
             items.append(item)
         return {
             "items": items,
@@ -237,6 +245,26 @@ def fetch_journals(limit=20, offset=0, journal_date=None):
             "limit": limit,
             "offset": offset,
         }
+
+
+def _session_average_net_score(row):
+    """Read the saved average for the calendar's selected full-session snapshot."""
+    try:
+        evaluation = json.loads(row["rule_evaluation_json"])
+        if not isinstance(evaluation, dict) or evaluation.get("schema_version") != 1:
+            return None
+        definition, summary = evaluation.get("rule_set"), evaluation.get("summary")
+        if (not isinstance(definition, dict) or definition.get("id") != "four_factor_v4"
+                or not isinstance(summary, dict) or summary.get("method") != "session_average"
+                or summary.get("complete") is not True or summary.get("candle_count") != 6):
+            return None
+        value, maximum = summary.get("net_score"), summary.get("max_points")
+        if (any(type(number) not in (int, float) or not math.isfinite(number) for number in (value, maximum))
+                or maximum <= 0 or abs(value) > maximum):
+            return None
+        return value
+    except (TypeError, ValueError, KeyError, OverflowError):
+        return None
 
 
 def fetch_journal_calendar(month):
@@ -247,7 +275,7 @@ def fetch_journal_calendar(month):
             "SELECT COUNT(*) AS total, MAX(journal_date) AS latest FROM journals"
         ).fetchone()
         rows = connection.execute("""
-            SELECT id, pair, journal_date, timeframe, market_data_json
+            SELECT id, pair, journal_date, timeframe, market_data_json, rule_evaluation_json
             FROM journals WHERE journal_date >= ? AND journal_date <= ?
             ORDER BY journal_date, created_at DESC, id DESC
         """, (first.isoformat(), last.isoformat()))
@@ -255,7 +283,7 @@ def fetch_journal_calendar(month):
         for row in rows:
             day = days.setdefault(row["journal_date"], {
                 "date": row["journal_date"], "journal_count": 0,
-                "change_percent": None, "source_journal_id": None,
+                "change_percent": None, "average_net_score": None, "source_journal_id": None,
             })
             day["journal_count"] += 1
             # Several strategies can share a session. Do not add their returns.
@@ -264,6 +292,9 @@ def fetch_journal_calendar(month):
                 change = _session_change_percent(row)
                 if change is not None:
                     day["change_percent"] = change
+                    # Keep both values tied to one journal; never combine strategies
+                    # or substitute a final-candle/provisional score for a daily mean.
+                    day["average_net_score"] = _session_average_net_score(row)
                     day["source_journal_id"] = row["id"]
         return {
             "month": month, "days": list(days.values()),

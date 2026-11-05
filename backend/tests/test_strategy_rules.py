@@ -5,7 +5,7 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from test_market_data import FixedDateTime, payload
+from tests.test_market_data import FixedDateTime, payload
 import market_data as md
 from journal_grounding import InvalidJournalEvidence
 from strategy_rules import evaluate_strategy, rule_set_definition, _consecutive, LEGACY_RULE_SET_ID, MOMENTUM_RULE_SET_ID

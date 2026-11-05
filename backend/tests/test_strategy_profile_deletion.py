@@ -1,6 +1,6 @@
 """Offline profile deletion checks; all data lives in temporary SQLite files.
 
-Run from backend: python -m unittest -v test_strategy_profile_deletion
+Run from backend: python -m unittest -v tests.test_strategy_profile_deletion
 """
 
 import os
@@ -13,7 +13,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 # Imports main with dummy credentials and dotenv disabled.
-from test_market_data import ENVIRONMENT
+from tests.test_market_data import ENVIRONMENT
 import database as db
 import main
 

@@ -1,6 +1,6 @@
 """Offline market-data regression tests using simulated OANDA responses.
 
-Run all tests from backend: python -m unittest discover -v
+Run all tests from backend: python -m unittest discover -s tests -t . -v
 Uses dummy credentials; no live provider requests or saved journal data.
 """
 

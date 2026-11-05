@@ -34,18 +34,22 @@ export default function MarketEvidence({ snapshot }) {
 
   const { session = {}, summary = {}, indicator_settings: settings = {} } = snapshot
   const candles = Array.isArray(snapshot.candles) ? snapshot.candles : []
+  const customRange = snapshot.analysis_kind === 'custom_range'
+  const partial = snapshot.analysis_kind === 'intraday' && !session.complete
   const sessionChange = change(summary.open, summary.close)
   const pips = Number.isFinite(sessionChange) ? (summary.close - summary.open) * 10000 : null
 
-  return <section className="jv-market" aria-labelledby="evidence-heading">
+  return <section className={`jv-market${customRange ? ' jv-market-range' : ''}`} aria-labelledby="evidence-heading">
     <header className="jv-market-header">
       <h3 id="evidence-heading">Market evidence</h3>
       <p>{snapshot.source} · {snapshot.environment} · Midpoint prices</p>
     </header>
     <p className="jv-session-window">{timestamp(session.start)} <span aria-hidden="true">→</span><span className="jv-sr-only"> through </span> {timestamp(session.end)}</p>
+    {customRange && <p className="jv-range-coverage">{snapshot.range.trading_day_count} trading sessions · {candles.length} completed H4 candles · Weekend sessions excluded</p>}
+    {partial && <p className="jv-range-coverage">Session in progress · {candles.length} of 6 completed · Data through {timestamp(snapshot.data_through)}. Prices and indicators exclude the forming candle.</p>}
     <div className="jv-price-strip">
       <div className={`jv-return jv-tone-${changeTone(sessionChange)}`}>
-        <span>Session price change</span><strong>{formatChange(sessionChange)}</strong>
+        <span>{partial ? 'Change through latest close' : customRange ? 'Range price change' : 'Session price change'}</span><strong>{formatChange(sessionChange)}</strong>
         <span>{pips > 0 ? '+' : ''}{number(pips, 1)} pips</span>
       </div>
       <dl className="jv-ohlc">
@@ -53,7 +57,7 @@ export default function MarketEvidence({ snapshot }) {
       </dl>
     </div>
     <details className="jv-candles">
-      <summary><span>View all six candles and indicators</span><span className="jv-summary-hint">{session.candle_count ?? candles.length} completed candles</span></summary>
+      <summary><span>{partial ? `View ${candles.length} completed candles and indicators` : customRange ? `View all ${candles.length} candles and indicators` : 'View all six candles and indicators'}</span><span className="jv-summary-hint">{session.candle_count ?? candles.length} completed candles</span></summary>
       <div className="jv-table-scroll" role="region" aria-label="Candle prices and indicators" tabIndex={0}>
         <table>
           <caption>New York time · Indicators at candle close · Change compares each candle’s open and close.</caption>

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calendarCells, changeTone, formatChange, formatDay, isDateKey, isMonthKey, newYorkToday, shiftDate, shiftMonth } from '../src/journalCalendar.js'
+import { calendarCells, changeTone, formatChange, formatAverageNet, formatDay, isDateKey, isMonthKey, newYorkToday, shiftDate, shiftMonth } from '../src/journalCalendar.js'
 
 test('October 2026 starts on Thursday and has 31 dates', () => {
   const cells = calendarCells('2026-10')
@@ -59,4 +59,20 @@ test('positive, negative, flat and missing changes have distinct meanings', () =
 test('tiny returns never display a misleading signed zero', () => {
   assert.equal(formatChange(0.0001), '+<0.01%')
   assert.equal(formatChange(-0.0001), '−<0.01%')
+})
+
+test('average net scores show signed points with two decimals, without a percent sign', () => {
+  assert.equal(formatAverageNet(11 / 6), '+1.83')
+  assert.equal(formatAverageNet(-11 / 6), '−1.83')
+  assert.equal(formatAverageNet(0), '0.00')
+  assert.equal(formatAverageNet(-0), '0.00')
+  assert.equal(formatAverageNet(0.5), '+0.50')
+  assert.equal(formatAverageNet(0.0001), '+<0.01')
+  assert.equal(formatAverageNet(-0.0001), '−<0.01')
+})
+
+test('unavailable net scores never display as zero', () => {
+  for (const value of [undefined, null, NaN, Infinity, -Infinity, '1.83', true]) {
+    assert.equal(formatAverageNet(value), '—')
+  }
 })

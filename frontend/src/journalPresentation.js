@@ -18,7 +18,7 @@ const summaryTitles = ['Session recap', 'Agreement and conflict', 'Directional c
 
 export function isShortSummary(sections) {
   return sections.length === summaryTitles.length &&
-    sections.every((section, index) => section.title === summaryTitles[index])
+    sections.every((section, index) => section.title === summaryTitles[index] || (index === 0 && ['Range recap', 'Session so far'].includes(section.title)))
 }
 
 // Presentation only: the original text remains the editor/save source of truth.
