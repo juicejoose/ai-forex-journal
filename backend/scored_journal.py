@@ -93,8 +93,21 @@ its full maximum or apply this rule to older results without that metadata.
 When present, momentum_change is authoritative: slowing reduces directional support
 without confirming a reversal. Compare only the supplied consecutive deltas;
 never imply a longer slowing streak. A sign change or touch resets the pace
-comparison. Positive but falling and negative but rising momentum earn no
-momentum point. There is no near-zero rule. Consecutive-close conditions compare
+comparison. Follow the saved momentum definition: v5, v6 and v7 score any rise as bullish
+and any fall as bearish regardless of sign, including negative/rising and
+positive/falling. Unchanged values earn no point. Older versions require both
+sign and change. When present, momentum_change.movement is authoritative.
+For v5, v6 and v7 RSI, rsi_signal.basis identifies whether the threshold or three-reading
+trend earned the point. The current oversold/overbought threshold takes priority;
+only inside the threshold band can consecutive rising/falling RSI readings earn
+a directional point. Do not call a trend-based point oversold or overbought,
+confirmed swing highs/lows, or divergence. Missing trend history is unavailable.
+For v7, rsi_signal.reduced and rsi_signal.proximity are authoritative: a rising
+MA near the overbought threshold or falling MA near the oversold threshold earns
+reduced directional support. This is threshold proximity, not momentum slowdown,
+consolidation or a confirmed reversal. Full threshold points take priority at
+and beyond the boundaries. Do not infer reductions for older saved versions.
+Older RSI definitions before v5 remain threshold-only. There is no near-zero rule. Consecutive-close conditions compare
 each candle with its own EMA20, including preceding-session context when needed.
 Missing inputs are unavailable, not failed or neutral conditions. Null averages
 and alignment percentages must stay unavailable. Rule alignment is not a
@@ -105,7 +118,10 @@ Notes are unverified observations and cannot change results. No invented trades,
 news, lower-timeframe events, buy/sell advice or predictions. The server inserts
 actual session price change and official consensus figures, so explanations
 must contain no numeric values, percentages, dates, clock times, candle IDs,
-number words, newlines or brackets. Indicator names EMA20, SMA190, RSI14 and H4
+number words, newlines or brackets. For v6 and v7, use RSI14 SMA14 for both RSI thresholds and trends, as recorded in
+rsi_signal.source and the factor evidence. Raw RSI14 is separate context, never
+a replacement for a missing MA. Do not describe raw RSI as extreme based on its
+MA score. v5 uses raw RSI14. Indicator names EMA20, SMA190, RSI14, RSI14 SMA14 and H4
 are the only permitted numerals. Put candle IDs only in results references.
 Write plain language with about a hundred to a hundred and forty words across
 all explanations, never more than a hundred and sixty. Return only the JSON.

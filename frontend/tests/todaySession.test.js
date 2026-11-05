@@ -6,7 +6,7 @@ import { isShortSummary, journalSections } from '../src/journalPresentation.js'
 function view(count = 3) {
   const market_data = count ? { analysis_kind: 'intraday', candles: Array(count).fill({}), journal_date: '2026-10-23',
     data_key: 'same-evidence', data_through: '2026-10-23T09:00:00Z', session: { complete: count === 6, candle_count: count } } : null
-  const rule_evaluation = count ? { analysis_kind: 'intraday', candles: Array(count).fill({}), rule_set: { id: 'four_factor_v4' },
+  const rule_evaluation = count ? { analysis_kind: 'intraday', candles: Array(count).fill({}), rule_set: { id: 'four_factor_v7' },
     summary: { method: count === 6 ? 'session_average' : 'session_to_date' } } : null
   return { schema_version: 1, journal_date: '2026-10-23', as_of: '2026-10-23T10:00:00Z', snapshot_id: count ? 'snapshot' : null,
     session: { candle_count: count, expected_candle_count: 6, complete: count === 6 }, slots: Array(6).fill({}), market_data, rule_evaluation }
@@ -45,4 +45,26 @@ test('partial summary uses compact presentation and preserves editable text', ()
   assert.equal(isShortSummary(sections), true)
   assert.equal(sections[0].body.trim(), 'Original review.')
   assert.equal(text.includes('Pending candles.'), true)
+})
+
+test('saved v4 Today evidence remains readable but the live view requires current rules', () => {
+  const old = view(); old.rule_evaluation.rule_set.id = 'four_factor_v4'
+  assert.equal(validTodayEvidence(old.market_data, old.rule_evaluation), true)
+  assert.equal(validTodayView(old), false)
+  old.rule_evaluation.rule_set.id = 'four_factor_v3'
+  assert.equal(validTodayEvidence(old.market_data, old.rule_evaluation), false)
+})
+
+test('saved v5 Today evidence remains readable after the current MA upgrade', () => {
+  const old = view()
+  old.rule_evaluation.rule_set.id = 'four_factor_v5'
+  assert.equal(validTodayEvidence(old.market_data, old.rule_evaluation), true)
+  assert.equal(validTodayView(old), false)
+})
+
+test('saved v6 evidence remains readable while the live view uses v7', () => {
+  const old = view()
+  old.rule_evaluation.rule_set.id = 'four_factor_v6'
+  assert.equal(validTodayEvidence(old.market_data, old.rule_evaluation), true)
+  assert.equal(validTodayView(old), false)
 })

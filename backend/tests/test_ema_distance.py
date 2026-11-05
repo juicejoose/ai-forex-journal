@@ -74,7 +74,7 @@ class EmaDistanceTests(unittest.TestCase):
     def test_ema_and_momentum_reductions_combine_without_opposite_points(self):
         for candle, momentum in zip(self.snapshot['candles'][-3:], [0.001, 0.0018, 0.0023]):
             candle['indicators']['squeeze']['momentum'] = momentum
-        self.snapshot['candles'][-1]['indicators'].update(ema20=1.106, sma190=1.1, rsi14=50)
+        self.snapshot['candles'][-1]['indicators'].update(ema20=1.106, sma190=1.1, rsi14=50, rsi14_sma14=50)
         last = rules.evaluate_strategy(self.snapshot)['candles'][-1]
         self.assertEqual((last['bullish_points'], last['bearish_points'], last['reduced_factors']), (2.5, 0, 2))
         self.assertEqual(last['bullish_alignment_percent'], 50)
@@ -87,7 +87,7 @@ class EmaDistanceTests(unittest.TestCase):
             self.assertNotIn('ema_sma_distance', result)
             self.assertNotIn('distance_weighting', rules.rule_set_definition(rule_id)['factors'][1])
         definition = rules.rule_set_definition()
-        self.assertEqual((definition['id'], definition['version'], definition['revision']), ('four_factor_v4', 4, 2))
+        self.assertEqual((definition['id'], definition['version'], definition['revision']), ('four_factor_v7', 7, 1))
         self.assertEqual(definition['factors'][1]['distance_weighting']['pip_size'], 0.0001)
         self.assertIn('do not shrink the alignment denominator', definition['rules'])
         definition['factors'][1]['distance_weighting']['within_points'] = 99
@@ -98,7 +98,7 @@ class EmaDistanceTests(unittest.TestCase):
         for candle in snapshot['candles']:
             candle['indicators'].update(ema20=1.106, sma190=1.1)
         result = dr.evaluate_range_strategy(snapshot)
-        self.assertEqual(result['rule_set']['revision'], 2)
+        self.assertEqual(result['rule_set']['revision'], 1)
         self.assertEqual(len(result['candles']), 30)
         for row in result['candles']:
             self.assertEqual(row['factors'][1]['bullish_points'], 1)
@@ -108,7 +108,7 @@ class EmaDistanceTests(unittest.TestCase):
     def test_today_uses_same_revision_and_only_completed_candles(self):
         view = view_at()
         result = view['rule_evaluation']
-        self.assertEqual(result['rule_set']['revision'], 2)
+        self.assertEqual(result['rule_set']['revision'], 1)
         self.assertEqual(result['summary']['method'], 'session_to_date')
         self.assertEqual(len(result['candles']), 3)
         for row in result['candles']:
@@ -130,7 +130,7 @@ class EmaDistanceJournalTests(ScoredJournalTestCase):
         self.assertEqual(sent['rule_evaluation'], expected)
         self.assertEqual(expected['summary']['bullish_points'], 4)
         self.assertEqual(expected['summary']['bullish_alignment_percent'], 80)
-        self.assertEqual(expected['rule_set']['revision'], 2)
+        self.assertEqual(expected['rule_set']['revision'], 1)
         self.assertIn('ema_sma_distance is authoritative', self.ai.call_args.kwargs['instructions'])
         saved = self.client.post('/journals', json={'generation_id': draft['generation_id'], 'edited_draft': draft['draft']})
         self.assertEqual(saved.status_code, 201, saved.text)
@@ -142,14 +142,14 @@ class EmaDistanceJournalTests(ScoredJournalTestCase):
     def test_old_v4_saved_and_pending_results_are_never_recalculated(self):
         for candle in self.snapshot['candles']:
             candle['indicators'].update(ema20=1.106, sma190=1.1)
-        old_definition = rules.rule_set_definition()
+        old_definition = rules.rule_set_definition(rules.SESSION_RULE_SET_ID)
         old_definition.pop('revision')
         old_definition['factors'] = copy.deepcopy(list(rules.FACTORS))
         old_definition['rules'] = 'Previously saved v4 rules: EMA/SMA always earns two points.'
         with patch.object(rules, 'rule_set_definition', return_value=old_definition):
-            old_result = rules.evaluate_strategy(self.snapshot)
+            old_result = rules.evaluate_strategy(self.snapshot, rules.SESSION_RULE_SET_ID)
         self.assertEqual(old_result['summary']['bullish_points'], 5)
-        entry = {**self.entry, 'strategy': old_definition['rules']}
+        entry = {**self.entry, 'rule_set_id': rules.SESSION_RULE_SET_ID, 'strategy': old_definition['rules']}
         pending = db.store_generated_draft(entry, 'Old draft', self.snapshot, old_result)
         original = db.save_generated_journal(db.store_generated_draft(entry, 'Already saved', self.snapshot, old_result), 'Already saved')
         new = self.generate()
@@ -165,8 +165,8 @@ class EmaDistanceJournalTests(ScoredJournalTestCase):
         profile = self.client.post('/strategy-profiles', json={'name': 'Existing v3', 'rules': 'ignored', 'rule_set_id': 'four_factor_v3'}).json()
         before = copy.deepcopy(profile)
         catalog = self.client.get('/strategy-rule-sets').json()
-        self.assertEqual([item['id'] for item in catalog['items']], ['four_factor_v4'])
-        self.assertEqual(catalog['items'][0]['revision'], 2)
+        self.assertEqual([item['id'] for item in catalog['items']], ['four_factor_v7'])
+        self.assertEqual(catalog['items'][0]['revision'], 1)
         self.assertEqual(db.fetch_strategy_profile(profile['id']), before)
         changed = self.client.patch(f"/strategy-profiles/{profile['id']}", json={'name': 'Existing v3', 'rules': 'ignored', 'rule_set_id': rules.RULE_SET_ID})
         self.assertEqual(changed.status_code, 200)

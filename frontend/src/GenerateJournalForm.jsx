@@ -39,7 +39,7 @@ export default function GenerateJournalForm({ pair, journalDate, timeframe, stra
           <aside className="gf-included" aria-labelledby="included-heading">
             <h3 id="included-heading">Included in the review</h3>
             <p>Six completed 4-hour candles, with:</p>
-            <ul><li>RSI 14</li><li>EMA 20</li><li>SMA 190</li><li>Squeeze Momentum</li></ul>
+            <ul><li>RSI 14 + SMA 14 smoothing</li><li>EMA 20</li><li>SMA 190</li><li>Squeeze Momentum</li></ul>
           </aside>
         </div>
         <div className="gf-main-column">

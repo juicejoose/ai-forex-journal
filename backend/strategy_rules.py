@@ -9,13 +9,18 @@ from typing import Literal
 from journal_grounding import InvalidJournalEvidence, NY, _utc, build_evidence_catalog
 
 
-RULE_SET_ID = "four_factor_v4"
+RULE_SET_ID = "four_factor_v7"
+RSI_MA_RULE_SET_ID = "four_factor_v6"
+RSI_MA_RULE_SET_IDS = (RULE_SET_ID, RSI_MA_RULE_SET_ID)
+TREND_RULE_SET_ID = "four_factor_v5"
+SESSION_RULE_SET_ID = "four_factor_v4"
+SESSION_RULE_SET_IDS = (*RSI_MA_RULE_SET_IDS, TREND_RULE_SET_ID, SESSION_RULE_SET_ID)
 MOMENTUM_RULE_SET_ID = "four_factor_v3"
 WEIGHTED_RULE_SET_ID = "four_factor_v2"
 LEGACY_RULE_SET_ID = "four_factor_v1"
-SUPPORTED_RULE_SET_IDS = (RULE_SET_ID, MOMENTUM_RULE_SET_ID, WEIGHTED_RULE_SET_ID, LEGACY_RULE_SET_ID)
+SUPPORTED_RULE_SET_IDS = (*SESSION_RULE_SET_IDS, MOMENTUM_RULE_SET_ID, WEIGHTED_RULE_SET_ID, LEGACY_RULE_SET_ID)
 ACTIVE_RULE_SET_IDS = (RULE_SET_ID,)
-RuleSetId = Literal["four_factor_v1", "four_factor_v2", "four_factor_v3", "four_factor_v4"]
+RuleSetId = Literal["four_factor_v1", "four_factor_v2", "four_factor_v3", "four_factor_v4", "four_factor_v5", "four_factor_v6", "four_factor_v7"]
 DELTA_REL_TOL = 1e-9
 DELTA_ABS_TOL = 1e-12
 LEGACY_FACTORS = (
@@ -111,6 +116,75 @@ RULES_TEXT = RULES_TEXT.replace(
     "Each other factor is worth at most one. The maximum stays five points even when EMA/SMA earns only one; do not shrink the alignment denominator.")
 
 
+# Version 5 keeps v4's stored definition and evaluation behavior intact.
+V4_RULES_TEXT = RULES_TEXT
+V5_FACTORS = deepcopy(V4_FACTORS)
+V5_FACTORS[2].update(
+    name="RSI14 thresholds and trend",
+    bullish="Current RSI14 at or below 40 earns 1 bullish point, regardless of its trend. Otherwise, only when current RSI14 is strictly between 40 and 60, three consecutive strictly rising RSI14 readings earn 1 bullish point.",
+    bearish="Current RSI14 at or above 60 earns 1 bearish point, regardless of its trend. Otherwise, only when current RSI14 is strictly between 40 and 60, three consecutive strictly falling RSI14 readings earn 1 bearish point.",
+    trend={"lookback_candles": 3, "thresholds_take_priority": True,
+           "lower_threshold": 40, "upper_threshold": 60, "strict_comparison": True},
+)
+V5_FACTORS[3].update(
+    bullish="Rising momentum earns 1 bullish point, including negative momentum rising toward zero. Reduce to 0.5 when all three consecutive values stay strictly on the same side of zero and the latest positive delta is smaller than the preceding positive delta.",
+    bearish="Falling momentum earns 1 bearish point, including positive momentum falling toward zero. Reduce to 0.5 when all three consecutive values stay strictly on the same side of zero and the latest negative delta is smaller in magnitude than the preceding negative delta.",
+    direction_basis="change",
+)
+for old, new in zip(V4_FACTORS, V5_FACTORS):
+    RULES_TEXT = RULES_TEXT.replace(
+        f"{old['name']} — up to {old['points']} {'point' if old['points'] == 1 else 'points'}. Bullish: {old['bullish']} Bearish: {old['bearish']}",
+        f"{new['name']} — up to {new['points']} {'point' if new['points'] == 1 else 'points'}. Bullish: {new['bullish']} Bearish: {new['bearish']}",
+    )
+RULES_TEXT = RULES_TEXT.replace(
+    "the base positive/rising or negative/falling condition can still earn one point.",
+    "the base rising/bullish or falling/bearish condition can still earn one point, even when the current value is exactly zero. Unchanged momentum earns zero."
+) + (
+    " RSI threshold decisions need only the current valid reading. Between the thresholds, compare older < previous < current "
+    "for bullish or older > previous > current for bearish. Earlier readings can be outside the threshold band. "
+    "Equal or mixed readings earn zero; missing, invalid or nonconsecutive history makes the RSI trend unavailable. "
+    "This is a three-reading trend, not a confirmed swing-high/low pattern or price divergence. "
+    "Each RSI factor awards at most one point, never threshold and trend points together."
+)
+
+
+# v6 changes only the RSI source; keep all earlier definitions reproducible.
+V5_RULES_TEXT = RULES_TEXT
+V6_FACTORS = deepcopy(V5_FACTORS)
+V6_FACTORS[2].update(
+    name="RSI-based MA thresholds and trend",
+    source="rsi14_sma14",
+    smoothing={"source": "rsi14", "type": "sma", "period": 14},
+    bullish=V5_FACTORS[2]["bullish"].replace("RSI14", "RSI14 SMA14"),
+    bearish=V5_FACTORS[2]["bearish"].replace("RSI14", "RSI14 SMA14"),
+)
+RULES_TEXT = V5_RULES_TEXT.replace("RSI14", "RSI14 SMA14") + (
+    " The RSI factor uses the simple average of the latest fourteen valid consecutive RSI14 readings, "
+    "including the current completed candle, for both thresholds and trend. Raw RSI14 is retained only "
+    "as separate context and never substitutes for an unavailable RSI-based MA."
+)
+RULES_TEXT = RULES_TEXT.replace("RSI14 SMA14 thresholds and trend", "RSI-based MA thresholds and trend")
+
+
+# Preserve v6's full-point RSI trend decisions for existing journals and clients.
+V6_RULES_TEXT = RULES_TEXT
+V7_FACTORS = deepcopy(V6_FACTORS)
+V7_FACTORS[2].update(
+    bullish="Current RSI14 SMA14 at or below 40 earns 1 bullish point, regardless of its trend. Otherwise, only when current RSI14 SMA14 is strictly between 40 and 60, three consecutive strictly rising MA readings earn 1 bullish point, reduced to 0.5 when the current MA is at least 56 and still below 60.",
+    bearish="Current RSI14 SMA14 at or above 60 earns 1 bearish point, regardless of its trend. Otherwise, only when current RSI14 SMA14 is strictly between 40 and 60, three consecutive strictly falling MA readings earn 1 bearish point, reduced to 0.5 when the current MA is at most 44 and still above 40.",
+    trend_reduction={"bullish_min": 56, "bearish_max": 44, "reduced_points": 0.5},
+)
+RULES_TEXT = V6_RULES_TEXT.replace(V6_FACTORS[2]["bullish"], V7_FACTORS[2]["bullish"]).replace(
+    V6_FACTORS[2]["bearish"], V7_FACTORS[2]["bearish"]
+) + (
+    " Near-threshold reductions apply only to a confirmed three-reading MA trend inside the open forty-to-sixty band. "
+    "At or below forty and at or above sixty, the original full-point threshold rules take priority. "
+    "Mixed or equal readings remain neutral. A reduced RSI trend point keeps its direction, "
+    "does not award an opposite point, and does not change the five-point maximum or averaging denominator. "
+    "Approaching a threshold does not establish a reversal, slower momentum, or consolidation."
+)
+
+
 def rule_set_definition(rule_set_id=RULE_SET_ID):
     if rule_set_id not in SUPPORTED_RULE_SET_IDS:
         raise InvalidJournalEvidence("Unknown strategy rule set.")
@@ -119,13 +193,16 @@ def rule_set_definition(rule_set_id=RULE_SET_ID):
         LEGACY_RULE_SET_ID: (LEGACY_RULES_TEXT, LEGACY_FACTORS, 1),
         WEIGHTED_RULE_SET_ID: (WEIGHTED_RULES_TEXT, WEIGHTED_FACTORS, 2),
         MOMENTUM_RULE_SET_ID: (MOMENTUM_RULES_TEXT, FACTORS, 3),
-        RULE_SET_ID: (RULES_TEXT, V4_FACTORS, 4),
+        SESSION_RULE_SET_ID: (V4_RULES_TEXT, V4_FACTORS, 4),
+        TREND_RULE_SET_ID: (V5_RULES_TEXT, V5_FACTORS, 5),
+        RSI_MA_RULE_SET_ID: (V6_RULES_TEXT, V6_FACTORS, 6),
+        RULE_SET_ID: (RULES_TEXT, V7_FACTORS, 7),
     }[rule_set_id]
     return {"id": rule_set_id, "version": version, "name": "Four-factor strategy",
-            **({"revision": 2} if rule_set_id == RULE_SET_ID else {}),
+            **({"revision": 2 if rule_set_id == SESSION_RULE_SET_ID else 1} if rule_set_id in SESSION_RULE_SET_IDS else {}),
             "instrument": "EUR_USD", "timeframe": "H4", "rules": rules,
             "factors": deepcopy(list(factors)), "max_points": 4 if legacy else 5,
-            "summary_method": "session_average" if rule_set_id == RULE_SET_ID else "final_candle",
+            "summary_method": "session_average" if rule_set_id in SESSION_RULE_SET_IDS else "final_candle",
             "alignment_denominator": "all_four_factors" if legacy else "all_factor_weights"}
 
 
@@ -137,6 +214,7 @@ def _values(candle):
     indicators = candle.get("indicators") or {}
     return {"close": _number(candle.get("close")), "ema20": _number(indicators.get("ema20")),
             "sma190": _number(indicators.get("sma190")), "rsi14": _number(indicators.get("rsi14")),
+            "rsi14_sma14": _number(indicators.get("rsi14_sma14")),
             "momentum": _number((indicators.get("squeeze") or {}).get("momentum"))}
 
 
@@ -224,7 +302,15 @@ def _momentum_with_pace(factor, older, previous, current, older_id, previous_id,
         outcome, reason = "unavailable", "Three consecutive completed candles with finite momentum values are required to assess direction and slowing."
     else:
         momentum = values[2]
-        if momentum > 0 and current_delta > 0:
+        if factor.get("direction_basis") == "change":
+            sign = "positive" if momentum > 0 else "negative" if momentum < 0 else "at zero"
+            if current_delta > 0:
+                outcome, reason = "bullish", f"Momentum is {sign} and rising."
+            elif current_delta < 0:
+                outcome, reason = "bearish", f"Momentum is {sign} and falling."
+            else:
+                outcome, reason = "neutral", "Momentum is unchanged."
+        elif momentum > 0 and current_delta > 0:
             outcome, reason = "bullish", "Momentum is positive and increasing."
         elif momentum < 0 and current_delta < 0:
             outcome, reason = "bearish", "Momentum is negative and decreasing."
@@ -255,6 +341,66 @@ def _momentum_with_pace(factor, older, previous, current, older_id, previous_id,
     result["momentum_change"] = {"pace": pace,
                                  "previous_delta": previous_delta if previous_delta is not None and isfinite(previous_delta) else None,
                                  "current_delta": current_delta if current_delta is not None and isfinite(current_delta) else None}
+    if factor.get("direction_basis") == "change":
+        result["momentum_change"]["movement"] = (
+            "unavailable" if outcome == "unavailable" else
+            "rising" if current_delta > 0 else "falling" if current_delta < 0 else "unchanged"
+        )
+    return result
+
+
+def _rsi_with_trend(factor, older, previous, current, older_id, previous_id, current_id):
+    source = factor.get("source", "rsi14")
+    label = "RSI14 SMA14" if source == "rsi14_sma14" else "RSI14"
+    rsi = _values(current)[source]
+    evidence = [_evidence(current, current_id, (source,))]
+    basis = "unavailable"
+    if rsi is None or not 0 <= rsi <= 100:
+        outcome, reason = "unavailable", f"{label} is undefined or outside its valid range."
+    elif rsi <= 40:
+        outcome, basis = "bullish", "oversold"
+        reason = f"{label} is at or below 40. The bullish threshold takes priority over the trend."
+    elif rsi >= 60:
+        outcome, basis = "bearish", "overbought"
+        reason = f"{label} is at or above 60. The bearish threshold takes priority over the trend."
+    else:
+        previous_ok = _consecutive(previous, current)
+        older_ok = previous_ok and _consecutive(older, previous)
+        before = _values(previous)[source] if previous_ok else None
+        earliest = _values(older)[source] if older_ok else None
+        if previous_ok:
+            evidence.insert(0, _evidence(previous, previous_id, (source,)))
+        if older_ok:
+            evidence.insert(0, _evidence(older, older_id, (source,)))
+        if any(v is None or not 0 <= v <= 100 for v in (earliest, before)):
+            outcome, reason = "unavailable", f"Between 40 and 60, three consecutive completed candles with valid {label} readings are required."
+        elif earliest < before < rsi:
+            outcome, basis = "bullish", "rising"
+            reason = f"Current {label} is between 40 and 60, and three consecutive readings are strictly rising."
+        elif earliest > before > rsi:
+            outcome, basis = "bearish", "falling"
+            reason = f"Current {label} is between 40 and 60, and three consecutive readings are strictly falling."
+        else:
+            outcome, basis = "neutral", "mixed_or_flat"
+            reason = f"Current {label} is between 40 and 60, but the three readings are mixed or include an equal pair."
+    result = _result(factor, outcome, reason, evidence)
+    result["rsi_signal"] = {"basis": basis}
+    if "source" in factor:
+        result["rsi_signal"]["source"] = source
+    reduction = factor.get("trend_reduction")
+    if reduction:
+        proximity = None
+        if basis == "rising" and rsi >= reduction["bullish_min"]:
+            proximity = "overbought"
+        elif basis == "falling" and rsi <= reduction["bearish_max"]:
+            proximity = "oversold"
+        result["rsi_signal"].update(reduced=proximity is not None, proximity=proximity)
+        if proximity:
+            result[f"{outcome}_points"] = reduction["reduced_points"]
+            result["reason"] += (
+                f" The MA is nearing the {proximity} threshold; directional support is reduced to "
+                f"{reduction['reduced_points']} points. This does not confirm a reversal."
+            )
     return result
 
 
@@ -272,7 +418,8 @@ def _score(factors, max_points):
     extra = {}
     if any("momentum_change" in f or "ema_sma_distance" in f for f in factors):
         extra["reduced_factors"] = sum(f.get("momentum_change", {}).get("pace") == "slowing"
-                                      or f.get("ema_sma_distance", {}).get("reduced") is True for f in factors)
+                                      or f.get("ema_sma_distance", {}).get("reduced") is True
+                                      or f.get("rsi_signal", {}).get("reduced") is True for f in factors)
     return {"bullish_points": bullish, "bearish_points": bearish, "neutral_factors": neutral,
             "unavailable_factors": len(factors) - available, "evaluated_factors": available,
             "max_points": max_points, "net_score": bullish - bearish, "direction": direction,
@@ -314,6 +461,10 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
             or settings.get("sma", {}).get("period") != 190
             or settings.get("rsi", {}).get("period") != 14):
         raise InvalidJournalEvidence("The scored strategy requires EUR/USD H4 with EMA20, SMA190 and RSI14.")
+    if rule_set_id in RSI_MA_RULE_SET_IDS and any(
+            settings.get("rsi_ma", {}).get(key) != expected
+            for key, expected in (("source", "rsi14"), ("type", "sma"), ("period", 14))):
+        raise InvalidJournalEvidence("The RSI-based MA strategy requires SMA14 smoothing of RSI14.")
     rows = []
     previous = snapshot.get("previous_candle")
     history = snapshot.get("previous_candles")
@@ -350,7 +501,10 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
             outcome, reason = "bearish", f"RSI14 is at or above {rsi_high}, meeting the bearish rule."
         else:
             outcome, reason = "neutral", f"RSI14 is between {rsi_low} and {rsi_high}; neither threshold is met."
-        factors.append(_result(definitions[2], outcome, reason, [_evidence(candle, candle_id, ("rsi14",))]))
+        if rule_set_id in (*RSI_MA_RULE_SET_IDS, TREND_RULE_SET_ID):
+            factors.append(_rsi_with_trend(definitions[2], older, previous, candle, older_id, previous_id, candle_id))
+        else:
+            factors.append(_result(definitions[2], outcome, reason, [_evidence(candle, candle_id, ("rsi14",))]))
 
         momentum, old_momentum = current["momentum"], prior.get("momentum")
         evidence = [_evidence(candle, candle_id, ("momentum",))]
@@ -364,7 +518,7 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
             outcome, reason = "bearish", "Momentum is negative and decreasing."
         else:
             outcome, reason = "neutral", "Momentum does not meet the required combination of sign and change."
-        if rule_set_id in (RULE_SET_ID, MOMENTUM_RULE_SET_ID):
+        if rule_set_id in (*SESSION_RULE_SET_IDS, MOMENTUM_RULE_SET_ID):
             factors.append(_momentum_with_pace(definitions[3], older, previous, candle, older_id, previous_id, candle_id))
         else:
             factors.append(_result(definitions[3], outcome, reason, evidence))
@@ -375,6 +529,6 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
         older, previous = previous, candle
     session_end = {"method": "final_candle", "candle_id": rows[-1]["candle_id"], **_score(rows[-1]["factors"], max_points)}
     result = {"schema_version": 1, "rule_set": definition, "candles": rows, "summary": session_end}
-    if rule_set_id == RULE_SET_ID:
+    if rule_set_id in SESSION_RULE_SET_IDS:
         result.update(summary=_session_average(rows, max_points), session_end=session_end)
     return result

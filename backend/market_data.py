@@ -10,7 +10,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from indicators import ema, rsi, sma, squeeze_momentum
+from indicators import ema, rsi, sma, sma_nullable, squeeze_momentum
 
 
 NY = ZoneInfo("America/New_York")
@@ -20,6 +20,7 @@ WARMUP_COUNT = 300
 EMA_PERIOD = 20
 SMA_PERIOD = 190
 RSI_PERIOD = 14
+RSI_MA_PERIOD = 14
 BB_PERIOD = 20
 BB_MULTIPLIER = 2.0
 KC_PERIOD = 20
@@ -184,6 +185,7 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
     ema_values = ema(closes, EMA_PERIOD)
     sma_values = sma(closes, SMA_PERIOD)
     rsi_values = rsi(closes, RSI_PERIOD)
+    rsi_ma_values = sma_nullable(rsi_values, RSI_MA_PERIOD)
     squeeze = squeeze_momentum(
         highs, lows, closes, bb_period=BB_PERIOD, bb_multiplier=BB_MULTIPLIER,
         kc_period=KC_PERIOD, kc_multiplier=KC_MULTIPLIER, use_true_range=USE_TRUE_RANGE,
@@ -213,6 +215,7 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
                 "ema20": ema_values[index],
                 "sma190": sma_values[index],
                 "rsi14": rsi_values[index],
+                "rsi14_sma14": rsi_ma_values[index],
                 "rsi_status": "ready" if rsi_values[index] is not None else "undefined_no_price_changes",
                 "squeeze": squeeze_values,
             },
@@ -220,7 +223,7 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
 
     change = session[-1].close - session[0].open
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "source": "OANDA",
         "environment": "practice",
         "instrument": "EUR_USD",
@@ -248,6 +251,7 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
             "ema": {"period": EMA_PERIOD, "seed": "sma"},
             "sma": {"period": SMA_PERIOD},
             "rsi": {"period": RSI_PERIOD, "smoothing": "wilder", "flat_value": None},
+            "rsi_ma": {"source": "rsi14", "type": "sma", "period": RSI_MA_PERIOD},
             "squeeze": {
                 "formula": "LazyBear corrected 2014-09-29",
                 "bb_period": BB_PERIOD, "bb_multiplier": BB_MULTIPLIER,

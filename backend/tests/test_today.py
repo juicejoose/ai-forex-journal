@@ -146,10 +146,11 @@ class TodayMarketTests(unittest.TestCase):
 
     def test_missing_factor_withholds_to_date_average_not_pending_zero_points(self):
         snapshot = view_at()['market_data']
-        snapshot['candles'][1]['indicators']['rsi14'] = None
+        snapshot['candles'][1]['indicators']['rsi14_sma14'] = None
         result = evaluate_strategy(snapshot, allow_partial=True)
         self.assertIsNone(result['summary']['bullish_points'])
-        self.assertEqual(result['summary']['evaluated_factors'], 11)
+        self.assertEqual(result['summary']['evaluated_factors'], 10)
+        self.assertEqual([c['factors'][2]['outcome'] for c in result['candles'][1:]], ['unavailable', 'unavailable'])
 
     def test_partial_canonical_rules_do_not_require_future_candles(self):
         rules = view_at()['rule_evaluation']['rule_set']['rules']

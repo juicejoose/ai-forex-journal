@@ -16,7 +16,7 @@ def scoring_snapshot():
         snapshot = md.get_market_data(date(2026, 10, 20))
     for candle in [snapshot["previous_candle"], *snapshot["candles"]]:
         candle.update(open=1.2, high=1.4, low=0.9, close=1.25)
-        candle["indicators"].update(ema20=1.2, sma190=1.1, rsi14=30)
+        candle["indicators"].update(ema20=1.2, sma190=1.1, rsi14=30, rsi14_sma14=30)
         candle["indicators"]["squeeze"]["momentum"] = 0.001
     for index, candle in enumerate(snapshot["candles"]):
         candle["indicators"]["squeeze"]["momentum"] = 0.002 + index * 0.001
@@ -161,7 +161,7 @@ class StrategyRulesTests(unittest.TestCase):
 
     def test_definition_is_a_fresh_versioned_snapshot(self):
         definition = rule_set_definition()
-        self.assertEqual((definition["version"], definition["max_points"]), (4, 5))
+        self.assertEqual((definition["version"], definition["max_points"]), (7, 5))
         definition["factors"][0]["points"] = 100
         self.assertEqual(rule_set_definition()["factors"][0]["points"], 1)
 

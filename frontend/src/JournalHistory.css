@@ -64,15 +64,20 @@
 .jh-entries-heading h3 { margin: 0; font-size: 1.06rem; line-height: 1.45; font-weight: 600; color: var(--text-h); letter-spacing: -0.03em; }
 .jh-session-change { font-size: 1.7rem; font-weight: 650; line-height: 1.4; letter-spacing: -0.05em; margin-top: 0.8rem; }
 .jh-session-change span { display: block; color: var(--text); font-weight: 400; font-size: 0.65rem; letter-spacing: 0; }
+.jh-selected-score { margin-top: 0.8rem; font-size: 0.72rem; }
+.jh-selected-score strong { margin-left: 0.35rem; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.jh-selected-score > span { display: block; margin-top: 0.25rem; color: var(--text); font-size: 0.59rem; }
 .jh-entries-status { padding: 0.8rem 1.1rem 0.2rem; font-size: 0.66rem; }
 .jh-entry-list { list-style: none; padding: 0.75rem; margin: 0; display: flex; flex-direction: column; gap: 0.65rem; max-height: 31rem; overflow-y: auto; }
 .jh-entry-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.8rem; }
 .jh-entry-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.35rem; }
-.jh-entry-title h4 { margin: 0; font-size: 0.82rem; font-weight: 600; color: var(--text-h); }
+.jh-entry-title h4 { margin: 0; font-size: 0.82rem; font-weight: 600; color: var(--text-h); overflow-wrap: anywhere; min-width: 0; }
+.jh-entry-title h3 { overflow-wrap: anywhere; min-width: 0; }
 .jh-pair { color: var(--text); background: var(--jh-surface); border-radius: 4px; padding: 0.1rem 0.3rem; font-size: 0.55rem; }
 .jh-saved-time { font-size: 0.59rem; margin: 0.5rem 0 0.65rem; }
 .jh-entry-change { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.3rem; font-size: 0.65rem; }
 .jh-entry-change strong { font-variant-numeric: tabular-nums; font-size: 0.73rem; font-weight: 650; }
+.jh-entry-score { margin-top: 0.4rem; }
 .jh-text-up { color: var(--jh-up); }
 .jh-text-down { color: var(--jh-down); }
 .jh-entry-actions { display: flex; align-items: center; gap: 0.65rem; border-top: 1px solid var(--border); margin-top: 0.8rem; padding-top: 0.75rem; }

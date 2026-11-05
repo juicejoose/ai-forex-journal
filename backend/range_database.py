@@ -21,6 +21,9 @@ def init_range_db():
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )""")
         connection.execute("CREATE INDEX IF NOT EXISTS range_journals_created ON range_journals(created_at DESC, id DESC)")
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(range_journals)")}
+        if "title" not in columns:
+            connection.execute("ALTER TABLE range_journals ADD COLUMN title TEXT NOT NULL DEFAULT ''")
 
 
 def _journal(row):
@@ -45,11 +48,11 @@ def store_range_draft(entry, draft, snapshot, evaluation):
     return generation_id
 
 
-def save_range_journal(generation_id, edited_draft):
+def save_range_journal(generation_id, edited_draft, *, title=""):
     with get_connection(write=True) as connection:
         existing = connection.execute("SELECT * FROM range_journals WHERE generation_id = ?", (generation_id,)).fetchone()
         if existing is not None:
-            if existing["edited_draft"] != edited_draft:
+            if existing["edited_draft"] != edited_draft or existing["title"] != title:
                 raise DraftAlreadySavedError
             return _journal(existing)
         draft = connection.execute("SELECT * FROM range_generated_drafts WHERE id = ?", (generation_id,)).fetchone()
@@ -61,10 +64,10 @@ def save_range_journal(generation_id, edited_draft):
         now = datetime.now(timezone.utc).isoformat()
         cursor = connection.execute("""INSERT INTO range_journals
             (start_date, end_date, entry_json, original_draft, edited_draft, market_data_json,
-             rule_evaluation_json, generation_id, change_percent, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
+             rule_evaluation_json, generation_id, change_percent, created_at, updated_at, title)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
             entry["start_date"], entry["end_date"], draft["entry_json"], draft["original_draft"], edited_draft,
-            draft["market_data_json"], draft["rule_evaluation_json"], generation_id, change, now, now))
+            draft["market_data_json"], draft["rule_evaluation_json"], generation_id, change, now, now, title))
         connection.execute("DELETE FROM range_generated_drafts WHERE id = ?", (generation_id,))
         return _journal(connection.execute("SELECT * FROM range_journals WHERE id = ?", (cursor.lastrowid,)).fetchone())
 
@@ -74,10 +77,10 @@ def fetch_range_journal(journal_id):
         return _journal(connection.execute("SELECT * FROM range_journals WHERE id = ?", (journal_id,)).fetchone())
 
 
-def update_range_journal(journal_id, text):
+def update_range_journal(journal_id, text, *, title=None):
     with get_connection(write=True) as connection:
-        cursor = connection.execute("UPDATE range_journals SET edited_draft = ?, updated_at = ? WHERE id = ?",
-                                    (text, datetime.now(timezone.utc).isoformat(), journal_id))
+        cursor = connection.execute("UPDATE range_journals SET edited_draft = ?, updated_at = ?, title = COALESCE(?, title) WHERE id = ?",
+                                    (text, datetime.now(timezone.utc).isoformat(), title, journal_id))
         if not cursor.rowcount:
             return None
         return _journal(connection.execute("SELECT * FROM range_journals WHERE id = ?", (journal_id,)).fetchone())
@@ -91,6 +94,6 @@ def delete_range_journal(journal_id):
 def fetch_range_journals(limit=20, offset=0):
     with get_connection() as connection:
         total = connection.execute("SELECT COUNT(*) FROM range_journals").fetchone()[0]
-        rows = connection.execute("""SELECT id, start_date, end_date, created_at, updated_at, change_percent
+        rows = connection.execute("""SELECT id, title, start_date, end_date, created_at, updated_at, change_percent
             FROM range_journals ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?""", (limit, offset)).fetchall()
         return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}

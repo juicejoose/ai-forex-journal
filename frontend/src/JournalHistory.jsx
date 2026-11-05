@@ -4,6 +4,7 @@ import {
   isDateKey, isMonthKey, newYorkToday, shiftDate, shiftMonth,
 } from './journalCalendar.js'
 import './JournalHistory.css'
+import { journalName } from './journalNames.js'
 
 const API_URL = 'http://127.0.0.1:8000/journals'
 const PAGE_SIZE = 20
@@ -30,7 +31,8 @@ function validEntries(data, date, offset) {
   return Array.isArray(data?.items) && Number.isInteger(data.total) && data.total >= 0 &&
     data.limit === PAGE_SIZE && data.offset === offset && data.items.length <= PAGE_SIZE &&
     data.items.every((item) => Number.isInteger(item?.id) && item.id > 0 && item.journal_date === date &&
-      typeof item.pair === 'string' && typeof item.timeframe === 'string' && validChange(item.change_percent))
+      typeof item.pair === 'string' && typeof item.timeframe === 'string' && validChange(item.change_percent) &&
+      (item.title == null || typeof item.title === 'string') && validChange(item.average_net_score ?? null))
 }
 
 function Chevron({ next = false }) {
@@ -200,6 +202,8 @@ export default function JournalHistory({ onOpen, onDelete, deletingId, busy, ref
             {Number.isFinite(selectedDay?.change_percent) && <p className={`jh-session-change jh-text-${changeTone(selectedDay.change_percent)}`}>
               {formatChange(selectedDay.change_percent)}<span>EUR/USD session</span>
             </p>}
+            {selectedDay && <p className="jh-selected-score">Avg net score <strong className={`jh-text-${changeTone(selectedDay.average_net_score)}`}>{formatAverageNet(selectedDay.average_net_score)}</strong>
+              <span>{selectedDay.source_journal_id ? `From journal #${selectedDay.source_journal_id}, matching the calendar.` : 'No complete session-average score.'}</span></p>}
           </header>
           <div aria-live="polite" className="jh-entries-status">
             {loadingEntries ? <p>Loading entries…</p> : entries.error ? <p role="alert" className="jh-error">{entries.error}</p> : <p>{countLabel(entries.data.total)} saved for this date</p>}
@@ -213,10 +217,12 @@ export default function JournalHistory({ onOpen, onDelete, deletingId, busy, ref
             {entries.data.items.map((journal) => {
               const saved = new Date(journal.created_at)
               return <li key={journal.id} className="jh-entry-card">
-                <div className="jh-entry-title"><h4>Journal #{journal.id}</h4><span className="jh-pair">{journal.pair.replace(/^EURUSD$/, 'EUR/USD')} · {journal.timeframe}</span></div>
+                <div className="jh-entry-title"><h4>{journalName(journal)}</h4><span className="jh-pair">{journal.pair.replace(/^EURUSD$/, 'EUR/USD')} · {journal.timeframe}</span></div>
+                {journal.title && <p className="jh-saved-time">Journal #{journal.id}</p>}
                 <p className="jh-saved-time">{Number.isFinite(saved.getTime()) ? `Saved ${savedTime.format(saved)} NY` : 'Saved time unavailable'}</p>
                 {journal.session_complete === false && <p className="jh-saved-time">Intraday snapshot · {journal.completed_candles} of 6 candles · through {savedTime.format(new Date(journal.data_through))} NY</p>}
                 <p className="jh-entry-change">Session change <strong className={`jh-text-${changeTone(journal.change_percent)}`}>{Number.isFinite(journal.change_percent) ? formatChange(journal.change_percent) : journal.session_complete === false ? 'Session was in progress' : 'Unavailable'}</strong></p>
+                <p className="jh-entry-change jh-entry-score">Avg net score{journal.session_complete === false ? ' · so far' : ''} <strong className={`jh-text-${changeTone(journal.average_net_score)}`}>{formatAverageNet(journal.average_net_score)}</strong></p>
                 <div className="jh-entry-actions">
                   <button className="jh-button jh-open-button" type="button" onClick={() => onOpen(journal.id)} disabled={busy} aria-label={`Open journal #${journal.id}`}>Open journal <span aria-hidden="true">↗</span></button>
                   <button className="jh-delete-button" type="button" onClick={() => onDelete(journal)} disabled={busy} aria-label={`Delete journal #${journal.id} from ${journal.journal_date}`}>{deletingId === journal.id ? 'Deleting…' : 'Delete'}</button>

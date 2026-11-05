@@ -3,7 +3,7 @@
 import copy
 import unittest
 
-from strategy_rules import (LEGACY_RULE_SET_ID, WEIGHTED_RULE_SET_ID, MOMENTUM_RULE_SET_ID, _momentum_with_pace,
+from strategy_rules import (LEGACY_RULE_SET_ID, WEIGHTED_RULE_SET_ID, MOMENTUM_RULE_SET_ID, SESSION_RULE_SET_ID, _momentum_with_pace,
                             evaluate_strategy, rule_set_definition)
 from tests.test_strategy_rules import scoring_snapshot
 
@@ -16,7 +16,7 @@ class MomentumSlowdownTests(unittest.TestCase):
         candles = [*self.snapshot["previous_candles"], self.snapshot["candles"][0]]
         for candle, value in zip(candles, values):
             candle["indicators"]["squeeze"]["momentum"] = value
-        return evaluate_strategy(self.snapshot)["candles"][0]["factors"][-1]
+        return evaluate_strategy(self.snapshot, SESSION_RULE_SET_ID)["candles"][0]["factors"][-1]
 
     def test_bullish_slowdown_uses_exactly_three_candles(self):
         result = self.first([0.001, 0.0018, 0.0023])
@@ -61,7 +61,7 @@ class MomentumSlowdownTests(unittest.TestCase):
             self.assertEqual(result["bullish_points"] + result["bearish_points"], 1)
         self.first([-0.001, 0.001, 0.0015])
         self.snapshot["candles"][1]["indicators"]["squeeze"]["momentum"] = 0.0017
-        result = evaluate_strategy(self.snapshot)["candles"][1]["factors"][-1]
+        result = evaluate_strategy(self.snapshot, SESSION_RULE_SET_ID)["candles"][1]["factors"][-1]
         self.assertEqual((result["momentum_change"]["pace"], result["bullish_points"]), ("slowing", 0.5))
         self.assertEqual([item["candle_id"] for item in result["evidence"]], ["P0", "C1", "C2"])
 
@@ -73,7 +73,7 @@ class MomentumSlowdownTests(unittest.TestCase):
 
     def test_missing_oldest_history_is_unavailable_then_recovers(self):
         self.snapshot.pop("previous_candles")
-        result = evaluate_strategy(self.snapshot)
+        result = evaluate_strategy(self.snapshot, SESSION_RULE_SET_ID)
         first = result["candles"][0]
         self.assertEqual(first["factors"][-1]["outcome"], "unavailable")
         self.assertEqual((first["direction"], first["evaluated_factors"], first["max_points"]), ("insufficient_data", 3, 5))
@@ -91,7 +91,7 @@ class MomentumSlowdownTests(unittest.TestCase):
         for change in cases:
             snapshot = copy.deepcopy(base)
             change(snapshot)
-            result = evaluate_strategy(snapshot)["candles"][0]["factors"][-1]
+            result = evaluate_strategy(snapshot, SESSION_RULE_SET_ID)["candles"][0]["factors"][-1]
             self.assertEqual((result["outcome"], result["bullish_points"], result["bearish_points"]), ("unavailable", 0, 0))
             self.assertEqual(result["momentum_change"]["pace"], "unavailable")
 
@@ -106,7 +106,7 @@ class MomentumSlowdownTests(unittest.TestCase):
         ]:
             candles = [{"open_time": times[0], "close_time": times[1], "indicators": {"squeeze": {"momentum": value}}}
                        for times, value in zip((older_times, previous_times, current_times), (0.001, 0.0018, 0.0023))]
-            factor = rule_set_definition()["factors"][-1]
+            factor = rule_set_definition(SESSION_RULE_SET_ID)["factors"][-1]
             result = _momentum_with_pace(factor, *candles, "P-1", "P0", "C1")
             self.assertEqual(result["bullish_points"], 0.5)
             candles[0]["close_time"] = candles[0]["open_time"]
@@ -126,10 +126,10 @@ class MomentumSlowdownTests(unittest.TestCase):
 
     def test_future_momentum_changes_do_not_change_previous_scores_or_inputs(self):
         before = copy.deepcopy(self.snapshot)
-        result = evaluate_strategy(self.snapshot)
+        result = evaluate_strategy(self.snapshot, SESSION_RULE_SET_ID)
         self.assertEqual(self.snapshot, before)
         self.snapshot["candles"][-1]["indicators"]["squeeze"]["momentum"] = -0.1
-        after = evaluate_strategy(self.snapshot)
+        after = evaluate_strategy(self.snapshot, SESSION_RULE_SET_ID)
         self.assertEqual(result["candles"][:-1], after["candles"][:-1])
         self.assertNotEqual(result["summary"], after["summary"])
 
@@ -150,7 +150,7 @@ class MomentumSlowdownTests(unittest.TestCase):
         self.assertEqual(history[0]["close_time"], history[1]["open_time"])
         self.assertEqual(history[1]["close_time"], self.snapshot["session"]["start_utc"])
         self.assertEqual(len(self.snapshot["candles"]), 6)
-        self.assertEqual(self.snapshot["schema_version"], 3)
+        self.assertEqual(self.snapshot["schema_version"], 4)
         self.assertTrue(all(c not in self.snapshot["candles"] for c in history))
 
 

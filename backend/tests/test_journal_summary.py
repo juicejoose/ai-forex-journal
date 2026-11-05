@@ -54,6 +54,7 @@ class JournalSummaryTests(ScoredJournalTestCase):
 
     def test_incomplete_average_cannot_be_replaced_by_valid_final_candle(self):
         self.snapshot["candles"][0]["indicators"]["rsi14"] = None
+        self.snapshot["candles"][0]["indicators"]["rsi14_sma14"] = None
         context = build_summary_context(self.snapshot, evaluate_strategy(self.snapshot))
         value = valid_scored_commentary(context)
         value["consensus"]["direction"] = "bullish"
@@ -101,7 +102,7 @@ class JournalSummaryTests(ScoredJournalTestCase):
             snapshot = copy.deepcopy(self.snapshot)
             for index, candle in enumerate([*snapshot["previous_candles"], *snapshot["candles"]]):
                 candle["indicators"].update(ema20=1.25, sma190=1.2 if mixed else 1.25,
-                                            rsi14=60 if mixed else 50)
+                                            rsi14=60 if mixed else 50, rsi14_sma14=60 if mixed else 50)
                 candle["indicators"]["squeeze"]["momentum"] = -0.001 * (index + 1) if mixed else 0
             evaluation = evaluate_strategy(snapshot)
             context = build_summary_context(snapshot, evaluation)

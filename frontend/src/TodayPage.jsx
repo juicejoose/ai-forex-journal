@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import MarketEvidence from './MarketEvidence.jsx'
 import StrategyScores from './StrategyScores.jsx'
 import JournalView from './JournalView.jsx'
+import { journalEditsSaved } from './journalNames.js'
 import { formatDay } from './journalCalendar.js'
 import { validTodayView, validTodayEvidence, summaryIsBehind, freshTodayView } from './todaySession.js'
 import './TodayPage.css'
@@ -25,10 +26,11 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
   const [preview, setPreview] = useState(null)
   const [saved, setSaved] = useState(null)
   const [text, setText] = useState('')
+  const [journalTitle, setJournalTitle] = useState('')
   const [action, setAction] = useState('')
   const [error, setError] = useState('')
   const [saveError, setSaveError] = useState('')
-  const isSaved = saved !== null && text.trim() === saved.edited_draft
+  const isSaved = journalEditsSaved(saved, text, journalTitle)
   const dirty = preview !== null && !isSaved
   useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
 
@@ -75,7 +77,7 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
       const data = await responseData(response, 'Could not generate a summary. Your previous review is still here.')
       if (!data?.entry || typeof data.generation_id !== 'string' || typeof data.draft !== 'string' || !data.draft.trim() ||
           !validTodayEvidence(data.market_data, data.rule_evaluation)) throw new Error('The server did not return a valid Today summary.')
-      setPreview(data); setSaved(null); setText(data.draft); setSaveError('')
+      setPreview(data); setSaved(null); setText(data.draft); setJournalTitle(''); setSaveError('')
     } catch (err) { setError(err.message) } finally { pending('') }
   }
   async function save() {
@@ -83,20 +85,20 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
     setSaveError(''); pending('save')
     try {
       const response = await fetch(`${API}/journals${saved ? `/${saved.id}` : ''}`, { method: saved ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saved ? { edited_draft: text.trim() }
-          : { generation_id: preview.generation_id, edited_draft: text.trim() }) })
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saved ? { edited_draft: text.trim(), title: journalTitle.trim() }
+          : { generation_id: preview.generation_id, edited_draft: text.trim(), title: journalTitle.trim() }) })
       const data = await responseData(response, 'Could not save this review. Your text is still here.')
-      if (!Number.isInteger(data?.id) || typeof data.edited_draft !== 'string' || !validTodayEvidence(data.market_data, data.rule_evaluation)) {
+      if (!Number.isInteger(data?.id) || data.title !== journalTitle.trim() || typeof data.edited_draft !== 'string' || !validTodayEvidence(data.market_data, data.rule_evaluation)) {
         throw new Error('The server did not confirm a valid saved review. Check Saved journals before retrying.')
       }
-      setSaved(data); setText(data.edited_draft); onSaved()
+      setSaved(data); setText(data.edited_draft); setJournalTitle(data.title ?? ''); onSaved()
     } catch (err) { setSaveError(err.message) } finally { pending('') }
   }
 
   return <section id="today-panel" role="tabpanel" aria-labelledby="today-tab" hidden={!active} tabIndex={0} className="today-page">
     {active && <>
       <header className="today-heading"><div><p className="jv-eyebrow">CURRENT TRADING SESSION</p><h2>Today, as it unfolds</h2>
-        <p>EUR/USD · 4-hour candles · Four-factor strategy v4</p></div>
+        <p>EUR/USD · 4-hour candles · Four-factor strategy v7</p></div>
         <button className="jv-button" type="button" onClick={() => setReload(value => value + 1)} disabled={fetching || busy}>{fetching ? 'Refreshing…' : 'Refresh data'}</button>
       </header>
       <p className="today-refresh" role="status">Checks for completed candles every minute while this page is visible. The backend must be running. AI summaries refresh only when you request them.</p>
@@ -126,7 +128,7 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
       </section>
       {staleSummary && <p className="today-notice" role="status">The live data has changed since this summary was generated. The review below still uses its original snapshot. Refresh the AI summary when ready.</p>}
       {saved && <p className="today-refresh">Saved as journal #{saved.id} in Saved journals for {formatDay(saved.journal_date)}. Reopen or delete it there.</p>}
-      {preview && <JournalView key={preview.generation_id} preview={preview} savedJournal={saved} text={text} onChange={setText} onSave={save}
+      {preview && <JournalView key={preview.generation_id} preview={preview} savedJournal={saved} text={text} name={journalTitle} onNameChange={setJournalTitle} onChange={setText} onSave={save}
         busy={busy} saving={action === 'save'} isSaved={isSaved} error={saveError} showEvidence={false} />}
     </>}
   </section>
