@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: ai-forex-journal
+    runtime: python
+    plan: starter
+    branch: main
+    buildCommand: pip install -r backend/requirements.txt && npm --prefix frontend ci --include=dev && npm --prefix frontend run build
+    startCommand: uvicorn hosted:create_app --factory --app-dir backend --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    disk:
+      name: journal-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.16"
+      - key: NODE_VERSION
+        value: "24.21.0"
+      - key: JOURNAL_DB_PATH
+        value: /var/data/journal.db
+      - key: JOURNAL_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OANDA_API_TOKEN
+        sync: false
+      - key: OANDA_ACCOUNT_ID
+        sync: false
+      - key: OANDA_API_URL
+        value: https://api-fxpractice.oanda.com

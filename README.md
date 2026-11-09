@@ -1,5 +1,7 @@
 # AI Forex Journal
 
+To use the journal from your phone, follow the [Render deployment guide](docs/render-deployment.md).
+
 A local journal app that compares a completed forex session with your strategy rules. Python retrieves market data, calculates indicators, and evaluates the built-in four-factor strategy. OpenAI writes commentary around those results. Written strategies can also use the original AI review mode.
 
 The frontend uses React and Vite. The backend uses FastAPI and a local SQLite database.
@@ -236,7 +238,7 @@ All automated backend tests live in `backend/tests/`. Run discovery from `backen
 ./.venv/bin/python -B -m unittest -v tests.test_journal_calendar
 ```
 
-The current backend suite contains **266 tests**:
+The current backend suite contains **270 tests**:
 
 | File | Tests | Coverage |
 | --- | ---: | --- |
@@ -255,13 +257,14 @@ The current backend suite contains **266 tests**:
 | `tests/test_session_average.py` | 14 | Equal averaging, late reversals, half points, missing data, mixed/neutral sessions, legacy methods, canonical AI inputs, profile upgrades and immutable saving |
 | `tests/test_custom_range.py` | 23 | Inclusive dates and limits, full-session coverage, continuous indicators, weekends/DST, equal range averaging, global candle references, AI validation, immutable saving, daily/custom isolation, deletion, pagination and startup preservation |
 | `tests/test_rsi_ma.py` | 6 | Smoothing precision, warmup, missing readings, causal calculations and daily/Today/range consistency |
+| `tests/test_hosted.py` | 4 | Hosted login for the UI and API, health checks, cross-origin write protection, persistence and required deployment settings |
 | `tests/test_strategy_v7.py` | 13 | Near-threshold boundaries, strict trend checks, half-point totals across daily/Today/range, AI metadata, calendar scores and saved v6 preservation |
 | `tests/test_strategy_v6.py` | 11 | MA versus raw RSI conflicts, thresholds, trends, missing settings/history, version compatibility, AI evidence and saved/calendar results |
 | `tests/test_strategy_v5.py` | 17 | RSI threshold priority, strict trends, missing history, all momentum quadrants and slowdown, no future influence, range continuity, AI inputs, saved v4/v5 compatibility and calendar scores |
 | `tests/test_ema_distance.py` | 11 | Inclusive 60-pip boundaries in both directions, full precision, missing inputs, fixed denominator, combined reductions, daily/range/Today reuse, AI inputs and immutable historical v4 revisions |
 | `tests/test_today.py` | 19 | Empty/partial/full sessions, close boundaries, rollover, weekend/DST history, future-data exclusion, delayed candles, partial grounding and averages, cache expiry, AI snapshot consistency, immutable saving and calendar semantics |
 
-These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 266 tests` and `OK`.
+These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 270 tests` and `OK`.
 
 From the repository root, check the frontend:
 

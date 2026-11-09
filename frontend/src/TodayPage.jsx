@@ -1,3 +1,4 @@
+import { API } from './api.js'
 import { useEffect, useState } from 'react'
 import MarketEvidence from './MarketEvidence.jsx'
 import StrategyScores from './StrategyScores.jsx'
@@ -7,7 +8,6 @@ import { formatDay } from './journalCalendar.js'
 import { validTodayView, validTodayEvidence, summaryIsBehind, freshTodayView } from './todaySession.js'
 import './TodayPage.css'
 
-const API = 'http://127.0.0.1:8000'
 const stamp = value => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value))
 const clock = value => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(new Date(value))
 async function responseData(response, fallback) {
