@@ -1,3 +1,4 @@
+import { API } from './api.js'
 import { useEffect, useState } from 'react'
 import { changeTone, formatChange, formatDay, isDateKey } from './journalCalendar.js'
 import './JournalHistory.css'
@@ -15,7 +16,7 @@ export default function CustomRangeHistory({ active, refreshVersion, onOpen, onD
     const controller = new AbortController()
     async function load() {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/range-journals?limit=${PAGE_SIZE}&offset=${offset}`, { signal: controller.signal })
+        const response = await fetch(`${API}/range-journals?limit=${PAGE_SIZE}&offset=${offset}`, { signal: controller.signal })
         const data = await response.json().catch(() => null)
         if (!response.ok || !Array.isArray(data?.items) || !Number.isInteger(data.total) || data.total < 0 ||
             data.offset !== offset || data.limit !== PAGE_SIZE || data.items.length > PAGE_SIZE ||

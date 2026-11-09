@@ -1,3 +1,4 @@
+import { API } from './api.js'
 import { useEffect, useState } from 'react'
 import CustomRangeForm from './CustomRangeForm.jsx'
 import CustomRangeHistory from './CustomRangeHistory.jsx'
@@ -8,7 +9,6 @@ import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 import { customRangeDetails, rangePreview, validRangePreview } from './customRange.js'
 import './CustomRangeJournals.css'
 
-const API = 'http://127.0.0.1:8000'
 async function readResponse(response, fallback) {
   const data = await response.json().catch(() => null)
   if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : fallback)

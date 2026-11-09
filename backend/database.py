@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import sqlite3
 from calendar import monthrange
 from contextlib import contextmanager
@@ -7,7 +8,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-DB_PATH = Path(__file__).resolve().parent / "data" / "journal.db"
+DB_PATH = Path(os.environ.get("JOURNAL_DB_PATH", Path(__file__).resolve().parent / "data" / "journal.db"))
 
 
 class DraftAlreadySavedError(Exception):

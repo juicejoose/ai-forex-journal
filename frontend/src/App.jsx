@@ -1,3 +1,4 @@
+import { API } from './api.js'
 import { useEffect, useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
 import GenerateJournalForm from './GenerateJournalForm.jsx'
@@ -64,7 +65,7 @@ function App() {
     const controller = new AbortController()
     async function loadRuleSet() {
       try {
-        const response = await fetch('http://127.0.0.1:8000/strategy-rule-sets', { signal: controller.signal })
+        const response = await fetch(`${API}/strategy-rule-sets`, { signal: controller.signal })
         const data = await response.json()
         if (!response.ok || !Array.isArray(data?.items) ||
             !data.items.some((item) => item.id === CURRENT_RULE_SET_ID && item.version === 7 && item.revision === 1 &&
@@ -165,7 +166,7 @@ function App() {
 
     try {
       const response = await fetch(
-        'http://127.0.0.1:8000/journal/generate',
+        `${API}/journal/generate`,
         {
           method: 'POST',
           headers: {
@@ -230,8 +231,8 @@ function App() {
     const existingId = savedJournal?.id
 
     const url = existingId
-      ? `http://127.0.0.1:8000/journals/${existingId}`
-      : 'http://127.0.0.1:8000/journals'
+      ? `${API}/journals/${existingId}`
+      : `${API}/journals`
 
     const body = existingId
       ? { edited_draft: text, title: journalTitle.trim() }
@@ -292,7 +293,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/journals/${journalId}`
+        `${API}/journals/${journalId}`
       )
       const data = await response.json().catch(() => null)
 
@@ -359,7 +360,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/journals/${journal.id}`,
+        `${API}/journals/${journal.id}`,
         { method: 'DELETE' }
       )
       // A stale entry may already have been removed in another browser tab.

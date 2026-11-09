@@ -1,3 +1,4 @@
+import { API } from './api.js'
 import { useEffect, useState } from 'react'
 import {
   calendarCells, changeTone, formatChange, formatAverageNet, formatDay, formatMonth,
@@ -6,7 +7,7 @@ import {
 import './JournalHistory.css'
 import { journalName } from './journalNames.js'
 
-const API_URL = 'http://127.0.0.1:8000/journals'
+const API_URL = `${API}/journals`
 const PAGE_SIZE = 20
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const savedTime = new Intl.DateTimeFormat('en-US', {

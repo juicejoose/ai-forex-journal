@@ -1,10 +1,11 @@
+import { API } from './api.js'
 import { useEffect, useRef, useState } from 'react'
 import DeleteStrategyProfileDialog from './DeleteStrategyProfileDialog.jsx'
 import './StrategyProfiles.css'
 import RuleSetSelect from './RuleSetSelect.jsx'
 import { isRetiredRuleSet } from './strategyChoices.js'
 
-const API_URL = 'http://127.0.0.1:8000/strategy-profiles'
+const API_URL = `${API}/strategy-profiles`
 
 function isProfile(value) {
   return Number.isInteger(value?.id) && value.id > 0 &&
