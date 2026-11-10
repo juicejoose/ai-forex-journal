@@ -109,3 +109,42 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+.page-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-tabs > [role="tab"] {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.page-tabs > [aria-selected="true"] {
+  background: var(--accent-bg);
+  font-weight: 700;
+}
+
+.page-tabs > :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.page-tabs > :disabled {
+  cursor: wait;
+}

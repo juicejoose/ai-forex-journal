@@ -1,5 +1,5 @@
 import { API } from './api.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import JournalHistory from './JournalHistory.jsx'
 import GenerateJournalForm from './GenerateJournalForm.jsx'
 import JournalView from './JournalView.jsx'
@@ -25,6 +25,7 @@ function App() {
   const [rangeBusy, setRangeBusy] = useState(false)
   const [rangeDirtyTab, setRangeDirtyTab] = useState(null)
   const [activeTab, setActiveTab] = useState('generate')
+  const tabListRef = useRef(null)
   const [editorTab, setEditorTab] = useState('generate')
   const pair = 'EURUSD'
   const [notes, setNotes] = useState('')
@@ -80,6 +81,17 @@ function App() {
     loadRuleSet()
     return () => controller.abort()
   }, [ruleReload])
+
+  useEffect(() => {
+    // A page can also be selected from the profile form. Reveal its tab
+    // horizontally while leaving the user's vertical reading position alone.
+    const list = tabListRef.current
+    const selected = list.querySelector('[aria-selected="true"]')
+    const bounds = list.getBoundingClientRect()
+    const tab = selected.getBoundingClientRect()
+    if (tab.left < bounds.left) list.scrollLeft += tab.left - bounds.left
+    else if (tab.right > bounds.right) list.scrollLeft += tab.right - bounds.right
+  }, [activeTab])
 
   function retryRuleSet() {
     setRuleError('')
@@ -415,13 +427,11 @@ function App() {
 
   return (
     <main>
-      <h1>Forex AI Journal</h1>
-      <p>Review EUR/USD sessions against your strategy, as they unfold or after the close.</p>
-
       <div
         role="tablist"
         aria-label="Journal pages"
-        style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', padding: '1rem', borderBottom: '1px solid var(--border)' }}
+        className="page-tabs"
+        ref={tabListRef}
       >
         {tabs.map((tab, index) => (
           <button
@@ -435,15 +445,6 @@ function App() {
             onClick={() => setActiveTab(tab.id)}
             onKeyDown={(event) => handleTabKeyDown(event, index)}
             disabled={busy}
-            style={{
-              padding: '0.65rem 1rem',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-              background: activeTab === tab.id ? 'var(--accent-bg)' : 'var(--bg)',
-              color: 'var(--text-h)',
-              fontWeight: activeTab === tab.id ? 700 : 400,
-              cursor: busy ? 'wait' : 'pointer',
-            }}
           >
             {tab.label}
             {preview && editorTab === tab.id && !isSaved && ' · Unsaved'}
