@@ -3,6 +3,7 @@ import { useState } from 'react'
 import './StrategyScores.css'
 import StrategyRuleHelp from './StrategyRuleHelp.jsx'
 import { changeTone, formatChange } from './journalCalendar.js'
+import { chartTime } from './marketChartData.js'
 
 const clock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })
 const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' })
@@ -22,7 +23,7 @@ function priceChange(candle) {
   return Number.isFinite(value) ? value : null
 }
 
-export default function StrategyScores({ evaluation, snapshot }) {
+export default function StrategyScores({ evaluation, snapshot, selectedTime, onSelectCandle }) {
   const [activeHelp, setActiveHelp] = useState(null)
   const customRange = evaluation?.analysis_kind === 'custom_range'
   const intraday = evaluation?.analysis_kind === 'intraday'
@@ -79,8 +80,11 @@ export default function StrategyScores({ evaluation, snapshot }) {
         <tbody>{candles.map((candle) => {
           const prices = marketCandles.find((item) => item?.open_time === candle.open_time && item?.close_time === candle.close_time)
           const change = priceChange(prices)
-          return <tr key={candle.candle_id} className={candle.candle_id === finalCandle.candle_id ? 'ss-final' : ''}>
-          <th scope="row"><span>{stamp(candle.open_time)} – {stamp(candle.close_time)}</span><small>{stamp(candle.open_time, day)} – {stamp(candle.close_time, day)}{candle.candle_id === finalCandle.candle_id ? ` · ${partial ? 'Latest close' : `${periodLabel} end`}` : ''}</small></th>
+          const selected = selectedTime === chartTime(candle.open_time)
+          const timeLabel = <><span>{stamp(candle.open_time)} – {stamp(candle.close_time)}</span><small>{stamp(candle.open_time, day)} – {stamp(candle.close_time, day)}{candle.candle_id === finalCandle.candle_id ? ` · ${partial ? 'Latest close' : `${periodLabel} end`}` : ''}</small></>
+          return <tr key={candle.candle_id} className={`${candle.candle_id === finalCandle.candle_id ? 'ss-final' : ''} ${selected ? 'ss-chart-selected' : ''}`}>
+          <th scope="row">{onSelectCandle ? <button type="button" className="ss-candle-select" aria-pressed={selected}
+            title="Select this candle on the market chart" onClick={() => onSelectCandle(chartTime(candle.open_time))}>{timeLabel}</button> : timeLabel}</th>
           {candle.factors.map((factor) => <td key={factor.factor_id}><span className={`ss-outcome ss-${factor.outcome}`}>{outcomeLabel(factor)}</span><small className="ss-factor-description">{factorDescription(factor)}</small></td>)}
           <td>{candle.bullish_points} / {candle.bearish_points}</td><td>{labels[candle.direction]}</td>
           <td className={`ss-price-change jv-tone-${changeTone(change)}`} title={change === null ? 'Candle prices unavailable' : '(Close − Open) ÷ Open × 100'}>{formatChange(change)}</td>

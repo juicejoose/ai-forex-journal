@@ -243,7 +243,8 @@ class TodayAPITests(unittest.TestCase):
     def test_summary_gets_exact_python_coverage_and_pending_cannot_be_cited(self):
         view = self.current(); draft = self.generate(view)
         sent = json.loads(self.ai.call_args.kwargs['input'])
-        self.assertEqual(sent['market_data'], view['market_data'])
+        self.assertNotIn('chart_context', sent['market_data'])
+        self.assertEqual(sent['market_data'], {k: v for k, v in view['market_data'].items() if k != 'chart_context'})
         self.assertEqual(sent['summary_context']['coverage']['completed_candles'], 3)
         self.assertEqual(list(sent['evidence_catalog']), ['C1', 'C2', 'C3'])
         self.assertIn('Session in progress: 3 of 6', draft['draft'])

@@ -68,7 +68,8 @@ class JournalEvidenceTests(unittest.TestCase):
     def test_full_evidence_sent_to_ai_and_original_held_on_server(self):
         draft = self.generate()
         sent = json.loads(self.ai.call_args.kwargs["input"])
-        self.assertEqual(sent["market_data"], self.snapshot)
+        self.assertNotIn("chart_context", sent["market_data"])
+        self.assertEqual(sent["market_data"], {k: v for k, v in self.snapshot.items() if k != "chart_context"})
         self.assertEqual(sent["entry"], draft["entry"])
         self.assertEqual(sent["entry"]["pair"], "EURUSD")
         self.assertEqual(len(sent["market_data"]["candles"]), 6)

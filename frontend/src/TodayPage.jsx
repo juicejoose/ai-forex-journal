@@ -1,7 +1,6 @@
 import { API } from './api.js'
 import { useEffect, useState } from 'react'
-import MarketEvidence from './MarketEvidence.jsx'
-import StrategyScores from './StrategyScores.jsx'
+import MarketReview from './MarketReview.jsx'
 import JournalView from './JournalView.jsx'
 import { journalEditsSaved } from './journalNames.js'
 import { formatDay } from './journalCalendar.js'
@@ -115,7 +114,7 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
           <span>{slot.candle_id}</span><strong>{clock(slot.open_time)} – {clock(slot.close_time)}</strong>
           <small>{slot.status === 'completed' ? 'Completed' : slot.status === 'forming' ? 'Forming · score pending' : 'Upcoming · pending'}</small>
         </li>)}</ol>
-        {view.market_data ? <><MarketEvidence snapshot={view.market_data} /><StrategyScores evaluation={view.rule_evaluation} snapshot={view.market_data} /></>
+        {view.market_data ? <MarketReview snapshot={view.market_data} evaluation={view.rule_evaluation} />
           : <div className="today-empty"><h3>Waiting for the first completed candle</h3><p>The first H4 candle closes at {clock(view.slots[0].close_time)}. Scores and an AI review become available after that close. Previous-session candles provide indicator history only.</p></div>}
       </>}
       <section className="today-ai" aria-labelledby="today-ai-heading"><div><p className="jv-eyebrow">YOUR SESSION REVIEW</p><h3 id="today-ai-heading">Generate when you’re ready</h3>

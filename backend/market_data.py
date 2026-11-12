@@ -17,6 +17,7 @@ NY = ZoneInfo("America/New_York")
 UTC = timezone.utc
 CANDLE_DURATION = timedelta(hours=4)
 WARMUP_COUNT = 300
+CHART_HISTORY_COUNT = 60
 EMA_PERIOD = 20
 SMA_PERIOD = 190
 RSI_PERIOD = 14
@@ -192,9 +193,10 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
     )
 
     rows = []
-    # Retain two preceding trading candles for the three-candle momentum rule.
-    # They supply context only and do not contribute to the requested period score.
-    for index in range(len(warmup) - 2, len(series)):
+    # Save a bounded part of the existing warmup for chart context. Calculate it
+    # in the same pass so displayed indicators agree with the analyzed candles.
+    history_count = min(CHART_HISTORY_COUNT, len(warmup))
+    for index in range(len(warmup) - history_count, len(series)):
         candle = series[index]
         squeeze_values = {key: values[index] for key, values in squeeze.items()}
         if (ema_values[index] is None or sma_values[index] is None
@@ -269,7 +271,8 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
             "change_percent": 100 * change / session[0].open,
             "price_direction": "up" if change > 0 else "down" if change < 0 else "unchanged",
         },
-        "previous_candle": rows[1],  # Compatibility for v1/v2 rules and earlier consumers.
-        "previous_candles": rows[:2],  # Oldest to newest; P-1 then P0.
-        "candles": rows[2:],
+        "chart_context": {"purpose": "display_only", "candles": rows[:history_count]},
+        "previous_candle": rows[history_count - 1],
+        "previous_candles": rows[history_count - 2:history_count],  # P-1 then P0.
+        "candles": rows[history_count:],
     }

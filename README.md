@@ -65,6 +65,18 @@ The backend sends the full range snapshot, globally numbered candle evidence (`C
 
 Click **Save journal** to add the result to **Saved custom journals**. That library lists date ranges and their stored market returns, with 20 entries per page. Opening an entry reuses its saved evidence without contacting either provider. Editing or restoring the text requires **Save changes**. The daily calendar and custom library have independent entries and deletion actions, while both use the existing SQLite database. Switching tabs preserves current form inputs and unsaved journal edits; refreshing the page loses unsaved browser state.
 
+## Interactive market chart
+
+Daily journals, custom-range journals and Today include a three-panel chart using TradingView Lightweight Charts 5.3.0. The price panel overlays EMA20 and SMA190 on H4 candles. The other panels show RSI14 with its SMA14 smoothing and the saved LazyBear Squeeze Momentum histogram. Chart values come from the market snapshot; the browser does not recalculate indicators or strategy scores.
+
+Click or tap a candle, use the selected-candle dropdown or arrow buttons, or select a time in the strategy table. The details card shows prices, indicator readings, squeeze state and saved Python factor results. The matching strategy row is highlighted. Drag horizontally or use the zoom buttons/pinch gesture. **Session only** (or **Range only**) focuses the reviewed candles; **All history** restores the saved context. A purple band marks the analyzed period. Time labels use America/New_York, including daylight saving time. RSI guides follow the saved rule version, and missing indicator values remain gaps.
+
+New snapshots retain the last **60 completed warmup H4 candles** in an optional `chart_context` field. These are calculated in the existing indicator pass and require no additional OANDA request. They are for display only and are excluded from AI input and session/range scores. The two predecessor candles used for strategy rules remain unchanged. Saving preserves the chart history with the original evidence in SQLite; no database migration is needed. Older journals display their available saved history without fetching or recomputing it.
+
+Today refreshes the chart alongside completed-candle data while preserving the chart's visible range. Forming and upcoming candles remain pending in the session slots. Before the first completed candle, the existing waiting state remains. The chart includes no provisional OHLC prices. Opening a chart or selecting a candle makes no OpenAI calls.
+
+The chart code loads when a market review is opened. TradingView attribution and a link appear below the chart. Full candle and strategy tables remain available for keyboard access and detailed evidence.
+
 ## Local setup
 
 These commands assume macOS or Linux and that you start in the repository root. Setup has been used with Python 3.13 and Node.js 24. The installed Vite version requires Node.js 20.19+ on the 20.x line, or 22.12+.
