@@ -45,13 +45,16 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
       </button>
     </header>
 
-    <div className="jv-name-field">
+    <details className="jv-name-editor">
+      <summary>{name.trim() ? 'Rename journal' : 'Add a journal name'}</summary>
+      <div className="jv-name-field">
       <div className="jv-editor-label"><label htmlFor={nameId}>Journal name <span>(optional)</span></label><span>{name.length} / {JOURNAL_NAME_LIMIT}</span></div>
       <input id={nameId} type="text" value={name} onChange={event => onNameChange(event.target.value)}
         disabled={busy} maxLength={JOURNAL_NAME_LIMIT} aria-describedby={`${nameId}-help`}
         placeholder="e.g. EUR/USD — trend and momentum review" />
       <p id={`${nameId}-help`}>{savedJournal ? 'Rename this journal here, then choose Save changes. Clear the name to use its journal number.' : 'Add a name before saving, or leave it blank to use the journal number.'}</p>
-    </div>
+      </div>
+    </details>
 
     {partial && <p className="jv-session-window">Review data through: {cutoffText} · {preview.market_data.candles.length} of 6 candles · Remaining candles were pending. This snapshot does not update with the live page.</p>}
     {showEvidence && <MarketReview snapshot={preview.market_data} evaluation={preview.rule_evaluation} />}

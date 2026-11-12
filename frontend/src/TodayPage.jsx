@@ -96,24 +96,35 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
 
   return <section id="today-panel" role="tabpanel" aria-labelledby="today-tab" hidden={!active} tabIndex={0} className="today-page">
     {active && <>
-      <header className="today-heading"><div><p className="jv-eyebrow">CURRENT TRADING SESSION</p><h2>Today, as it unfolds</h2>
-        <p>EUR/USD · 4-hour candles · Four-factor strategy v7</p></div>
+      <header className="today-heading"><div><h2>Today</h2>
+        <p>EUR/USD · H4 · Four-factor v7</p></div>
         <button className="jv-button" type="button" onClick={() => setReload(value => value + 1)} disabled={fetching || busy}>{fetching ? 'Refreshing…' : 'Refresh data'}</button>
       </header>
-      <p className="today-refresh" role="status">Checks for completed candles every minute while this page is visible. The backend must be running. AI summaries refresh only when you request them.</p>
       {dataError && <p role="alert" className="jv-error">{dataError} {view && 'Showing the last successful snapshot; it may be outdated.'}</p>}
       {!view && !dataError && <p role="status">Loading today’s session…</p>}
       {view && <>
-        <div className="today-window"><div><span className="jv-eyebrow">SESSION ENDING</span><h3>{formatDay(view.journal_date)}</h3>
-          <p>{stamp(view.session.start)} → {stamp(view.session.end)}</p></div>
-          <div className="today-coverage"><strong>{view.session.candle_count}<small> / 6</small></strong><span>candles completed</span></div>
+        <div className="today-window">
+          <h3>{formatDay(view.journal_date)}</h3>
+          <span className="today-coverage"><strong>{view.session.candle_count} / 6</strong> closed</span>
         </div>
-        <p className="today-refresh">Last checked {stamp(view.as_of)}{!fresh && ' · Refresh needed'} · Session dates use the 5 PM New York close. After 5 PM, the next trading session begins.</p>
+        {!fresh && <p className="today-notice" role="status">Refresh needed · Last checked {stamp(view.as_of)}.</p>}
         {view.market_state === 'weekend_closed' && <p className="today-notice">Weekend closure · Showing the latest Friday session. The next scheduled opening is {stamp(view.next_open)}.</p>}
-        <ol className="today-slots" aria-label="Six session candles">{view.slots.map(slot => <li key={slot.candle_id} className={`today-slot today-${slot.status}`}>
-          <span>{slot.candle_id}</span><strong>{clock(slot.open_time)} – {clock(slot.close_time)}</strong>
-          <small>{slot.status === 'completed' ? 'Completed' : slot.status === 'forming' ? 'Forming · score pending' : 'Upcoming · pending'}</small>
+        <ol className="today-slots" aria-label="Six session candles">{view.slots.map(slot => <li key={slot.candle_id} className={`today-slot today-${slot.status}`}
+          aria-label={`${slot.candle_id} · ${clock(slot.open_time)} – ${clock(slot.close_time)} · ${slot.status === 'completed' ? 'Completed' : slot.status === 'forming' ? 'Forming, score pending' : 'Upcoming, pending'}`}>
+          <span aria-hidden="true">{slot.status === 'completed' ? '✓' : slot.status === 'forming' ? '◐' : '·'}</span><strong aria-hidden="true">{slot.candle_id}</strong>
         </li>)}</ol>
+        <details className="today-details">
+          <summary>Session details <span>Updated {clock(view.as_of)} · Every minute</span></summary>
+          <div>
+            <p>{stamp(view.session.start)} → {stamp(view.session.end)}</p>
+            <p>New York session · 5 PM to 5 PM. ✓ Completed · ◐ Forming · · Upcoming. Pending candles have no score.</p>
+            <ol className="today-slot-times">{view.slots.map(slot => <li key={slot.candle_id}>
+              <strong>{slot.candle_id}</strong><span>{clock(slot.open_time)} – {clock(slot.close_time)}</span>
+              <span>{slot.status === 'completed' ? 'Completed' : slot.status === 'forming' ? 'Forming · score pending' : 'Upcoming · pending'}</span>
+            </li>)}</ol>
+            <p>Checks for completed candles every minute while this page is visible. The backend must be running. AI summaries refresh only when you request them.</p>
+          </div>
+        </details>
         {view.market_data ? <MarketReview snapshot={view.market_data} evaluation={view.rule_evaluation} />
           : <div className="today-empty"><h3>Waiting for the first completed candle</h3><p>The first H4 candle closes at {clock(view.slots[0].close_time)}. Scores and an AI review become available after that close. Previous-session candles provide indicator history only.</p></div>}
       </>}
