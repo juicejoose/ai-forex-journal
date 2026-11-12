@@ -147,7 +147,9 @@ def generate_journal(entry: JournalInput):
 
 
 def _generate_draft(entry_data, market_data, evidence_catalog, evaluation, *, custom_range=False):
-    ai_input = {"entry": entry_data, "market_data": market_data, "evidence_catalog": evidence_catalog}
+    # Chart-only history stays in the saved snapshot, outside AI review input.
+    analysis_data = {key: value for key, value in market_data.items() if key != "chart_context"}
+    ai_input = {"entry": entry_data, "market_data": analysis_data, "evidence_catalog": evidence_catalog}
     if evaluation is not None:
         ai_input["rule_evaluation"] = evaluation
         ai_input["summary_context"] = build_summary_context(market_data, evaluation)

@@ -248,6 +248,8 @@ class RangeJournalTests(unittest.TestCase):
         draft = self.generate()
         sent = json.loads(self.ai.call_args.kwargs["input"])
         self.assertEqual(len(sent["market_data"]["candles"]), 30)
+        self.assertNotIn("chart_context", sent["market_data"])
+        self.assertEqual(len(draft["market_data"]["chart_context"]["candles"]), 60)
         self.assertEqual(len(sent["evidence_catalog"]), 30)
         self.assertEqual(sent["rule_evaluation"], draft["rule_evaluation"])
         self.assertEqual(sent["summary_context"]["method"], "range_average")

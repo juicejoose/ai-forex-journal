@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import MarketEvidence from './MarketEvidence.jsx'
-import StrategyScores from './StrategyScores.jsx'
+import MarketReview from './MarketReview.jsx'
 import { formatDay, isDateKey } from './journalCalendar.js'
 import { isShortSummary, journalSections } from './journalPresentation.js'
 import './JournalView.css'
@@ -55,8 +54,7 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
     </div>
 
     {partial && <p className="jv-session-window">Review data through: {cutoffText} · {preview.market_data.candles.length} of 6 candles · Remaining candles were pending. This snapshot does not update with the live page.</p>}
-    {showEvidence && <><MarketEvidence snapshot={preview.market_data} />
-    <StrategyScores evaluation={preview.rule_evaluation} snapshot={preview.market_data} /></>}
+    {showEvidence && <MarketReview snapshot={preview.market_data} evaluation={preview.rule_evaluation} />}
 
     <details className="jv-context">
       <summary><span>Strategy & observations</span><span className="jv-summary-hint">Your inputs for this {customRange ? 'range' : 'session'}</span></summary>
