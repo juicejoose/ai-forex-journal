@@ -5,7 +5,7 @@ import { factorDescription } from './strategyDescriptions.js'
 import { formatChange, changeTone } from './journalCalendar.js'
 import './MarketChart.css'
 
-const colors = { up: '#249c79', down: '#d65e70', ema: '#d38a24', sma: '#598cec', ma: '#ab78e5', raw: '#84949d' }
+const colors = { up: '#249c79', down: '#d65e70', ema: '#598cec', sma: '#249c79', ma: '#ab78e5', raw: '#84949d' }
 const momentumColors = { lime: '#2bbf91', green: '#217e68', red: '#e36578', maroon: '#9e4a63' }
 const directions = { bullish: 'Bullish lean', bearish: 'Bearish lean', mixed: 'Mixed', neutral: 'Neutral', insufficient_data: 'Insufficient data' }
 const points = value => Number.isFinite(value) ? String(value) : '—'
@@ -200,7 +200,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
   }
   if (!model.rows.length) return null
   return <section className="market-chart" aria-labelledby={`${id}-heading`}>
-    <header className="mc-header"><div><p className="jv-eyebrow">EXPLORE THE EVIDENCE</p><h3 id={`${id}-heading`}>Market chart</h3>
+    <header className="mc-header"><div><h3 id={`${id}-heading`}>Market chart</h3>
       <p>EUR/USD · H4 · New York time</p></div>
       <div className="mc-toolbar" role="group" aria-label="Chart view">
         <button type="button" onClick={focusPeriod}>{period} only</button>

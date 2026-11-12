@@ -3,14 +3,15 @@
 .mc-header h3 { color: var(--text-h); margin: .2rem 0; font-size: 1.15rem; }
 .mc-header p:last-child, .mc-help { font-size: .7rem; line-height: 1.6; }
 .mc-toolbar { display: flex; gap: .35rem; flex-wrap: wrap; }
+.mc-toolbar button { white-space: nowrap; }
 .market-chart button, .mc-picker select { min-height: 44px; border: 1px solid var(--border); border-radius: 7px; color: var(--text-h); background: var(--bg); padding: .45rem .65rem; font: inherit; font-size: .7rem; cursor: pointer; }
 .market-chart button:disabled { opacity: .4; cursor: default; }
 .market-chart :is(button, select, input, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mc-legend { display: flex; gap: .5rem 1rem; flex-wrap: wrap; margin-top: 1rem; font-size: .65rem; }
+.mc-legend { display: flex; gap: .5rem 1rem; flex-wrap: wrap; margin-top: .65rem; font-size: .65rem; }
 .mc-legend span { display: inline-flex; align-items: center; gap: .35rem; }
 .mc-legend span::before { content: ''; width: 14px; height: 3px; background: var(--series-color); border-radius: 2px; }
 .mc-legend .mc-period-key::before { height: 10px; background: rgba(171,120,229,.2); border: 1px solid rgba(171,120,229,.5); }
-.mc-readout { min-height: 2.6rem; font-size: .65rem; line-height: 1.7; padding: .75rem 0 .4rem; font-variant-numeric: tabular-nums; }
+.mc-readout { min-height: 2rem; font-size: .65rem; line-height: 1.7; padding: .4rem 0; font-variant-numeric: tabular-nums; }
 .mc-readout b { color: var(--text-h); font-weight: 550; }
 .mc-plot-wrap { position: relative; isolation: isolate; }
 .mc-plot { height: 560px; width: 100%; }
@@ -52,6 +53,6 @@
   .mc-values { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .mc-factors { grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8rem; }
   .mc-selection { padding: .65rem; }
-  .mc-readout { min-height: 4rem; }
+  .mc-readout { min-height: 3rem; }
   .mc-picker select { font-size: 16px; }
 }
