@@ -9,6 +9,14 @@ const colors = { up: '#249c79', down: '#d65e70', ema: '#598cec', sma: '#249c79',
 const momentumColors = { lime: '#2bbf91', green: '#217e68', red: '#e36578', maroon: '#9e4a63' }
 const directions = { bullish: 'Bullish lean', bearish: 'Bearish lean', mixed: 'Mixed', neutral: 'Neutral', insufficient_data: 'Insufficient data' }
 const points = value => Number.isFinite(value) ? String(value) : '—'
+const rightOffset = 2
+const zoomOutStep = 1.4
+
+function zoomedRange(range, multiplier) {
+  const middle = (range.from + range.to) / 2
+  const half = Math.max(3, (range.to - range.from) * multiplier / 2)
+  return { from: middle - half, to: middle + half }
+}
 
 function SelectedCandle({ row, hasEvaluation }) {
   if (!row) return null
@@ -50,7 +58,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
   const shadeRef = useRef(null)
   const apiRef = useRef(null)
   const selectRef = useRef(onSelect)
-  const [rawRsi, setRawRsi] = useState(false)
+  const [rawRsi, setRawRsi] = useState(true)
   const [hovered, setHovered] = useState(null)
   const model = useMemo(() => buildChartData(snapshot, evaluation), [snapshot, evaluation])
   const showRaw = rawRsi || !model.hasRsiMa || model.rsiSource === 'RSI14'
@@ -79,7 +87,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false, minimumWidth: 76 },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, tickMarkFormatter: chartTick,
-        rightOffset: 2, shiftVisibleRangeOnNewBar: false },
+        rightOffset, shiftVisibleRangeOnNewBar: false },
       localization: { locale: 'en-US', timeFormatter: chartStamp },
       handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
@@ -91,11 +99,10 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     const ema = chart.addSeries(LineSeries, { ...lineOptions, color: colors.ema, lineWidth: 2 })
     const sma = chart.addSeries(LineSeries, { ...lineOptions, color: colors.sma, lineWidth: 2 })
     const rsiMa = chart.addSeries(LineSeries, { ...lineOptions, color: colors.ma, lineWidth: 2,
-      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
-      autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) }, 1)
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 } }, 1)
     const rsi = chart.addSeries(LineSeries, { ...lineOptions, color: colors.raw, lineWidth: 1,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 } }, 1)
-    rsiMa.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 } })
+    rsiMa.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.05, bottom: 0.05 } })
     const momentum = chart.addSeries(HistogramSeries, { ...lineOptions, base: 0 }, 2)
     momentum.createPriceLine({ price: 0, color: '#87919d', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false })
     chart.panes()[0].setStretchFactor(2.3)
@@ -164,7 +171,9 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
       lineStyle: guide.proximity ? LineStyle.Dotted : LineStyle.Dashed, axisLabelVisible: true,
     }) }))
     if (!api.initialized) {
-      api.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, model.startIndex - 18) - 0.5, to: rows.length + 1 })
+      // Match All history followed by one Zoom out, without waiting for fitContent's deferred redraw.
+      const fullHistory = { from: 0, to: rows.length - 1 + rightOffset }
+      api.chart.timeScale().setVisibleLogicalRange(zoomedRange(fullHistory, zoomOutStep))
       api.initialized = true
     } else if (range) api.chart.timeScale().setVisibleLogicalRange(range)
     api.shade()
@@ -194,9 +203,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     const scale = apiRef.current?.chart.timeScale()
     const range = scale?.getVisibleLogicalRange()
     if (!range) return
-    const middle = (range.from + range.to) / 2
-    const half = Math.max(3, (range.to - range.from) * multiplier / 2)
-    scale.setVisibleLogicalRange({ from: middle - half, to: middle + half })
+    scale.setVisibleLogicalRange(zoomedRange(range, multiplier))
   }
   if (!model.rows.length) return null
   return <section className="market-chart" aria-labelledby={`${id}-heading`}>
@@ -206,7 +213,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
         <button type="button" onClick={focusPeriod}>{period} only</button>
         <button type="button" onClick={() => apiRef.current?.chart.timeScale().fitContent()}>All history</button>
         <button type="button" aria-label="Zoom in" onClick={() => zoom(0.7)}>+</button>
-        <button type="button" aria-label="Zoom out" onClick={() => zoom(1.4)}>−</button>
+        <button type="button" aria-label="Zoom out" onClick={() => zoom(zoomOutStep)}>−</button>
       </div>
     </header>
     <div className="mc-legend"><span style={{ '--series-color': colors.ema }}>EMA20</span><span style={{ '--series-color': colors.sma }}>SMA190</span>

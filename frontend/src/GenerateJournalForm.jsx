@@ -52,7 +52,7 @@ export default function GenerateJournalForm({ pair, journalDate, timeframe, stra
             <p id="strategy-help" className="gf-help gf-intro">{ruleSetId ? 'The saved rule definitions below are fixed for this version. Add session-specific context in Your observations.' : 'Describe your bullish and bearish conditions, including any thresholds or timing that matter.'}</p>
             {loadedProfile && <div className="gf-profile" role="status" id="loaded-profile-help">
               <p><span>Loaded profile</span><strong>{loadedProfile.name}</strong>{customized && <span className="gf-customized">Customized for this journal</span>}</p>
-              <p>{ruleSetId ? 'This profile uses the fixed four-factor scoring rules.' : 'Changes here apply to this journal. Save profile edits in the Strategy profiles tab.'}</p>
+              <p>{ruleSetId ? 'This profile uses the fixed four-factor scoring rules.' : 'Changes here apply to this journal. Save profile edits in the Strategy profiles page.'}</p>
             </div>}
             <textarea id="strategy" rows={8} value={strategy} onChange={(event) => onStrategyChange(event.target.value)} readOnly={Boolean(ruleSetId)} disabled={busy} maxLength={10000} aria-required="true" aria-describedby={loadedProfile ? 'strategy-help loaded-profile-help strategy-count' : 'strategy-help strategy-count'} placeholder={'Bullish factors:\nDescribe the conditions you want checked.\n\nBearish factors:\nDescribe the conditions you want checked.'} />
             <div className="gf-field-footer"><span>{ruleSetId ? `Fixed rules · Version ${ruleDefinition?.version ?? '…'}` : 'Required'}</span><span id="strategy-count">{strategy.length.toLocaleString()} / 10,000 characters</span></div>

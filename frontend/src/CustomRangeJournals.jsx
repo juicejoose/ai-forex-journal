@@ -134,13 +134,13 @@ export default function CustomRangeJournals({ activeTab, onBusyChange, onDirtyTa
     } : undefined} />
 
   return <>
-    <section id="custom-panel" role="tabpanel" aria-labelledby="custom-tab" hidden={activeTab !== 'custom'} tabIndex={0} className="cr-panel">
+    <section id="custom-panel" aria-label="Custom range journal" hidden={activeTab !== 'custom'} tabIndex={0} className="cr-panel">
       <CustomRangeForm start={start} end={end} notes={notes} options={options} optionsError={optionsError}
         onRetry={() => setRetry(v => v + 1)} onStart={setStart} onEnd={setEnd} onNotes={setNotes}
         onSubmit={generate} busy={busy} loading={action === 'generate'} error={error} />
       {editorTab === 'custom' && editor}
     </section>
-    <section id="custom-saved-panel" role="tabpanel" aria-labelledby="custom-saved-tab" hidden={activeTab !== 'custom-saved'} tabIndex={0} className="cr-panel">
+    <section id="custom-saved-panel" aria-label="Saved custom journals" hidden={activeTab !== 'custom-saved'} tabIndex={0} className="cr-panel">
       {message && <p role="status">{message}</p>}{historyError && <p className="jv-error" role="alert">{historyError}</p>}
       {action === 'open' && <p role="status">Opening custom journal…</p>}
       <CustomRangeHistory active={activeTab === 'custom-saved'} refreshVersion={historyVersion} onOpen={open} onDelete={requestDelete} busy={busy} />

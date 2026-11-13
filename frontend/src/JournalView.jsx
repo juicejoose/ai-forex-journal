@@ -104,7 +104,7 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
       {error && <p role="alert" className="jv-error">{error}</p>}
     </section>
     <footer className="jv-bottom">
-      <p>Switching tabs keeps your journal here. Unsaved changes are lost if you refresh the page.</p>
+      <p>Switching pages keeps your journal here. Unsaved changes are lost if you refresh the page.</p>
       {savedJournal && onDelete && <button type="button" className="jv-delete" onClick={onDelete} disabled={busy}>{deleting ? 'Deleting…' : 'Delete journal'}</button>}
     </footer>
   </article>

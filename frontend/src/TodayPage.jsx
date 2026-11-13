@@ -94,7 +94,7 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
     } catch (err) { setSaveError(err.message) } finally { pending('') }
   }
 
-  return <section id="today-panel" role="tabpanel" aria-labelledby="today-tab" hidden={!active} tabIndex={0} className="today-page">
+  return <section id="today-panel" aria-label="Today" hidden={!active} tabIndex={0} className="today-page">
     {active && <>
       <header className="today-heading"><div><h2>Today</h2>
         <p>EUR/USD · H4 · Four-factor v7</p></div>

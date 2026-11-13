@@ -1,0 +1,43 @@
+.app-shell { --nav-surface: #faf9fc; display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100svh; text-align: left; }
+.app-content { min-width: 0; }
+.app-sidebar { position: sticky; top: 0; align-self: start; height: 100dvh; box-sizing: border-box; overflow-y: auto; padding: 1.5rem 0.7rem; border-right: 1px solid var(--border); background: var(--nav-surface); }
+.app-sidebar-heading { color: var(--text-h); font-size: 0.86rem; font-weight: 650; letter-spacing: -0.02em; padding: 0 0.7rem 1.4rem; }
+.app-nav-group + .app-nav-group { margin-top: 1.25rem; }
+.app-nav-group-label { font-size: 0.57rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.1em; padding: 0 0.7rem; margin-bottom: 0.45rem; }
+.app-nav-link { display: flex; align-items: center; gap: 0.65rem; width: 100%; min-height: 46px; box-sizing: border-box; border: 1px solid transparent; border-radius: 8px; padding: 0.6rem 0.65rem; margin-top: 0.15rem; font: 500 0.73rem/1.45 var(--sans); text-align: left; background: transparent; color: var(--text); cursor: pointer; }
+.app-nav-link > svg { width: 19px; height: 19px; flex-shrink: 0; }
+.app-nav-label { min-width: 0; }
+.app-nav-link:hover:not(:disabled) { background: var(--bg); color: var(--text-h); }
+.app-nav-link[aria-current="page"] { background: var(--accent-bg); border-color: var(--accent-border); color: var(--text-h); font-weight: 650; }
+.app-nav-link[aria-current="page"] > svg { color: var(--accent); }
+.app-nav-link:disabled { opacity: 0.55; cursor: wait; }
+.app-nav-unsaved { display: flex; gap: 0.35rem; align-items: center; margin-top: 0.15rem; font-size: 0.58rem; font-weight: 500; color: var(--text); }
+.app-nav-unsaved::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.app-nav-busy { padding: 1rem 0.7rem; font-size: 0.65rem; line-height: 1.6; }
+.app-navigation button:focus-visible, .app-menu-toggle:focus-visible, .app-menu-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-mobile-bar { display: none; }
+.app-menu:not([open]) { display: none; }
+.app-menu { box-sizing: border-box; width: min(300px, calc(100% - 40px)); max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0.65rem 0.75rem 1.5rem; border: 0; border-right: 1px solid var(--border); background: var(--bg); color: var(--text); text-align: left; overflow-y: auto; overscroll-behavior: contain; }
+.app-menu::backdrop { background: rgb(8 6 13 / 45%); }
+.app-menu-heading { display: flex; align-items: center; justify-content: space-between; color: var(--text-h); padding: 0 0.65rem 0.9rem; font-size: 0.95rem; font-weight: 650; }
+.app-menu-close { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 6px; background: transparent; color: var(--text-h); cursor: pointer; }
+.app-menu-close:hover { background: var(--accent-bg); }
+.app-menu-close svg { width: 21px; height: 21px; }
+.app-menu .app-nav-link { min-height: 48px; font-size: 0.85rem; }
+.app-menu .app-nav-group-label, .app-menu .app-nav-unsaved { font-size: 0.65rem; }
+.app-skip-link { position: fixed; top: 0.5rem; left: 0.5rem; z-index: 100; padding: 0.6rem 1rem; background: var(--bg); color: var(--text-h); border: 2px solid var(--accent); border-radius: 6px; font-size: 0.8rem; transform: translateY(-150%); }
+.app-skip-link:focus { transform: translateY(0); }
+@media (max-width: 1100px) {
+  .app-shell { --nav-surface: #faf9fc; display: block; }
+  .app-sidebar { display: none; }
+  .app-mobile-bar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 1rem; justify-content: space-between; min-height: 52px; box-sizing: border-box; padding: 0.2rem 1rem; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .app-menu-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; flex-shrink: 0; min-height: 44px; padding: 0.4rem 0.5rem; margin-left: -0.5rem; border: 0; border-radius: 6px; font: 550 0.8rem var(--sans); background: transparent; color: var(--text-h); cursor: pointer; }
+  .app-menu-toggle:hover { background: var(--accent-bg); }
+  .app-menu-toggle svg { width: 21px; height: 21px; }
+  .app-mobile-title { color: var(--text); font-size: 0.75rem; line-height: 1.4; text-align: right; }
+  .app-content section[id$="-panel"], .app-content [id$="heading"] { scroll-margin-top: 70px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-shell { --nav-surface: #1f2028; }
+}
