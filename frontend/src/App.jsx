@@ -1,5 +1,6 @@
 import { API } from './api.js'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import AppNavigation from './AppNavigation.jsx'
 import JournalHistory from './JournalHistory.jsx'
 import GenerateJournalForm from './GenerateJournalForm.jsx'
 import JournalView from './JournalView.jsx'
@@ -25,7 +26,6 @@ function App() {
   const [rangeBusy, setRangeBusy] = useState(false)
   const [rangeDirtyTab, setRangeDirtyTab] = useState(null)
   const [activeTab, setActiveTab] = useState('generate')
-  const tabListRef = useRef(null)
   const [editorTab, setEditorTab] = useState('generate')
   const pair = 'EURUSD'
   const [notes, setNotes] = useState('')
@@ -82,35 +82,9 @@ function App() {
     return () => controller.abort()
   }, [ruleReload])
 
-  useEffect(() => {
-    // A page can also be selected from the profile form. Reveal its tab
-    // horizontally while leaving the user's vertical reading position alone.
-    const list = tabListRef.current
-    const selected = list.querySelector('[aria-selected="true"]')
-    const bounds = list.getBoundingClientRect()
-    const tab = selected.getBoundingClientRect()
-    if (tab.left < bounds.left) list.scrollLeft += tab.left - bounds.left
-    else if (tab.right > bounds.right) list.scrollLeft += tab.right - bounds.right
-  }, [activeTab])
-
   function retryRuleSet() {
     setRuleError('')
     setRuleReload((value) => value + 1)
-  }
-
-  function handleTabKeyDown(event, index) {
-    if (busy) return
-    const nextIndex = {
-      ArrowRight: (index + 1) % tabs.length,
-      ArrowLeft: (index - 1 + tabs.length) % tabs.length,
-      Home: 0,
-      End: tabs.length - 1,
-    }[event.key]
-    if (nextIndex === undefined) return
-    event.preventDefault()
-    const nextTab = tabs[nextIndex].id
-    setActiveTab(nextTab)
-    document.getElementById(`${nextTab}-tab`)?.focus()
   }
 
   function handleUseProfile(profile) {
@@ -294,7 +268,7 @@ function App() {
     if (
       preview &&
       !isSaved &&
-      !window.confirm(`Discard the unsaved journal in the ${editorTab === 'generate' ? 'Generate journal' : 'Saved journals'} tab and open this entry?`)
+      !window.confirm(`Discard the unsaved journal in the ${editorTab === 'generate' ? 'Generate journal' : 'Saved journals'} page and open this entry?`)
     ) {
       return
     }
@@ -426,129 +400,117 @@ function App() {
   )
 
   return (
-    <main>
-      <div
-        role="tablist"
-        aria-label="Journal pages"
-        className="page-tabs"
-        ref={tabListRef}
-      >
-        {tabs.map((tab, index) => (
-          <button
-            key={tab.id}
-            id={`${tab.id}-tab`}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            aria-controls={`${tab.id}-panel`}
-            tabIndex={activeTab === tab.id ? 0 : -1}
-            onClick={() => setActiveTab(tab.id)}
-            onKeyDown={(event) => handleTabKeyDown(event, index)}
-            disabled={busy}
-          >
-            {tab.label}
-            {preview && editorTab === tab.id && !isSaved && ' · Unsaved'}
-            {tab.id === 'profiles' && profileDirty && ' · Unsaved'}
-            {tab.id === rangeDirtyTab && ' · Unsaved'}
-            {tab.id === 'today' && todayDirty && ' · Unsaved'}
-          </button>
-        ))}
-      </div>
+    <div className="app-shell">
+      <a className="app-skip-link" href="#page-content">Skip to content</a>
+      <AppNavigation
+        pages={tabs}
+        activePage={activeTab}
+        busy={busy}
+        unsavedPages={tabs.filter(tab =>
+          (preview && editorTab === tab.id && !isSaved) ||
+          (tab.id === 'profiles' && profileDirty) ||
+          tab.id === rangeDirtyTab ||
+          (tab.id === 'today' && todayDirty)
+        ).map(tab => tab.id)}
+        onSelect={(page) => {
+          if (busy) return
+          setActiveTab(page)
+          requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+        }}
+      />
+      <main id="page-content" className="app-content" tabIndex={-1}>
+        {deleteTarget && (
+          <DeleteJournalDialog
+            journal={deleteTarget}
+            hasUnsavedEdits={savedJournal?.id === deleteTarget.id && !isSaved}
+            pending={deletingId !== null}
+            error={deleteError}
+            onCancel={() => setDeleteTarget(null)}
+            onConfirm={handleDeleteJournal}
+          />
+        )}
+        {deleteMessage && <p role="status">{deleteMessage}</p>}
 
-      {deleteTarget && (
-        <DeleteJournalDialog
-          journal={deleteTarget}
-          hasUnsavedEdits={savedJournal?.id === deleteTarget.id && !isSaved}
-          pending={deletingId !== null}
-          error={deleteError}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={handleDeleteJournal}
-        />
-      )}
-      {deleteMessage && <p role="status">{deleteMessage}</p>}
+        <section
+          id="generate-panel"
+          aria-label="Generate journal"
+          hidden={activeTab !== 'generate'}
+          tabIndex={0}
+          style={{ padding: '1rem' }}
+        >
+          <GenerateJournalForm
+            pair={pair}
+            journalDate={journalDate}
+            timeframe={timeframe}
+            strategy={ruleSetId ? ruleDefinition?.rules ?? '' : strategy}
+            ruleSetId={ruleSetId}
+            ruleDefinition={ruleDefinition}
+            ruleDefinitions={ruleDefinitions}
+            ruleError={ruleError}
+            onRetryRules={retryRuleSet}
+            onRuleSetChange={(value) => { setRuleSetId(value); setLoadedProfile(null); setError('') }}
+            notes={notes}
+            loadedProfile={loadedProfile}
+            busy={busy}
+            loading={loading}
+            error={error}
+            onDateChange={setJournalDate}
+            onStrategyChange={setStrategy}
+            onNotesChange={setNotes}
+            onChooseProfile={() => {
+              setActiveTab('profiles')
+              requestAnimationFrame(() => document.getElementById('profiles-panel')?.focus())
+            }}
+            onSubmit={handleSubmit}
+          />
 
-      <section
-        id="generate-panel"
-        role="tabpanel"
-        aria-labelledby="generate-tab"
-        hidden={activeTab !== 'generate'}
-        tabIndex={0}
-        style={{ padding: '1rem' }}
-      >
-        <GenerateJournalForm
-          pair={pair}
-          journalDate={journalDate}
-          timeframe={timeframe}
-          strategy={ruleSetId ? ruleDefinition?.rules ?? '' : strategy}
-          ruleSetId={ruleSetId}
-          ruleDefinition={ruleDefinition}
-          ruleDefinitions={ruleDefinitions}
-          ruleError={ruleError}
-          onRetryRules={retryRuleSet}
-          onRuleSetChange={(value) => { setRuleSetId(value); setLoadedProfile(null); setError('') }}
-          notes={notes}
-          loadedProfile={loadedProfile}
-          busy={busy}
-          loading={loading}
-          error={error}
-          onDateChange={setJournalDate}
-          onStrategyChange={setStrategy}
-          onNotesChange={setNotes}
-          onChooseProfile={() => {
-            setActiveTab('profiles')
-            requestAnimationFrame(() => document.getElementById('profiles-tab')?.focus())
-          }}
-          onSubmit={handleSubmit}
-        />
+          {editorTab === 'generate' && journalEditor}
+        </section>
 
-        {editorTab === 'generate' && journalEditor}
-      </section>
+        <section
+          id="saved-panel"
+          aria-label="Saved journals"
+          hidden={activeTab !== 'saved'}
+          tabIndex={0}
+          style={{ padding: '1rem' }}
+        >
+          {historyError && <p role="alert">{historyError}</p>}
+          {opening && <p role="status">Opening journal...</p>}
 
-      <section
-        id="saved-panel"
-        role="tabpanel"
-        aria-labelledby="saved-tab"
-        hidden={activeTab !== 'saved'}
-        tabIndex={0}
-        style={{ padding: '1rem' }}
-      >
-        {historyError && <p role="alert">{historyError}</p>}
-        {opening && <p role="status">Opening journal...</p>}
+          <JournalHistory
+            refreshVersion={historyVersion}
+            onOpen={handleOpenJournal}
+            onDelete={requestDeleteJournal}
+            deletingId={deletingId}
+            busy={busy}
+          />
+          {editorTab === 'saved' && journalEditor}
+        </section>
 
-        <JournalHistory
-          refreshVersion={historyVersion}
-          onOpen={handleOpenJournal}
-          onDelete={requestDeleteJournal}
-          deletingId={deletingId}
-          busy={busy}
-        />
-        {editorTab === 'saved' && journalEditor}
-      </section>
-
-      <section
-        id="profiles-panel"
-        role="tabpanel"
-        aria-labelledby="profiles-tab"
-        hidden={activeTab !== 'profiles'}
-        tabIndex={0}
-        style={{ padding: '1rem' }}
-      >
-        <StrategyProfiles
-          ruleDefinitions={ruleDefinitions}
-          ruleError={ruleError}
-          onRetryRules={retryRuleSet}
-          busy={busy}
-          onUse={handleUseProfile}
-          onDeleted={handleProfileDeleted}
-          onBusyChange={setProfileBusy}
-          onDirtyChange={setProfileDirty}
-        />
-      </section>
-      <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
-        onSaved={() => setHistoryVersion(value => value + 1)} />
-      <CustomRangeJournals activeTab={activeTab}
-        onBusyChange={setRangeBusy} onDirtyTabChange={setRangeDirtyTab} busy={busy} />
-    </main>
+        <section
+          id="profiles-panel"
+          aria-label="Strategy profiles"
+          hidden={activeTab !== 'profiles'}
+          tabIndex={0}
+          style={{ padding: '1rem' }}
+        >
+          <StrategyProfiles
+            ruleDefinitions={ruleDefinitions}
+            ruleError={ruleError}
+            onRetryRules={retryRuleSet}
+            busy={busy}
+            onUse={handleUseProfile}
+            onDeleted={handleProfileDeleted}
+            onBusyChange={setProfileBusy}
+            onDirtyChange={setProfileDirty}
+          />
+        </section>
+        <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
+          onSaved={() => setHistoryVersion(value => value + 1)} />
+        <CustomRangeJournals activeTab={activeTab}
+          onBusyChange={setRangeBusy} onDirtyTabChange={setRangeDirtyTab} busy={busy} />
+      </main>
+    </div>
   )
 }
 

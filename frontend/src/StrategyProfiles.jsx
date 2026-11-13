@@ -306,7 +306,7 @@ export default function StrategyProfiles({ busy, onUse, onDeleted, onBusyChange,
           <aside className="sp-reuse-note" aria-labelledby="profile-reuse-heading">
             <h4 id="profile-reuse-heading">From profile to journal</h4>
             <p><strong>Use in journal</strong> copies the profile’s rules and evaluation method into the generation form. Written rules can be customized for a session; scored rules stay fixed for their version.</p>
-            <p>Switching tabs keeps your edits here. Updating a profile leaves past journals unchanged.</p>
+            <p>Switching pages keeps your edits here. Updating a profile leaves past journals unchanged.</p>
           </aside>
         </section>
       </div>
