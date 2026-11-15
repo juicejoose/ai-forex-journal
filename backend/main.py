@@ -31,6 +31,8 @@ from date_range import (MAX_RANGE_DAYS, get_range_market_data, build_range_evide
 from range_database import (init_range_db, store_range_draft, save_range_journal,
                             fetch_range_journal, fetch_range_journals, update_range_journal, delete_range_journal)
 from today import get_today_view, load_today_snapshot
+from setup_database import init_setup_db
+from setup_api import setup_router
 
 load_dotenv(Path(__file__).with_name(".env"))
 
@@ -41,10 +43,12 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     init_db()
     init_range_db()
+    init_setup_db()
     yield
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(setup_router(lambda: client))
 
 app.add_middleware(
     CORSMiddleware,

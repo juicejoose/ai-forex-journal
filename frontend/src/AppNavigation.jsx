@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './AppNavigation.css'
 
 const icons = {
+  setup: <><path d="M4 20V4m0 16h16M7 14l4-5 4 3 5-8" /><circle cx="15" cy="12" r="2" /></>,
   today: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18m-13 5h3" /></>,
   generate: <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 15h8m-4-4v8" /></>,
   saved: <><path d="M5 4h14v17l-7-4-7 4zM9 8h6" /></>,
@@ -10,6 +11,7 @@ const icons = {
   profiles: <><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="9" cy="6" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="9" cy="18" r="2" /></>,
 }
 const groups = [
+  { label: 'Trading copilot', ids: ['setup'] },
   { label: 'Daily journals', ids: ['today', 'generate', 'saved'] },
   { label: 'Date ranges', ids: ['custom', 'custom-saved'] },
   { label: 'Strategies', ids: ['profiles'] },

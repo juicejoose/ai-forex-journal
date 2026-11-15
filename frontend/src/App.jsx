@@ -8,10 +8,12 @@ import StrategyProfiles from './StrategyProfiles.jsx'
 import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 import CustomRangeJournals from './CustomRangeJournals.jsx'
 import TodayPage from './TodayPage.jsx'
+import SetupEvaluator from './SetupEvaluator.jsx'
 import { journalEditsSaved } from './journalNames.js'
 import { CURRENT_RULE_SET_ID, isRetiredRuleSet } from './strategyChoices.js'
 
 const tabs = [
+  { id: 'setup', label: 'Evaluate setup' },
   { id: 'today', label: 'Today' },
   { id: 'generate', label: 'Generate journal' },
   { id: 'saved', label: 'Saved journals' },
@@ -21,6 +23,8 @@ const tabs = [
 ]
 
 function App() {
+  const [setupBusy, setSetupBusy] = useState(false)
+  const [setupDirty, setSetupDirty] = useState(false)
   const [todayBusy, setTodayBusy] = useState(false)
   const [todayDirty, setTodayDirty] = useState(false)
   const [rangeBusy, setRangeBusy] = useState(false)
@@ -57,7 +61,7 @@ function App() {
   const [deleteMessage, setDeleteMessage] = useState('')
 
   const ruleDefinition = ruleDefinitions.find((item) => item.id === ruleSetId)
-  const busy = todayBusy || rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
+  const busy = setupBusy || todayBusy || rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
     journalEditsSaved(savedJournal, editedDraft, journalTitle)
@@ -410,7 +414,8 @@ function App() {
           (preview && editorTab === tab.id && !isSaved) ||
           (tab.id === 'profiles' && profileDirty) ||
           tab.id === rangeDirtyTab ||
-          (tab.id === 'today' && todayDirty)
+          (tab.id === 'today' && todayDirty) ||
+          (tab.id === 'setup' && setupDirty)
         ).map(tab => tab.id)}
         onSelect={(page) => {
           if (busy) return
@@ -505,6 +510,7 @@ function App() {
             onDirtyChange={setProfileDirty}
           />
         </section>
+        <SetupEvaluator active={activeTab === 'setup'} onBusyChange={setSetupBusy} onDirtyChange={setSetupDirty} />
         <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
           onSaved={() => setHistoryVersion(value => value + 1)} />
         <CustomRangeJournals activeTab={activeTab}

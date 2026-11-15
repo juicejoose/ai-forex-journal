@@ -3,6 +3,9 @@ import { CandlestickSeries, LineSeries, HistogramSeries, LineStyle, CrosshairMod
 import { buildChartData, candleLabel, chartNumber, chartStamp, chartTick, indicatorSeries } from './marketChartData.js'
 import { factorDescription } from './strategyDescriptions.js'
 import { formatChange, changeTone } from './journalCalendar.js'
+import { zoneChartMarkers, zoneLineData } from './setupHistory.js'
+import { ZoneBands } from './ZoneBands.js'
+import { draftBands, drawingPoint } from './setupDrawing.js'
 import './MarketChart.css'
 
 const colors = { up: '#249c79', down: '#d65e70', ema: '#598cec', sma: '#249c79', ma: '#ab78e5', raw: '#84949d' }
@@ -52,24 +55,27 @@ function SelectedCandle({ row, hasEvaluation }) {
   </div>
 }
 
-export default function MarketChart({ snapshot, evaluation, selectedTime, onSelect }) {
+export default function MarketChart({ snapshot, evaluation, selectedTime, onSelect, zoneOverlay, showZoneCloses = false, frozen = false, draftZones, drawing, onDrawingPoint }) {
   const id = useId()
   const hostRef = useRef(null)
   const shadeRef = useRef(null)
   const apiRef = useRef(null)
   const selectRef = useRef(onSelect)
+  const drawingRef = useRef(null)
   const [rawRsi, setRawRsi] = useState(true)
   const [hovered, setHovered] = useState(null)
   const model = useMemo(() => buildChartData(snapshot, evaluation), [snapshot, evaluation])
   const showRaw = rawRsi || !model.hasRsiMa || model.rsiSource === 'RSI14'
   const selected = model.rows.find(row => row.time === selectedTime) ?? model.rows.at(-1)
   const selectedIndex = model.rows.indexOf(selected)
-  const inspected = model.rows.find(row => row.time === hovered) ?? selected
+  const inspected = (!drawing && model.rows.find(row => row.time === hovered)) || selected
   const period = snapshot?.analysis_kind === 'custom_range' ? 'Range' : 'Session'
   const partial = snapshot?.analysis_kind === 'intraday' && !snapshot.session?.complete
   const identity = `${snapshot?.analysis_kind ?? 'daily'}-${snapshot?.session?.start_utc}-${snapshot?.session?.end_utc}`
 
   useEffect(() => { selectRef.current = onSelect }, [onSelect])
+
+  useEffect(() => { drawingRef.current = drawing ? onDrawingPoint : null }, [drawing, onDrawingPoint])
 
   // Create once per review. Subsequent Today polls replace data without resetting zoom.
   useEffect(() => {
@@ -98,6 +104,10 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
       wickUpColor: colors.up, wickDownColor: colors.down, borderVisible: false, priceLineVisible: false, priceFormat })
     const ema = chart.addSeries(LineSeries, { ...lineOptions, color: colors.ema, lineWidth: 2 })
     const sma = chart.addSeries(LineSeries, { ...lineOptions, color: colors.sma, lineWidth: 2 })
+    const zoneOptions = { ...lineOptions, color: '#d8a64b', lineWidth: 1, lineStyle: LineStyle.Dashed,
+      crosshairMarkerVisible: false, autoscaleInfoProvider: () => null }
+    const zoneLower = chart.addSeries(LineSeries, zoneOptions)
+    const zoneUpper = chart.addSeries(LineSeries, zoneOptions)
     const rsiMa = chart.addSeries(LineSeries, { ...lineOptions, color: colors.ma, lineWidth: 2,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 } }, 1)
     const rsi = chart.addSeries(LineSeries, { ...lineOptions, color: colors.raw, lineWidth: 1,
@@ -109,7 +119,9 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     chart.panes()[1].setStretchFactor(1)
     chart.panes()[2].setStretchFactor(1)
     const markers = createSeriesMarkers(candles, [])
-    const state = { chart, candles, ema, sma, rsiMa, rsi, momentum, markers, rows: [], guides: [], initialized: false }
+    const zoneBands = new ZoneBands()
+    candles.attachPrimitive(zoneBands)
+    const state = { chart, candles, ema, sma, zoneLower, zoneUpper, rsiMa, rsi, momentum, markers, zoneBands, rows: [], guides: [], initialized: false }
     function shade() {
       const overlay = shadeRef.current
       const analyzed = state.rows.filter(row => row.analyzed)
@@ -129,6 +141,11 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     state.shade = shade
     apiRef.current = state
     const handleClick = event => {
+      if (drawingRef.current) {
+        const point = drawingPoint(event, state.rows, y => candles.coordinateToPrice(y))
+        if (point) drawingRef.current(point)
+        return
+      }
       if (typeof event.time === 'number' && state.rows.some(row => row.time === event.time)) selectRef.current(event.time)
     }
     const handleHover = event => setHovered(typeof event.time === 'number' ? event.time : null)
@@ -183,10 +200,18 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
 
   useEffect(() => {
     const api = apiRef.current
+    if (!api) return
+    api.zoneLower.setData(zoneLineData(zoneOverlay, model.rows, 'lower'))
+    api.zoneUpper.setData(zoneLineData(zoneOverlay, model.rows, 'upper'))
+  }, [zoneOverlay, model, identity])
+
+  useEffect(() => {
+    const api = apiRef.current
     if (!api || !selected) return
     const first = model.rows[model.startIndex]
     const markers = [{ time: first.time, position: 'belowBar', shape: 'circle', color: colors.ma, text: `${period} start` }]
     markers.push({ time: selected.time, position: 'aboveBar', shape: 'arrowDown', color: colors.ma, text: selected.score?.candle_id ?? 'Selected' })
+    markers.push(...zoneChartMarkers(zoneOverlay, model.rows, showZoneCloses))
     api.markers.setMarkers(markers.sort((a, b) => a.time - b.time))
     const range = api.chart.timeScale().getVisibleLogicalRange()
     if (api.lastSelection !== selected.time && range && (selectedIndex < range.from || selectedIndex > range.to)) {
@@ -194,10 +219,29 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
       api.chart.timeScale().setVisibleLogicalRange({ from: selectedIndex - span / 2, to: selectedIndex + span / 2 })
     }
     api.lastSelection = selected.time
-  }, [selected, selectedIndex, model, identity, period])
+  }, [selected, selectedIndex, model, identity, period, zoneOverlay, showZoneCloses])
+
+  useEffect(() => {
+    const api = apiRef.current
+    if (!api) return
+    const bands = draftBands(draftZones ?? [], model.rows)
+    if (Number.isFinite(drawing?.first) && model.rows.length) bands.push({
+      lower: drawing.first, upper: drawing.first, start: 0, end: model.rows.length-1, kind: drawing.kind, label: 'First boundary',
+    })
+    api.zoneBands.setBands(bands)
+    api.chart.applyOptions({ handleScroll: { pressedMouseMove: !drawing, horzTouchDrag: !drawing },
+      handleScale: { pinch: !drawing, axisPressedMouseMove: !drawing } })
+  }, [draftZones, drawing, model, identity])
 
   function focusPeriod() {
     apiRef.current?.chart.timeScale().setVisibleLogicalRange({ from: model.startIndex - 0.5, to: model.rows.length - 0.2 })
+  }
+  function focusZone() {
+    const data = zoneLineData(zoneOverlay, model.rows, 'lower')
+    if (!data.length) return
+    const first = model.rows.findIndex(row => row.time === data[0].time)
+    const last = model.rows.findIndex(row => row.time === data.at(-1).time)
+    apiRef.current?.chart.timeScale().setVisibleLogicalRange({ from: first - 2, to: last + 2 })
   }
   function zoom(multiplier) {
     const scale = apiRef.current?.chart.timeScale()
@@ -206,20 +250,24 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     scale.setVisibleLogicalRange(zoomedRange(range, multiplier))
   }
   if (!model.rows.length) return null
-  return <section className="market-chart" aria-labelledby={`${id}-heading`}>
+  return <section className={`market-chart${drawing ? ' mc-drawing' : ''}`} aria-labelledby={`${id}-heading`}>
     <header className="mc-header"><div><h3 id={`${id}-heading`}>Market chart</h3>
       <p>EUR/USD · H4 · New York time</p></div>
       <div className="mc-toolbar" role="group" aria-label="Chart view">
         <button type="button" onClick={focusPeriod}>{period} only</button>
+        {zoneOverlay?.history?.coverage_start && <button type="button" onClick={focusZone}>Zone window</button>}
         <button type="button" onClick={() => apiRef.current?.chart.timeScale().fitContent()}>All history</button>
-        <button type="button" aria-label="Zoom in" onClick={() => zoom(0.7)}>+</button>
-        <button type="button" aria-label="Zoom out" onClick={() => zoom(zoomOutStep)}>−</button>
+        <span className="mc-zoom">
+          <button type="button" aria-label="Zoom in" onClick={() => zoom(0.7)}>+</button>
+          <button type="button" aria-label="Zoom out" onClick={() => zoom(zoomOutStep)}>−</button>
+        </span>
       </div>
     </header>
     <div className="mc-legend"><span style={{ '--series-color': colors.ema }}>EMA20</span><span style={{ '--series-color': colors.sma }}>SMA190</span>
       {model.hasRsiMa && <span style={{ '--series-color': colors.ma }}>RSI MA · SMA14</span>}
       {showRaw && <span style={{ '--series-color': colors.raw }}>RSI14</span>}
-      <span className="mc-period-key">{period.toLowerCase()} under review</span></div>
+      <span className="mc-period-key">{period.toLowerCase()} under review</span>
+      {zoneOverlay?.history?.coverage_start && <span style={{ '--series-color': '#d8a64b' }}>User zone · {zoneOverlay.label}</span>}</div>
     <p className="mc-readout">{inspected && <>{candleLabel(inspected.candle)} · Close <b>{chartNumber(inspected.candle.close)}</b> · {model.hasRsiMa ? 'RSI MA' : 'RSI14'} <b>{chartNumber(inspected.candle.indicators?.[model.hasRsiMa ? 'rsi14_sma14' : 'rsi14'], 2)}</b> · Momentum <b>{chartNumber(inspected.candle.indicators?.squeeze?.momentum)}</b></>}</p>
     <div className="mc-plot-wrap">
       <div ref={hostRef} className="mc-plot" aria-label="Interactive price, RSI and momentum chart. Use the candle selector below for keyboard access." />
@@ -234,8 +282,10 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     </div>
     <p className="mc-help">Click or tap a candle to select it. Drag sideways to explore; pinch or use + / − to zoom. The purple band marks the reviewed candles.</p>
     <p className="mc-help">{model.startIndex} earlier candles for context · {model.rows.length - model.startIndex} reviewed candles.
-      {partial && ` ${6 - (model.rows.length - model.startIndex)} pending; the chart updates after completed-candle refreshes.`}
+      {partial && (frozen ? ` ${6 - (model.rows.length - model.startIndex)} pending at capture; this saved snapshot stays fixed.`
+        : ` ${6 - (model.rows.length - model.startIndex)} pending; the chart updates after completed-candle refreshes.`)}
       {!snapshot.chart_context && ' This older snapshot has limited saved history.'}</p>
+    {snapshot.chart_context?.extended_zone_history && <p className="mc-help">Extended history uses saved OHLC candles. Saved indicator lines cover the recent 60 context candles and reviewed session; older readings remain unavailable. Zone markers describe observations, not trade signals.</p>}
     <div className="mc-picker"><label htmlFor={`${id}-candle`}>Selected candle</label>
       <div><button type="button" aria-label="Previous candle" disabled={selectedIndex <= 0} onClick={() => onSelect(model.rows[selectedIndex - 1].time)}>←</button>
         <select id={`${id}-candle`} value={selected?.time ?? ''} onChange={event => onSelect(Number(event.target.value))}>

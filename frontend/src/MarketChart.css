@@ -4,6 +4,8 @@
 .mc-header p:last-child, .mc-help { font-size: .7rem; line-height: 1.6; }
 .mc-toolbar { display: flex; gap: .35rem; flex-wrap: wrap; }
 .mc-toolbar button { white-space: nowrap; }
+.mc-zoom { display: flex; gap: .35rem; }
+.mc-zoom button { min-width: 44px; }
 .market-chart button, .mc-picker select { min-height: 44px; border: 1px solid var(--border); border-radius: 7px; color: var(--text-h); background: var(--bg); padding: .45rem .65rem; font: inherit; font-size: .7rem; cursor: pointer; }
 .market-chart button:disabled { opacity: .4; cursor: default; }
 .market-chart :is(button, select, input, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
