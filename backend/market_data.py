@@ -147,7 +147,7 @@ def _parse_candles(data: dict, cutoff: datetime) -> list[Candle]:
         raise MarketDataError("OANDA returned malformed, duplicate, or misaligned candle data.") from None
 
 
-def get_market_data(journal_date: date) -> dict:
+def get_market_data(journal_date: date, *, include_source=False) -> dict:
     """Fetch history and calculate indicators; return the requested session only."""
     start, end = session_bounds(journal_date)
     if end > datetime.now(UTC):
@@ -174,10 +174,10 @@ def get_market_data(journal_date: date) -> dict:
     if len(warmup) < WARMUP_COUNT:
         raise MarketDataError("Not enough earlier candles are available to initialize the indicators.", 422)
 
-    return _build_snapshot(journal_date, start, end, session, warmup, retrieved_at)
+    return _build_snapshot(journal_date, start, end, session, warmup, retrieved_at, include_source=include_source)
 
 
-def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
+def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at, *, include_source=False):
     """Calculate indicators once over the complete history and requested candles."""
     series = warmup + session
     closes = [candle.close for candle in series]
@@ -225,6 +225,9 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at):
 
     change = session[-1].close - session[0].open
     return {
+        **({"calculation_inputs": [{"open_time": c.open_time.isoformat(), "close_time": c.close_time.isoformat(),
+            "open": c.open, "high": c.high, "low": c.low, "close": c.close,
+            "price_updates": c.price_updates} for c in series]} if include_source else {}),
         "schema_version": 4,
         "source": "OANDA",
         "environment": "practice",

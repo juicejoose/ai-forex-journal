@@ -35,7 +35,7 @@ def session_context(now):
     return label, start, end, count, closed, next_open
 
 
-def build_today_view(now):
+def build_today_view(now, *, include_source=False):
     label, start, end, count, closed, next_open = session_context(now)
     slots = []
     for index in range(6):
@@ -61,7 +61,7 @@ def build_today_view(now):
     warmup = [c for c in candles if c.close_time <= start][-md.WARMUP_COUNT:]
     if len(warmup) != md.WARMUP_COUNT:
         raise md.MarketDataError("Not enough earlier candles are available for today's indicators.", 503)
-    snapshot = md._build_snapshot(label, start, end, selected, warmup, datetime.now(md.UTC))
+    snapshot = md._build_snapshot(label, start, end, selected, warmup, datetime.now(md.UTC), include_source=include_source)
     snapshot.update(analysis_kind="intraday", as_of=now.isoformat(), data_through=selected[-1].close_time.isoformat())
     snapshot["session"].update(complete=count == 6, expected_candle_count=6)
     evaluation = evaluate_strategy(snapshot, allow_partial=True)

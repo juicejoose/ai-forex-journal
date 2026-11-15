@@ -24,6 +24,7 @@ def get_connection(*, write=False):
     # Explicit transactions make the save check and insertion atomic.
     connection = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     try:
         with connection:
             connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")

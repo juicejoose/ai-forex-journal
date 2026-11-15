@@ -34,7 +34,9 @@ class HostedTests(unittest.TestCase):
             self.assertEqual(client.get("/healthz").text, "ok")
             for method, path in [("GET", "/"), ("GET", "/assets/app.js"), ("GET", "/api/docs"),
                                  ("GET", "/api/journals"), ("GET", "/api/strategy-profiles"),
-                                 ("POST", "/api/journal/generate"), ("DELETE", "/api/journals/1")]:
+                                 ("POST", "/api/journal/generate"), ("DELETE", "/api/journals/1"),
+                                 ("POST", "/api/setup-previews"), ("GET", "/api/setup-snapshots"), ("POST", "/api/setup-snapshots"),
+                                 ("POST", "/api/setup-snapshots/00000000-0000-0000-0000-000000000000/evaluate")]:
                 with self.subTest(path=path):
                     response = client.request(method, path)
                     self.assertEqual(response.status_code, 401)

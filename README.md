@@ -8,6 +8,7 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 
 ## Current features
 
+- **Evaluate setup:** capture a proposed long/short EUR/USD H4 setup with manual support/resistance zones, freeze the available market evidence and current four-factor results, and request a separate grounded AI assessment. Saved setups reopen without fetching newer prices or regenerating AI.
 - **Today:** follow the active New York session with automatic completed-candle updates, provisional strategy averages, pending candle slots, and a manually generated AI summary. Save a frozen intraday review into Saved journals.
 - **Generate journal:** choose a session date, select the scored four-factor strategy or a written strategy, add optional observations, then generate and edit a journal.
 - **Strategy scores:** inspect each candle's factor outcomes, bullish/bearish points and alignment, with the current four-factor preset averaging all six completed candles and showing the final candle’s bias separately. Saved calculations remain separate from editable journal text.
@@ -78,6 +79,58 @@ New snapshots retain the last **60 completed warmup H4 candles** in an optional 
 Today refreshes the chart alongside completed-candle data while preserving the chart's visible range. Forming and upcoming candles remain pending in the session slots. Before the first completed candle, the existing waiting state remains. The chart includes no provisional OHLC prices. Opening a chart or selecting a candle makes no OpenAI calls.
 
 The chart code loads when a market review is opened. TradingView attribution and a link appear below the chart. Full candle and strategy tables remain available for keyboard access and detailed evidence.
+
+## Trade setup evaluator
+
+Open **Evaluate setup** in the sidebar:
+
+1. Choose a proposed direction and either **Now** or a historical cutoff. Historical times use the device timezone shown beside the input.
+2. Optionally **Load chart**, choose **Draw support** or **Draw resistance**, then click/tap two price boundaries on the price pane. Green/red bands fill the zone fields below. Edit exact prices and names there, or remove a draft zone. **Cancel drawing** (or Escape) cancels the active tool. Manual price entry remains available without a preview; up to eight zones are allowed, with five decimal places and equal prices for a single level.
+3. Optionally **Pick origin … on chart** and select an H4 candle, or enter **Origin time** in the displayed device timezone, to analyze a zone's history. Drawing price boundaries does not infer its origin. Without an origin the band spans the displayed evidence and history remains unknown. H4/D1/W1 describes the chart on which you identified the zone, not an additional data feed. Add your chart observations below.
+4. **Capture setup** saves a fixed snapshot before any OpenAI request. It includes the completed H4 candles, all 300 warmup candles used in calculation, indicators/settings, strategy version/revision and results, source-code fingerprint, manual inputs, quote status, cutoff and retrieval timestamps.
+5. **Generate AI assessment** interprets that snapshot. It presents support, conflicts, zone context, possible future conditions and missing confirmation. The existing strategy scores remain Python-owned and unchanged. A repeat assessment creates a separate record against the same snapshot; capture a new setup to use newer market data.
+6. Reopen saved setups on the same page. Captures and completed/failed AI records cannot be edited or deleted through this MVP. Corrections should be captured as a new setup.
+
+**Fixed chart preview:** loading the chart saves temporary server-owned evidence. Capture reuses those exact candles, indicator values, scores, strategy version and quote without fetching newer prices or recalculating the strategy. Only zone geometry/history is added from that frozen evidence. The browser sends zone inputs and a preview ID, never trusted market values. **Refresh chart** deliberately replaces the preview and keeps your draft zones. Changing the mode, cutoff or quote option requires loading a new preview. Finalization time is recorded separately; annotations made after loading are labelled accordingly. Preview capture is rejected if the calculation code changed or the preview expired. The preview includes 300 earlier OHLC candles; indicator lines cover the recent 60 context candles and reviewed session.
+
+Only candles whose close is at or before the cutoff can affect prices, indicators or scores. Session-to-date averages and latest-candle results remain separate. Before the first current-session candle closes, the evaluator explicitly shows the previous completed session as context. Weekends use the most recent completed session. Historical captures are labelled reconstructions: today's provider history and zones entered later cannot prove exactly what was available or known then.
+
+For **Now**, the optional read-only OANDA practice pricing request can add a tradeable bid/ask quote no older than 120 seconds at the evidence cutoff (chart load when using a preview). It stays frozen while you annotate; refresh the chart explicitly for a newer quote. Its midpoint is used only for zone proximity; it does not enter strategy calculations or represent an execution price. An unavailable, stale, malformed or future-dated quote falls back to the last completed H4 close. Historical captures never request a current quote.
+
+Python computes above/inside/below relationships, nearest-edge distances in EUR/USD pips, last-close positions and candle-range overlaps. Zones and notes remain user observations. This version does **not** detect confirmed rejections, breakouts or retests; their definitions are a later step. Suggested invalidation scenarios are conditional checks against supplied zone boundaries, not mandatory rules or automated exit instructions. No orders, backtest, win-probability estimate or discipline grading is included.
+
+**Historical zone evidence:** new captures use `zone_history_v1` and snapshot schema 2. `zone_history.py` examines the already-saved 300 warmup candles plus the completed session; it makes no extra OANDA request. Only whole H4 candles opening at or after the origin and closing at or before the cutoff are eligible. The origin remains a user annotation, not independently verified formation time or proof that the zone was known then.
+
+A visit is a consecutive group of candles whose ranges overlap the zone, including equality at its edges. It is not a count of individual intrabar touches. Normal weekend closures, including DST weekends, preserve consecutive trading candles. Missing candles split groups and mark coverage partial; groups on either side of a gap might be the same real interaction. A group starting at the observation boundary is marked with an asterisk because it may have begun earlier.
+
+The stored history includes observed groups, counts of closes above/inside/below, and events when the observed close position changes. A gap directly from below to above does not imply that the zone was touched. Followup movement is measured from the last overlap close across up to the next three completed non-overlapping candles, stopping at a new visit, unexpected gap or cutoff. Signed close change and the observed high/low excursions are price observations, not trade returns or confirmation labels. Ongoing visits have no followup yet; missing observations are never converted to zero.
+
+Origins older than available history show **Partial history** with the actual observed window. No origin or no eligible completed candles shows unknown history rather than zero visits. The AI receives totals, coverage limits and the latest three visits/close-position changes per zone; complete event lists remain in the snapshot and UI. These facts remain context and add no four-factor points. The prompt is versioned separately as `setup_review_v2_zone_history`.
+
+**Zone history** above the chart lets you select a zone, inspect visit groups and close-position changes, and jump to an event candle. **Zone window** fits the chart to that zone's observed history. Gold lines show the supplied boundaries over the observed window; markers show the history start and visit starts. Close-position markers are optional. Setup charts with dated zones can show all 300 saved earlier OHLC candles; saved indicator readings still cover the latest 60 context candles and reviewed session, with older readings left unavailable. Ordinary journal charts retain their existing history and behavior.
+
+Existing saved setups remain unchanged. Their historical evidence is not recomputed on reopening or reassessment. Capture a new setup to add an origin or obtain history analysis. Zone history needs no additional packages.
+
+The AI receives a bounded catalog of those facts, the saved strategy definition and observations. Strict structured output selects existing evidence/condition IDs; validation checks roles, duplicate/unknown IDs, missing conflicts/zone context and incomplete strategy data. Python supplies displayed numbers. Numeric inventions, malformed/refused/incomplete responses are rejected. Qualitative wording is still an LLM interpretation and should be reviewed against the evidence; schema validation alone cannot prove every sentence's meaning.
+
+The additive SQLite migration runs on backend startup and creates a consistent backup next to the configured database named `<database>.before-setup-v1-<id>.db` before its first run. It adds `setup_snapshots`, `setup_evaluations` and migration tracking, without rewriting saved journals. Snapshot hashes detect changed evidence; database triggers prevent normal update/delete operations. Keep both the database and backup on the persistent Render disk. Backups have the same private data as the original database and are not served by the app.
+
+The chart feature adds migration 2 on startup: a `setup_previews` table with hashes and a trigger preventing evidence updates. Previews expire after 24 hours; new loads prune expired rows and retain at most 50 previews. Captured setups contain their own permanent copy and survive preview cleanup. Preview creation does not call OpenAI or add a saved setup.
+
+The API provides `POST /setup-previews`, `POST/GET /setup-snapshots`, `GET /setup-snapshots/{id}`, and `POST /setup-snapshots/{id}/evaluate`. Capture accepts an optional `preview_id`; omitting it retains the manual-input workflow. Write requests use client UUIDs for safe retries; overlapping AI attempts for the same snapshot are rejected, and interrupted attempts can be retried after five minutes. AI failures retain their saved evidence. The hosted app applies its existing authentication and same-origin write checks to these routes. Development continues to use the local API.
+
+Implementation is separated into `setup_models.py` (inputs), `setup_market.py` (cutoffs and deterministic geometry), `setup_database.py` (durable records), `setup_ai.py` (schema/catalog/validation), `setup_api.py` (routes), and `SetupEvaluator.jsx` (UI). No new packages are required. Setup assessments use the configured OpenAI model with medium reasoning, no automatic retries, a 90-second timeout, and a 6,000-token budget.
+
+Offline regression checks include historical/future boundaries, daylight saving time/weekends, unchanged scoring, quote validation, zone edges, immutable storage, migration backup, idempotency, failure recovery, AI references and the hosted access boundary. Chart checks cover drawing coordinates, origin selection, numeric edits, preview capture without a refetch, frozen live quotes, expiration/eviction, migration compatibility and client evidence injection:
+
+```bash
+cd backend
+python -B -m unittest discover -s tests -t .
+cd ../frontend
+node --test tests/*.test.js
+npm run lint
+npm run build
+```
 
 ## Local setup
 
