@@ -55,7 +55,7 @@ function Assessment({ attempt, catalog }) {
   </article>
 }
 
-export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) {
+export default function SetupEvaluator({ active, onBusyChange, onDirtyChange, onRecordTrade }) {
   const [form, setForm] = useState(freshForm)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState('')
@@ -313,6 +313,7 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
     {record && <div className="se-results" ref={resultRef} tabIndex={-1}>
       <div className="se-card">
         <div className="se-card-heading"><span className="se-step">2</span><h3>{snapshot.entry.title || 'Saved setup'}</h3><span className="se-saved">Snapshot saved</span>
+          <button type="button" className="se-primary" disabled={fieldsDisabled} onClick={() => onRecordTrade(record)}>Record trade</button>
           <button type="button" className="se-delete-link" disabled={fieldsDisabled} onClick={event => askDelete({ id: record.id, title: snapshot.entry.title, direction: snapshot.entry.direction, cutoff_at: snapshot.cutoff_at, mode: snapshot.mode }, event.currentTarget)}>Delete setup</button></div>
         <div className="se-snapshot-grid">
           <div><span>Proposed direction</span><strong>{snapshot.entry.direction === 'long' ? 'Long / bullish' : 'Short / bearish'}</strong></div>

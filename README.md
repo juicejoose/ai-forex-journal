@@ -8,6 +8,7 @@ The frontend uses React and Vite. The backend uses FastAPI and a local SQLite da
 
 ## Current features
 
+- **Trades:** record a manual EUR/USD entry, optionally retain a saved setup's evidence, add one full exit, and keep your discipline self-review separate from the Python-calculated pip and R result.
 - **Evaluate setup:** capture a proposed long/short EUR/USD H4 setup with manual support/resistance zones, freeze the available market evidence and current four-factor results, and request a separate grounded AI assessment. Saved setups reopen without fetching newer prices or regenerating AI.
 - **Today:** follow the active New York session with automatic completed-candle updates, provisional strategy averages, pending candle slots, and a manually generated AI summary. Save a frozen intraday review into Saved journals.
 - **Generate journal:** choose a session date, select the scored four-factor strategy or a written strategy, add optional observations, then generate and edit a journal.
@@ -148,6 +149,30 @@ node --test tests/*.test.js
 npm run lint
 npm run build
 ```
+
+## Manual trade log
+
+Open a saved setup and choose **Record trade** to retain its strategy calculations, applicable strategy version, zones, market evidence and proposed plan with the trade. If there is a proposed plan, its prices prefill the form: verify the actual entry fill and initial stop/target you used. Entry time and reason must be entered explicitly. Alternatively, use **Trades → Record trade** for a manual entry without a market snapshot. This version supports EUR/USD H4, one entry and one full exit, with no order execution or provider calls.
+
+Record direction, actual entry price/time and your entry reason. Name, initial stop, initial target and support/resistance observations are optional. A missing stop or target remains missing; no level is inferred. Times are entered in your device's displayed timezone and stored as UTC. Future timestamps and exits before entry are rejected. Entry details and full exits are fixed after saving, so check them before submitting. Editing/deleting trades, partial exits, position sizing and automatic outcome detection are outside this first version.
+
+For a linked trade, the backend copies the server-owned setup inside the same transaction as the trade save. The setup cutoff must be at or before entry; all retained candles and reference times must be at or before that cutoff. The entry copy is hashed, never refreshed, and survives deletion of the original setup. A live setup captured and finalized before entry is labeled **Setup captured before entry**. Historical reconstructions or setups saved after entry are labeled **Retrospective context** and do not establish what was known at entry. Manually entered reasoning and observations are self-reported and may have been logged later. AI assessments are not copied; this first version preserves the underlying setup evidence and proposed plan.
+
+After the position is closed, enter the actual full exit price/time. Python calculates signed pips with Decimal arithmetic: `(exit - entry) / 0.0001` for a long trade, reversed for a short. R is signed pips divided by the original entry-to-stop distance in pips. For example, a long entry at 1.10000, initial stop at 1.09800 and actual exit at 1.09900 records **−10.0 pips / −0.50 R**. A missing initial stop leaves R unavailable. Actual exit fills can exceed a stop or target; results are never capped to planned levels. Pips and R describe price movement using entered fills; separate commissions, financing and fees are not deducted, and monetary P&L is not calculated.
+
+**Trading discipline** is a separate self-review: Not reviewed, Followed my plan, or Deviated from my plan, with notes. No mandatory checklist has been defined yet, so the app does not infer compliance from strategy bias, score or outcome. A losing trade can correctly remain **Followed my plan**. Updated reviews append to the history; a stale browser cannot overwrite a newer review. AI discipline reviews can be added after this log contains useful evidence and personal rules have been defined.
+
+An additive migration runs on startup and creates `trades`, `trade_exits`, `trade_reviews` and `trade_schema_migrations` in the existing SQLite database. Entries/exits are immutable, reviews append, and all mutations use transactions and request IDs to prevent duplicate saves. No existing tables, strategies, credentials or dependencies change. Hosted routes use the existing login and same-origin write protections. Keep the database on the configured persistent disk and include it in normal backups.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| POST | `/trades` | Save an entry and optional independent setup copy |
+| GET | `/trades?status=all&limit=20&offset=0` | List trades; status can also be open or closed |
+| GET | `/trades/{id}` | Reopen saved entry, evidence, exit and review history |
+| POST | `/trades/{id}/close` | Save one actual full exit and Python outcome |
+| POST | `/trades/{id}/reviews` | Append a self-review using the expected review revision |
+
+Offline tests cover long/short/flat and fractional results, missing stops, entry/exit validation, duplicate requests, concurrent setup deletion, snapshot preservation, future-data rejection, review conflicts, immutability, restart persistence, migration compatibility, hosted authentication and same-origin protections. Frontend checks cover setup handoff, input validation, timezone ordering and separation of outcome from discipline.
 
 ## Local setup
 

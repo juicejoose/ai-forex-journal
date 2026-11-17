@@ -33,6 +33,8 @@ from range_database import (init_range_db, store_range_draft, save_range_journal
 from today import get_today_view, load_today_snapshot
 from setup_database import init_setup_db
 from setup_api import setup_router
+from trade_database import init_trade_db
+from trade_api import router as trade_router
 
 load_dotenv(Path(__file__).with_name(".env"))
 
@@ -44,11 +46,13 @@ async def lifespan(app: FastAPI):
     init_db()
     init_range_db()
     init_setup_db()
+    init_trade_db()
     yield
 
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(setup_router(lambda: client))
+app.include_router(trade_router)
 
 app.add_middleware(
     CORSMiddleware,

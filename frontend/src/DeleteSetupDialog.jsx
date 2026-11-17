@@ -17,7 +17,7 @@ export default function DeleteSetupDialog({ setup, pending, error, onCancel, onC
       EUR/USD · H4 · {setup.direction === 'long' ? 'Long' : 'Short'}<br />
       {setupTime(setup.cutoff_at)} · {setup.mode === 'live' ? 'Captured live' : 'Historical'}</p>
     <p id="delete-setup-warning">This permanently removes this saved setup, its market snapshot, zones, trade plan, and all AI assessments. This cannot be undone.</p>
-    <p>Your current form, saved journals and strategy profiles are kept.</p>
+    <p>Your current form, saved journals and strategy profiles are kept. Existing trades keep their own entry-evidence copies.</p>
     {error && <p className="se-error" role="alert">{error}</p>}
     {pending && <p role="status">Deleting setup…</p>}
     <div className="se-dialog-actions">

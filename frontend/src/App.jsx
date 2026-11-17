@@ -9,11 +9,13 @@ import DeleteJournalDialog from './DeleteJournalDialog.jsx'
 import CustomRangeJournals from './CustomRangeJournals.jsx'
 import TodayPage from './TodayPage.jsx'
 import SetupEvaluator from './SetupEvaluator.jsx'
+import TradesPage from './TradesPage.jsx'
 import { journalEditsSaved } from './journalNames.js'
 import { CURRENT_RULE_SET_ID, isRetiredRuleSet } from './strategyChoices.js'
 
 const tabs = [
   { id: 'setup', label: 'Evaluate setup' },
+  { id: 'trades', label: 'Trades' },
   { id: 'today', label: 'Today' },
   { id: 'generate', label: 'Generate journal' },
   { id: 'saved', label: 'Saved journals' },
@@ -23,6 +25,9 @@ const tabs = [
 ]
 
 function App() {
+  const [tradeBusy, setTradeBusy] = useState(false)
+  const [tradeDirty, setTradeDirty] = useState(false)
+  const [tradeSeed, setTradeSeed] = useState(null)
   const [setupBusy, setSetupBusy] = useState(false)
   const [setupDirty, setSetupDirty] = useState(false)
   const [todayBusy, setTodayBusy] = useState(false)
@@ -61,7 +66,7 @@ function App() {
   const [deleteMessage, setDeleteMessage] = useState('')
 
   const ruleDefinition = ruleDefinitions.find((item) => item.id === ruleSetId)
-  const busy = setupBusy || todayBusy || rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
+  const busy = tradeBusy || setupBusy || todayBusy || rangeBusy || loading || saving || opening || profileBusy || deletingId !== null
 
   const isSaved =
     journalEditsSaved(savedJournal, editedDraft, journalTitle)
@@ -415,7 +420,8 @@ function App() {
           (tab.id === 'profiles' && profileDirty) ||
           tab.id === rangeDirtyTab ||
           (tab.id === 'today' && todayDirty) ||
-          (tab.id === 'setup' && setupDirty)
+          (tab.id === 'setup' && setupDirty) ||
+          (tab.id === 'trades' && tradeDirty)
         ).map(tab => tab.id)}
         onSelect={(page) => {
           if (busy) return
@@ -510,7 +516,13 @@ function App() {
             onDirtyChange={setProfileDirty}
           />
         </section>
-        <SetupEvaluator active={activeTab === 'setup'} onBusyChange={setSetupBusy} onDirtyChange={setSetupDirty} />
+        <SetupEvaluator active={activeTab === 'setup'} onBusyChange={setSetupBusy} onDirtyChange={setSetupDirty}
+          onRecordTrade={record => {
+            if (busy || (tradeDirty && !window.confirm('Replace the unsaved trade entry, exit, or review with an entry from this setup?'))) return
+            setTradeSeed({ record, id: crypto.randomUUID() }); setTradeDirty(false); setActiveTab('trades')
+            requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: 'instant' }); document.getElementById('trades-panel')?.focus({ preventScroll: true }) })
+          }} />
+        <TradesPage key={tradeSeed?.id ?? 'manual'} active={activeTab === 'trades'} seed={tradeSeed} onBusyChange={setTradeBusy} onDirtyChange={setTradeDirty} />
         <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
           onSaved={() => setHistoryVersion(value => value + 1)} />
         <CustomRangeJournals activeTab={activeTab}
