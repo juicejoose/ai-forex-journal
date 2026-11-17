@@ -19,27 +19,38 @@ class TradeNotFound(ValueError):
 def init_trade_db():
     with db.get_connection(write=True) as con:
         con.execute('CREATE TABLE IF NOT EXISTS trade_schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)')
-        if con.execute('SELECT 1 FROM trade_schema_migrations WHERE version=1').fetchone():
-            return
-        con.execute('''CREATE TABLE trades (
-            id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, request_json TEXT NOT NULL,
-            entry_json TEXT NOT NULL, context_json TEXT NOT NULL, evidence_hash TEXT NOT NULL,
-            entry_at TEXT NOT NULL, created_at TEXT NOT NULL)''')
-        con.execute('''CREATE TABLE trade_exits (
-            trade_id TEXT PRIMARY KEY REFERENCES trades(id) ON DELETE RESTRICT,
-            request_id TEXT NOT NULL UNIQUE, request_json TEXT NOT NULL, exit_json TEXT NOT NULL,
-            result_json TEXT NOT NULL, created_at TEXT NOT NULL)''')
-        con.execute('''CREATE TABLE trade_reviews (
-            id TEXT PRIMARY KEY, trade_id TEXT NOT NULL REFERENCES trades(id) ON DELETE RESTRICT,
-            request_id TEXT NOT NULL UNIQUE, request_json TEXT NOT NULL,
-            review_json TEXT NOT NULL, revision INTEGER NOT NULL, created_at TEXT NOT NULL,
-            UNIQUE(trade_id,revision))''')
-        con.execute('CREATE INDEX trades_by_entry ON trades(entry_at DESC,id DESC)')
-        for table in ('trades','trade_exits','trade_reviews'):
+        if not con.execute('SELECT 1 FROM trade_schema_migrations WHERE version=1').fetchone():
+            con.execute('''CREATE TABLE trades (
+                id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, request_json TEXT NOT NULL,
+                entry_json TEXT NOT NULL, context_json TEXT NOT NULL, evidence_hash TEXT NOT NULL,
+                entry_at TEXT NOT NULL, created_at TEXT NOT NULL)''')
+            con.execute('''CREATE TABLE trade_exits (
+                trade_id TEXT PRIMARY KEY REFERENCES trades(id) ON DELETE RESTRICT,
+                request_id TEXT NOT NULL UNIQUE, request_json TEXT NOT NULL, exit_json TEXT NOT NULL,
+                result_json TEXT NOT NULL, created_at TEXT NOT NULL)''')
+            con.execute('''CREATE TABLE trade_reviews (
+                id TEXT PRIMARY KEY, trade_id TEXT NOT NULL REFERENCES trades(id) ON DELETE RESTRICT,
+                request_id TEXT NOT NULL UNIQUE, request_json TEXT NOT NULL,
+                review_json TEXT NOT NULL, revision INTEGER NOT NULL, created_at TEXT NOT NULL,
+                UNIQUE(trade_id,revision))''')
+            con.execute('CREATE INDEX trades_by_entry ON trades(entry_at DESC,id DESC)')
+            for table in ('trades','trade_exits','trade_reviews'):
+                for action in ('UPDATE','DELETE'):
+                    con.execute(f'''CREATE TRIGGER {table}_no_{action.lower()} BEFORE {action} ON {table}
+                        BEGIN SELECT RAISE(ABORT,'Trade records are fixed; reviews are appended'); END''')
+            con.execute('INSERT INTO trade_schema_migrations VALUES (1,?)',(datetime.now(timezone.utc).isoformat(),))
+        if not con.execute('SELECT 1 FROM trade_schema_migrations WHERE version=2').fetchone():
+            con.execute("""CREATE TABLE trade_strategy_analyses (
+                id TEXT PRIMARY KEY, trade_id TEXT NOT NULL REFERENCES trades(id) ON DELETE RESTRICT,
+                source TEXT NOT NULL CHECK (source IN ('saved_setup','entry_time')), request_id TEXT UNIQUE,
+                analysis_json TEXT NOT NULL, analysis_hash TEXT NOT NULL, created_at TEXT NOT NULL,
+                UNIQUE(trade_id,source))""")
             for action in ('UPDATE','DELETE'):
-                con.execute(f'''CREATE TRIGGER {table}_no_{action.lower()} BEFORE {action} ON {table}
-                    BEGIN SELECT RAISE(ABORT,'Trade records are fixed; reviews are appended'); END''')
-        con.execute('INSERT INTO trade_schema_migrations VALUES (1,?)',(datetime.now(timezone.utc).isoformat(),))
+                con.execute(f"""CREATE TRIGGER trade_strategy_analyses_no_{action.lower()}
+                    BEFORE {action} ON trade_strategy_analyses BEGIN
+                    SELECT RAISE(ABORT,'Trade strategy evidence is immutable'); END""")
+            con.execute('INSERT INTO trade_schema_migrations VALUES (2,?)',(datetime.now(timezone.utc).isoformat(),))
+
 
 
 def _hash(entry, context):
@@ -61,7 +72,7 @@ def _record(con, identifier, *, detail=True):
         'result':json.loads(closed['result_json']) if closed else None,
         'review':history[0] if history else {'discipline':'not_reviewed','notes':'','revision':0},
         'context_timing':context['timing'], 'evidence_hash':row['evidence_hash']}
-    if detail: record.update(context=context, reviews=history)
+    if detail: record.update(context=context, reviews=history, strategy_analyses=_analyses(con,row))
     return record
 
 
@@ -87,6 +98,11 @@ def create_trade(entry):
         identifier=str(uuid4())
         con.execute('INSERT INTO trades VALUES (?,?,?,?,?,?,?,?)',(identifier,str(entry.request_id),request,
             sd.canonical(values),sd.canonical(context),_hash(values,context),values['entry_at'],now.isoformat()))
+        record = _record(con,identifier)
+        if source is not None:
+            from trade_analysis import build_analysis
+            analysis = build_analysis(values, source['snapshot'], 'saved_setup', record['evidence_hash'], context['timing'])
+            _store_analysis(con, identifier, 'saved_setup', analysis)
         return _record(con,identifier)
 
 
@@ -140,3 +156,52 @@ def list_trades(status='all',limit=20,offset=0):
         total=con.execute('SELECT COUNT(*)'+source).fetchone()[0]
         rows=con.execute('SELECT t.id'+source+' ORDER BY t.entry_at DESC,t.id DESC LIMIT ? OFFSET ?',(limit,offset)).fetchall()
         return {'items':[_record(con,row['id'],detail=False) for row in rows], 'total':total,'limit':limit,'offset':offset}
+
+
+def _analyses(con, trade_row):
+    rows=con.execute('SELECT * FROM trade_strategy_analyses WHERE trade_id=? ORDER BY created_at,id',(trade_row['id'],)).fetchall()
+    results=[]
+    for row in rows:
+        payload=json.loads(row['analysis_json'])
+        if (hashlib.sha256(sd.canonical(payload).encode()).hexdigest()!=row['analysis_hash'] or
+                payload['entry_evidence_hash']!=trade_row['evidence_hash'] or payload['source']!=row['source']):
+            raise TradeConflict('The saved strategy comparison failed its integrity check.')
+        results.append({'id':row['id'],'source':row['source'],'created_at':row['created_at'],
+                        'analysis_hash':row['analysis_hash'],'analysis':payload})
+    return results
+
+
+def _store_analysis(con, identifier, source, payload, request_id=None):
+    encoded=sd.canonical(payload)
+    con.execute('INSERT INTO trade_strategy_analyses VALUES (?,?,?,?,?,?,?)',
+        (str(uuid4()),str(identifier),source,str(request_id) if request_id else None,encoded,
+         hashlib.sha256(encoded.encode()).hexdigest(),datetime.now(timezone.utc).isoformat()))
+
+
+def _analysis_exists(con, identifier, entry):
+    found=con.execute('SELECT trade_id,source FROM trade_strategy_analyses WHERE request_id=?',(str(entry.request_id),)).fetchone()
+    if found and (found['trade_id']!=str(identifier) or found['source']!=entry.source):
+        raise TradeConflict('This comparison request belongs to a different trade or evidence source.')
+    return con.execute('SELECT id FROM trade_strategy_analyses WHERE trade_id=? AND source=?',
+                       (str(identifier),entry.source)).fetchone() is not None
+
+
+def analyze_trade(identifier, entry):
+    from trade_analysis import build_analysis, reconstruct_entry
+    # Release the read transaction before a historical provider request.
+    with db.get_connection() as con:
+        record=_record(con,identifier)
+        if _analysis_exists(con,identifier,entry): return record
+    if entry.source=='saved_setup':
+        source=record['context']['setup']
+        if source is None: raise TradeInputError('This trade has no saved setup evidence. Reconstruct evidence at entry instead.')
+        snapshot=source['snapshot']; timing=record['context']['timing']
+    else:
+        snapshot=reconstruct_entry(record['entry']); timing='retrospective'
+    analysis=build_analysis(record['entry'],snapshot,entry.source,record['evidence_hash'],timing)
+    with db.get_connection(write=True) as con:
+        # Concurrent requests may fetch twice, but can never replace the first saved evidence.
+        record=_record(con,identifier)
+        if _analysis_exists(con,identifier,entry): return record
+        _store_analysis(con,identifier,entry.source,analysis,entry.request_id)
+        return _record(con,identifier)

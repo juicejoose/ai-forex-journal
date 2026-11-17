@@ -82,7 +82,7 @@ class HostedTests(unittest.TestCase):
         from tests.test_trade_log import trade, full_exit
         from uuid import uuid4
         with self.client() as client:
-            for method, path in [('GET','/api/trades'),('POST','/api/trades'),('POST','/api/trades/'+str(uuid4())+'/close'),('POST','/api/trades/'+str(uuid4())+'/reviews')]:
+            for method, path in [('GET','/api/trades'),('POST','/api/trades'),('POST','/api/trades/'+str(uuid4())+'/close'),('POST','/api/trades/'+str(uuid4())+'/reviews'),('POST','/api/trades/'+str(uuid4())+'/strategy-analysis')]:
                 self.assertEqual(client.request(method,path).status_code,401)
             for headers in ({'Origin':'https://other.example'},{'Sec-Fetch-Site':'cross-site'}):
                 self.assertEqual(client.post('/api/trades',json=trade(),auth=self.login,headers=headers).status_code,403)
@@ -90,6 +90,7 @@ class HostedTests(unittest.TestCase):
             self.assertEqual(client.get('/api/trades/'+record['id'],auth=self.login).status_code,200)
             self.assertEqual(client.post('/api/trades/'+record['id']+'/close',json=full_exit(),auth=self.login,headers={'Origin':'https://other.example'}).status_code,403)
             self.assertEqual(client.post('/api/trades/'+record['id']+'/reviews',json={},auth=self.login,headers={'Origin':'null'}).status_code,403)
+            self.assertEqual(client.post('/api/trades/'+record['id']+'/strategy-analysis',json={'source':'entry_time','request_id':str(uuid4())},auth=self.login,headers={'Origin':'https://other.example'}).status_code,403)
 
     def test_startup_requires_credentials_storage_and_built_ui(self):
         for changes in ({"JOURNAL_PASSWORD": ""}, {"JOURNAL_DB_PATH": "relative.db"},

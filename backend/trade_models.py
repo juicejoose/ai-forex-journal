@@ -47,3 +47,9 @@ class TradeReviewInput(BaseModel):
     expected_revision: int = Field(ge=0, strict=True)
     discipline: Literal['not_reviewed', 'followed', 'deviated']
     notes: str = Field(default='', max_length=5000)
+
+
+class TradeAnalysisInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: UUID
+    source: Literal['saved_setup', 'entry_time']
