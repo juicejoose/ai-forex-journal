@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { API } from './api.js'
 import MarketReview from './MarketReview.jsx'
-import { referencedItems, setupRequest, setupTime, previewRequest } from './setupEvaluation.js'
+import { referencedItems, setupRequest, setupTime, previewRequest, setupPageOffset } from './setupEvaluation.js'
 import { setupChartSnapshot } from './setupHistory.js'
 import SetupChartEditor from './SetupChartEditor.jsx'
+import SavedTradePlan, { TradePlanFields } from './SetupTradePlan.jsx'
+import DeleteSetupDialog from './DeleteSetupDialog.jsx'
 import './SetupEvaluator.css'
 
-const freshForm = () => ({ title: '', direction: 'long', mode: 'live', asOf: '', includeQuote: true, zones: [], observations: '' })
+const freshForm = () => ({ title: '', direction: 'long', mode: 'live', asOf: '', includeQuote: true, zones: [], observations: '',
+  tradePlan: { entryPrice: '', stopLoss: '', takeProfit: '' } })
 const labels = { supported: 'Supported', contradicted: 'Contradicted', mixed: 'Mixed evidence', insufficient_evidence: 'Insufficient evidence' }
 const displayPrice = value => Number.isFinite(value) ? value.toFixed(5) : '—'
 
-async function request(path, body, signal) {
-  const response = await fetch(`${API}${path}`, body === undefined ? { signal } : {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
+async function request(path, body, signal, method = body === undefined ? 'GET' : 'POST') {
+  const response = await fetch(`${API}${path}`, { method, signal,
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   })
+  if (response.ok && response.status === 204) return null
   const data = await response.json().catch(() => null)
   if (!response.ok) {
     const error = new Error(typeof data?.detail === 'string' ? data.detail : `Request failed (${response.status}). Check the setup inputs and try again.`)
@@ -41,7 +45,7 @@ function Assessment({ attempt, catalog }) {
       <EvidenceList title="Supporting evidence" ids={result.supporting_facts} items={catalog.facts} />
       <EvidenceList title="Conflicting evidence" ids={result.conflicting_facts} items={catalog.facts} />
     </div>
-    <EvidenceList title="Price and zone context" ids={result.context_facts} items={catalog.facts} />
+    <EvidenceList title="Price and setup context" ids={result.context_facts} items={catalog.facts} />
     <EvidenceList title="Conditions to monitor" ids={result.watch_conditions} items={catalog.conditions} />
     <EvidenceList title="Possible invalidation scenarios" ids={result.invalidation_conditions} items={catalog.conditions} />
     <details className="se-help"><summary>Assessment record</summary>
@@ -57,6 +61,12 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [record, setRecord] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [notice, setNotice] = useState('')
+  const historyRef = useRef(null)
+  const deleteReturnRef = useRef(null)
+  const historyRevision = useRef(0)
   const [preview, setPreview] = useState(null)
   const [drawing, setDrawing] = useState(null)
   const previewRetry = useRef(null)
@@ -85,9 +95,15 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
   useEffect(() => {
     if (!active) return
     const controller = new AbortController()
+    const revision = ++historyRevision.current
     request(`/setup-snapshots?limit=10&offset=${offset}`, undefined, controller.signal)
-      .then(data => { if (!controller.signal.aborted) { setHistory(data); setHistoryError('') } })
-      .catch(err => { if (!controller.signal.aborted) setHistoryError(err.message) })
+      .then(data => {
+        if (controller.signal.aborted || historyRevision.current !== revision) return
+        const page = setupPageOffset(offset, data.total)
+        if (page !== offset) { setOffset(page); return }
+        setHistory(data); setHistoryError('')
+      })
+      .catch(err => { if (!controller.signal.aborted && historyRevision.current === revision) setHistoryError(err.message) })
     return () => controller.abort()
   }, [active, offset, refresh])
 
@@ -165,6 +181,37 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
     catch (err) { setError(err.message) }
     finally { setBusy('') }
   }
+  function askDelete(target, opener) {
+    deleteReturnRef.current = opener
+    setDeleteError('')
+    setNotice('')
+    setDeleteTarget(target)
+  }
+  function cancelDelete() {
+    setDeleteTarget(null)
+    requestAnimationFrame(() => deleteReturnRef.current?.focus())
+  }
+  async function confirmDelete() {
+    if (busy || !deleteTarget) return
+    const target = deleteTarget
+    setDeleteError('')
+    setBusy('Deleting saved setup…')
+    try {
+      try { await request(`/setup-snapshots/${target.id}`, undefined, undefined, 'DELETE') }
+      catch (err) { if (err.status !== 404) throw err }
+      // Ignore an older list response that still contains the deleted setup.
+      historyRevision.current += 1
+      setHistory(current => ({ ...current, items: current.items.filter(item => item.id !== target.id), total: Math.max(0, current.total - 1) }))
+      setOffset(current => setupPageOffset(current, Math.max(0, history.total - 1)))
+      if (record?.id === target.id) { setRecord(null); aiRequest.current = null }
+      setDeleteTarget(null)
+      setError('')
+      setNotice('Saved setup and its AI assessments deleted.')
+      setRefresh(value => value + 1)
+      requestAnimationFrame(() => historyRef.current?.focus())
+    } catch (err) { setDeleteError(err.message) }
+    finally { setBusy('') }
+  }
   async function evaluate() {
     if (busy || !record) return
     setError('')
@@ -193,6 +240,7 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
     </header>
     {error && <p ref={errorRef} className="se-error" role="alert">{error}</p>}
     {busy && <p className="se-notice" role="status">{busy}</p>}
+    {notice && <p className="se-notice" role="status">{notice}</p>}
     <div className="se-workspace">
       <form className="se-card se-form" onSubmit={capture}>
         <div className="se-card-heading"><span className="se-step">1</span><h3>Capture the evidence</h3><span className="se-help">Four-factor v7</span></div>
@@ -211,7 +259,8 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
               <input type="datetime-local" required value={form.asOf} onChange={e => edit({ asOf: e.target.value })} />
             </label> : <label className="se-checkbox"><input type="checkbox" checked={form.includeQuote} onChange={e => edit({ includeQuote: e.target.checked })} />Include a fresh practice quote</label>}
           </div>
-          {form.mode === 'historical' && <p className="se-notice">A historical reconstruction uses only candles completed by the cutoff. Zones and notes entered now are labelled retrospective.</p>}
+          {form.mode === 'historical' && <p className="se-notice">A historical reconstruction uses only candles completed by the cutoff. Zones, notes and any trade plan entered now are labelled retrospective.</p>}
+          <TradePlanFields value={form.tradePlan} direction={form.direction} onChange={tradePlan => edit({ tradePlan })} />
           <div className="se-preview" ref={previewRef}>
             <div className="se-row"><div><h4>Chart preview</h4><p className="se-help">Load completed candles to mark zones visually, or enter prices manually below.</p></div>
               <button type="button" onClick={loadPreview}>{preview ? 'Refresh chart' : 'Load chart'}</button></div>
@@ -246,14 +295,16 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
         </fieldset>
       </form>
       <aside className="se-card se-history">
-        <div className="se-row"><h3>Saved setups</h3><button type="button" disabled={fieldsDisabled} onClick={() => setRefresh(value => value + 1)}>Refresh</button></div>
+        <div className="se-row"><h3 ref={historyRef} tabIndex={-1}>Saved setups</h3><button type="button" disabled={fieldsDisabled} onClick={() => setRefresh(value => value + 1)}>Refresh</button></div>
         <p className="se-help">Reopen the evidence as it was captured.</p>
         {historyError && <p className="se-error" role="alert">{historyError}</p>}
         {!historyError && history.total === 0 && <p className="se-empty">Your first captured setup will appear here.</p>}
-        <ul>{history.items.map(item => <li key={item.id}><button type="button" disabled={fieldsDisabled} aria-pressed={record?.id === item.id} onClick={() => openRecord(item.id)}>
+        <ul>{history.items.map(item => <li key={item.id}><button className="se-open-setup" type="button" disabled={fieldsDisabled} aria-pressed={record?.id === item.id} onClick={() => openRecord(item.id)}>
           <strong>{item.title || `${item.direction === 'long' ? 'Long' : 'Short'} setup`}</strong><span>{setupTime(item.cutoff_at)}</span>
           <small>{item.direction.toUpperCase()} · {item.mode === 'live' ? 'Captured live' : 'Historical'}</small>
-        </button></li>)}</ul>
+        </button><button type="button" className="se-delete-link" disabled={fieldsDisabled}
+          aria-label={`Delete ${item.title || `${item.direction === 'long' ? 'Long' : 'Short'} setup`} · ${setupTime(item.cutoff_at)}`}
+          onClick={event => askDelete(item, event.currentTarget)}>Delete</button></li>)}</ul>
         {history.total > 10 && <div className="se-row"><button type="button" disabled={fieldsDisabled || offset === 0} onClick={() => setOffset(value => Math.max(0, value - 10))}>Previous</button>
           <span className="se-help">{offset + 1}–{Math.min(offset + 10, history.total)} / {history.total}</span>
           <button type="button" disabled={fieldsDisabled || offset + 10 >= history.total} onClick={() => setOffset(value => value + 10)}>Next</button></div>}
@@ -261,7 +312,8 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
     </div>
     {record && <div className="se-results" ref={resultRef} tabIndex={-1}>
       <div className="se-card">
-        <div className="se-card-heading"><span className="se-step">2</span><h3>{snapshot.entry.title || 'Saved setup'}</h3><span className="se-saved">Snapshot saved</span></div>
+        <div className="se-card-heading"><span className="se-step">2</span><h3>{snapshot.entry.title || 'Saved setup'}</h3><span className="se-saved">Snapshot saved</span>
+          <button type="button" className="se-delete-link" disabled={fieldsDisabled} onClick={event => askDelete({ id: record.id, title: snapshot.entry.title, direction: snapshot.entry.direction, cutoff_at: snapshot.cutoff_at, mode: snapshot.mode }, event.currentTarget)}>Delete setup</button></div>
         <div className="se-snapshot-grid">
           <div><span>Proposed direction</span><strong>{snapshot.entry.direction === 'long' ? 'Long / bullish' : 'Short / bearish'}</strong></div>
           <div><span>Evidence cutoff</span><strong>{setupTime(snapshot.cutoff_at)}</strong></div>
@@ -271,8 +323,9 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
         {snapshot.quote.status === 'available' && <p className="se-help">Practice bid {displayPrice(snapshot.quote.bid)} · ask {displayPrice(snapshot.quote.ask)}. The quote does not affect four-factor scores.</p>}
         {snapshot.quote.reason && <p className="se-help">{snapshot.quote.reason} Using the last completed close.</p>}
         {snapshot.prior_session_context && <p className="se-notice">No H4 candle has closed in the current session. These scores describe the previous completed session.</p>}
-        {snapshot.preview_id && <p className="se-notice">Captured from a fixed chart preview. Prices and scores are as of the evidence cutoff; your zones and notes were finalized at {setupTime(snapshot.finalized_at)}.</p>}
-        {snapshot.mode === 'historical' && <p className="se-notice">Historical reconstruction. The market data stops at the cutoff; your zones and notes were entered afterward.</p>}
+        {snapshot.preview_id && <p className="se-notice">Captured from a fixed chart preview. Prices and scores are as of the evidence cutoff; your zones, notes and any trade plan were finalized at {setupTime(snapshot.finalized_at)}.</p>}
+        {snapshot.mode === 'historical' && <p className="se-notice">Historical reconstruction. The market data stops at the cutoff; your zones, notes and any trade plan were entered afterward.</p>}
+        <SavedTradePlan plan={snapshot.trade_plan} />
         {snapshot.zones.length > 0 && <div className="se-zone-results">{snapshot.zones.map(zone => <div key={zone.id}>
           <strong>{zone.label} <span className="se-help">· {zone.kind} · {zone.timeframe}</span></strong>
           <p>{zone.lower}–{zone.upper}</p><p className="se-help">Reference is {zone.price_position} · {zone.distance_pips.toFixed(1)} pips from edge. Last completed close is {zone.last_close_position}.</p>
@@ -289,5 +342,7 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange }) 
       </div>
       {active && <MarketReview key={record.id} snapshot={chartSnapshot} evaluation={snapshot.rule_evaluation} setupZones={snapshot.zones} />}
     </div>}
+    {deleteTarget && <DeleteSetupDialog setup={deleteTarget} pending={Boolean(busy)} error={deleteError}
+      onCancel={cancelDelete} onConfirm={confirmDelete} />}
   </section>
 }

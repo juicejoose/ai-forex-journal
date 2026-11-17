@@ -41,18 +41,32 @@ class SetupPreviewInput(BaseModel):
         return self
 
 
+class SetupTradePlan(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    entry_price: Price
+    stop_loss: Price
+    take_profit: Price
+
+
 class SetupInput(SetupPreviewInput):
     title: str = Field(default="", max_length=120)
     direction: Literal["long", "short"]
     zones: list[SetupZone] = Field(default_factory=list, max_length=8)
     observations: str = Field(default="", max_length=5000)
     preview_id: UUID | None = None
+    trade_plan: SetupTradePlan | None = None
 
     @model_validator(mode="after")
     def distinct_zones(self):
         labels = [zone.label.casefold() for zone in self.zones]
         if len(set(labels)) != len(labels):
             raise ValueError("Give each zone a distinct label.")
+        if self.trade_plan:
+            plan = self.trade_plan
+            ordered = (plan.stop_loss < plan.entry_price < plan.take_profit if self.direction == "long"
+                       else plan.take_profit < plan.entry_price < plan.stop_loss)
+            if not ordered:
+                raise ValueError("Long plans require stop loss < entry < take profit; short plans require take profit < entry < stop loss.")
         return self
 
 

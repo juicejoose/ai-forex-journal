@@ -6,8 +6,10 @@ from typing import Literal
 from pydantic import Field, ValidationError
 from journal_grounding import StrictModel, InvalidJournalEvidence, _check_explanation
 from zone_history import history_summary, history_description
+from zone_patterns import pattern_summary, pattern_description
+from trade_plan import trade_plan_description
 
-PROMPT_VERSION = "setup_review_v2_zone_history"
+PROMPT_VERSION = "setup_review_v4_trade_plan"
 
 
 class SetupAssessment(StrictModel):
@@ -35,15 +37,40 @@ Select supporting_facts only from facts whose role is supports; conflicting_fact
 only from conflicts; context_facts only from context or missing. Cite real IDs,
 without duplicates. Include conflicting evidence when the catalog contains it.
 Include the reference-price fact and every supplied zone fact in context_facts.
+When supplied, also include the trade-plan fact in context_facts. Its prices are
+the user's proposed levels, not market quotes, actual fills or recommendations.
+Python supplies risk/reward distances, ratio and zone positions; do not calculate
+or change them, suggest replacement levels, or convert them to monetary risk.
+No minimum ratio is configured. The ratio is neither strategy support/conflict
+nor an entry requirement, expected return, probability or evidence of discipline.
+The plan's distances exclude spread, commission, financing and slippage; stops
+and targets are not guaranteed executions. Do not infer a trade was entered,
+stopped out, profitable, or hit its target from these levels or historical candles.
+Plans entered after a historical/preview cutoff have the same retrospective
+provenance as other annotations. An absent plan is optional, not a rule violation.
 supported needs supporting evidence, contradicted needs conflicting evidence,
 mixed needs both; use insufficient_evidence when meaningful support cannot be
 assessed. Do not present rule alignment as a calibrated probability.
 
 Zones are unverified user observations. Their geometry is calculated, but a
-zone's importance is not proven. Proximity or a close beyond a zone is not a
-confirmed rejection, breakout, retest or trend reversal. Those pattern rules
-are not defined in this MVP; never assert that one has been confirmed. Squeeze
-compression is not a breakout. Preserve the recorded momentum direction/pace.
+zone's importance is not proven. Only saved zone_patterns_v1 events establish
+matches to the user's rejection, breakout and retest definitions. Say 'rule met'
+rather than 'confirmed breakout/rejection/retest/reversal'. Never infer a pattern
+from proximity, a quote, a visit count, or Squeeze compression. Preserve momentum pace.
+One completed close beyond the original zone is a breakout rule match. Rejection
+requires a prior close outside, then contact and a close back on the approach side.
+A held retest requires a later candle approaching from the breakout side, contact,
+and a close on that same side within six completed H4 candles. A close beyond the
+opposite edge before a hold invalidates that attempt. Inside closes do not. Missing
+candles interrupt the sequence. Pending, expired, held and invalidated are different;
+expiry is not failure, invalidation is not a trade loss or an opposite breakout.
+These rules use zero buffer and no wick ratio, candle colour or volume test.
+Events are historical facts at their recorded close, not continuing confirmation
+or proof of future direction. Do not describe an older event as happening now.
+Only a latest-candle directional pattern fact may be used as directional support
+or conflict; older events remain context. No-pattern/no-origin/old snapshots do not
+prove that patterns never occurred. Do not recalculate old snapshots or fill gaps.
+Pattern evidence adds no strategy points and is not independent proof of strength.
 Raw RSI14 and RSI14 SMA14 are distinct. Only the latter scores the current RSI rule.
 When zone history is supplied, it describes completed H4 candle observations
 starting at the user-supplied origin, even if the zone label says D1 or W1.
@@ -108,16 +135,31 @@ def build_catalog(snapshot):
                  candle_id=candle["candle_id"], factor_id=factor["factor_id"], result=factor)
     ref = snapshot["reference_price"]
     fact(f"Reference price: {ref['value']:.5f} ({ref['basis'].replace('_', ' ')}).", reference=ref)
+    plan = snapshot.get("trade_plan")
+    if plan:
+        fact(trade_plan_description(plan), trade_plan=plan)
     for zone in snapshot["zones"]:
-        zone_context = {key: value for key, value in zone.items() if key != "history"}
+        zone_context = {key: value for key, value in zone.items() if key not in ("history", "patterns")}
         history_text = ""
         if "history" in zone:
             zone_context["history"] = history_summary(zone["history"])
             history_text = " " + history_description(zone["history"])
+        if "patterns" in zone:
+            zone_context["patterns"] = pattern_summary(zone["patterns"])
+            history_text += " " + pattern_description(zone["patterns"])
         fact(f"{zone['label']}: reference price is {zone['price_position']} the {zone['kind']} zone "
              f"{zone['lower']}–{zone['upper']}, {zone['distance_pips']:.1f} pips from its nearest edge. "
              f"Latest completed close is {zone['last_close_position']}; candle range "
              f"{'overlaps' if zone['last_candle_overlaps'] else 'does not overlap'} the zone." + history_text, zone=zone_context)
+        events = zone.get("patterns", {}).get("events", [])
+        if events:
+            last_event = events[-1]
+            current = last_event["close_time"] == snapshot["data_through"]
+            directional = last_event["kind"] in ("rejection", "breakout", "retest_held")
+            fact(f"{zone['label']}: " + last_event["description"] +
+                 (" This event is on the latest completed candle." if current else " Earlier event; historical context only."),
+                 role(last_event["direction"]) if current and directional else "context",
+                 pattern_event=last_event, pattern_zone_id=zone["id"], on_latest_candle=current)
         for position, boundary in (("above", zone["upper"]), ("below", zone["lower"])):
             conditions.append({"id": f"W{len(conditions)+1}", "kind": "watch", "zone_id": zone["id"],
                 "text": f"Watch whether a later completed H4 candle closes {position} {zone['label']} at {boundary}.",
@@ -130,11 +172,17 @@ def build_catalog(snapshot):
                         f"{'below' if below else 'above'} {zone['label']} at {boundary}. This is a scenario, not an exit rule.",
                 "predicate": {"field": "future_h4_close", "operator": "lt" if below else "gt", "value": boundary}})
     limitations = ["Manual zones and observations are user-supplied, not independently verified.",
-        "Rejection, breakout and retest confirmation rules are not defined in this version.",
+        ("Pattern labels mean the saved candle rules matched at that time, not ongoing confirmation or a forecast. They add no four-factor points."
+         if snapshot.get("zone_pattern_version") else "This older snapshot has no saved rejection, breakout or retest rule analysis."),
         "Rule alignment is not a probability of success. An assessment is not an entry or exit instruction."]
     if not snapshot["zones"]:
         limitations.append("No support/resistance zones were supplied; zone confluence cannot be assessed.")
+    if plan:
+        limitations.append(plan["assumptions"])
     for zone in snapshot["zones"]:
+        patterns = zone.get("patterns")
+        if patterns and patterns["status"] in ("not_requested", "no_completed_candles", "insufficient_data"):
+            limitations.append(f"{zone['label']}: " + pattern_description(patterns))
         history = zone.get("history")
         if history is None:
             limitations.append(f"{zone['label']}: this older snapshot has no saved zone-history analysis.")
@@ -143,9 +191,9 @@ def build_catalog(snapshot):
         elif history["status"] == "partial_history":
             limitations.append(f"{zone['label']}: the origin predates saved history or candles are missing; observed counts are incomplete.")
     if snapshot["mode"] == "historical":
-        limitations.append("Historical reconstruction: zones and notes entered now are not proof of what was known at the cutoff.")
+        limitations.append("Historical reconstruction: zones, notes and any trade plan entered now are not proof of what was known at the cutoff.")
     if snapshot.get("preview_id"):
-        limitations.append("Market evidence and any quote were frozen when the chart preview loaded. Zones and notes were finalized afterward; they do not establish what was known at that earlier cutoff.")
+        limitations.append("Market evidence and any quote were frozen when the chart preview loaded. Zones, notes and any trade plan were finalized afterward; they do not establish what was known at that earlier cutoff.")
     if snapshot["prior_session_context"]:
         limitations.append("The current session has no completed H4 candles. Scores shown belong to the previous completed session.")
     if snapshot["quote"]["status"] != "available":
@@ -188,9 +236,9 @@ def parse_assessment(raw, snapshot):
                 raise ValueError("Invalid condition references")
         if any(f["role"] == "conflicts" for f in facts.values()) and not parsed.conflicting_facts:
             raise ValueError("Known opposition must be acknowledged")
-        required_context = {f["id"] for f in facts.values() if "zone" in f["evidence"] or "reference" in f["evidence"]}
+        required_context = {f["id"] for f in facts.values() if any(key in f["evidence"] for key in ("zone", "reference", "trade_plan"))}
         if not required_context.issubset(parsed.context_facts):
-            raise ValueError("Price and supplied zones must be acknowledged")
+            raise ValueError("Price, supplied zones and any trade plan must be acknowledged")
         if parsed.assessment in ("supported", "mixed") and not parsed.supporting_facts:
             raise ValueError("Support needs evidence")
         if parsed.assessment in ("contradicted", "mixed") and not parsed.conflicting_facts:
@@ -209,4 +257,5 @@ def ai_input(snapshot):
         "prior_session_context": snapshot["prior_session_context"],
         "strategy": snapshot["rule_evaluation"]["rule_set"],
         "price_action_version": snapshot.get("price_action_version", "zone_geometry_v1"),
+        "zone_pattern_version": snapshot.get("zone_pattern_version"),
         "observations": snapshot["entry"]["observations"], **snapshot["catalog"]}

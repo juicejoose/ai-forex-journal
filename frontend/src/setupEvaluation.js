@@ -1,3 +1,20 @@
+const validPrice = value => /^\d+(\.\d{1,5})?$/.test(value) && Number(value) > 0 && Number(value) <= 100
+
+export function tradePlanRequest(plan, direction) {
+  const entry = (plan?.entryPrice ?? '').trim()
+  const stop = (plan?.stopLoss ?? '').trim()
+  const target = (plan?.takeProfit ?? '').trim()
+  if (![entry, stop, target].some(Boolean)) return null
+  if (![entry, stop, target].every(Boolean)) throw new Error('Enter entry, stop loss, and take profit together, or clear all three to omit the trade plan.')
+  if (![entry, stop, target].every(validPrice)) throw new Error('Trade-plan prices must be positive, no more than 100, and have up to five decimal places.')
+  const ordered = direction === 'long' ? Number(stop) < Number(entry) && Number(entry) < Number(target)
+    : direction === 'short' && Number(target) < Number(entry) && Number(entry) < Number(stop)
+  if (!ordered) throw new Error(direction === 'long'
+    ? 'For a long plan, stop loss must be below entry and take profit above entry.'
+    : 'For a short plan, take profit must be below entry and stop loss above entry.')
+  return { entry_price: entry, stop_loss: stop, take_profit: target }
+}
+
 export function previewRequest(form, requestId) {
   let asOf = null
   if (form.mode === 'historical') {
@@ -20,7 +37,6 @@ export function setupRequest(form, requestId, preview = null) {
   const zones = form.zones.map(zone => {
     const label = zone.label.trim()
     const lower = zone.lower.trim(), upper = zone.upper.trim()
-    const validPrice = value => /^\d+(\.\d{1,5})?$/.test(value) && Number(value) > 0 && Number(value) <= 100
     if (!label || labels.has(label.toLowerCase())) throw new Error('Give each zone a distinct name.')
     if (!validPrice(lower) || !validPrice(upper) || Number(lower) > Number(upper)) {
       throw new Error('Enter positive zone prices with up to five decimal places. Lower must not exceed upper.')
@@ -37,9 +53,11 @@ export function setupRequest(form, requestId, preview = null) {
     }
     return { label, kind: zone.kind, lower, upper, timeframe: zone.timeframe, ...(origin ? { origin_at: origin } : {}) }
   })
+  const plan = tradePlanRequest(form.tradePlan, form.direction)
   return { request_id: requestId, title: form.title.trim(), direction: form.direction,
     mode: form.mode, as_of: asOf, include_quote: form.mode === 'live' && form.includeQuote,
-    observations: form.observations.trim(), zones, ...(preview ? { preview_id: preview.id } : {}) }
+    observations: form.observations.trim(), zones, ...(preview ? { preview_id: preview.id } : {}),
+    ...(plan ? { trade_plan: plan } : {}) }
 }
 
 export function referencedItems(ids, items) {
@@ -53,4 +71,9 @@ export function setupTime(value) {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
     timeZoneName: 'short',
   }) : 'Unavailable'
+}
+
+// Keep the nearest remaining page when its last saved setup is deleted.
+export function setupPageOffset(offset, total, pageSize = 10) {
+  return Math.min(offset, Math.max(0, Math.ceil(total / pageSize) - 1) * pageSize)
 }

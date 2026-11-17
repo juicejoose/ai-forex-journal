@@ -35,6 +35,7 @@ class HostedTests(unittest.TestCase):
             for method, path in [("GET", "/"), ("GET", "/assets/app.js"), ("GET", "/api/docs"),
                                  ("GET", "/api/journals"), ("GET", "/api/strategy-profiles"),
                                  ("POST", "/api/journal/generate"), ("DELETE", "/api/journals/1"),
+                                 ("DELETE", "/api/setup-snapshots/00000000-0000-0000-0000-000000000000"),
                                  ("POST", "/api/setup-previews"), ("GET", "/api/setup-snapshots"), ("POST", "/api/setup-snapshots"),
                                  ("POST", "/api/setup-snapshots/00000000-0000-0000-0000-000000000000/evaluate")]:
                 with self.subTest(path=path):
@@ -65,6 +66,17 @@ class HostedTests(unittest.TestCase):
         with self.client() as restarted:
             items = restarted.get("/api/strategy-profiles", auth=self.login).json()["items"]
             self.assertEqual([item["name"] for item in items], ["Hosted profile"])
+
+    def test_setup_deletion_requires_login_and_same_origin(self):
+        from tests.test_setup_evaluator import snapshot, inputs
+        with self.client() as client, patch('setup_api.build_setup_snapshot', return_value=snapshot()):
+            saved = client.post('/api/setup-snapshots', json=inputs(), auth=self.login).json()
+            url = '/api/setup-snapshots/' + saved['id']
+            self.assertEqual(client.delete(url).status_code, 401)
+            for headers in ({'Origin':'https://other.example'}, {'Origin':'null'}, {'Sec-Fetch-Site':'cross-site'}):
+                self.assertEqual(client.delete(url,auth=self.login,headers=headers).status_code,403)
+            self.assertEqual(client.get(url,auth=self.login).status_code,200)
+            self.assertEqual(client.delete(url,auth=self.login,headers={'Origin':'https://journal.example'}).status_code,204)
 
     def test_startup_requires_credentials_storage_and_built_ui(self):
         for changes in ({"JOURNAL_PASSWORD": ""}, {"JOURNAL_DB_PATH": "relative.db"},

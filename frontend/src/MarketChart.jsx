@@ -55,7 +55,7 @@ function SelectedCandle({ row, hasEvaluation }) {
   </div>
 }
 
-export default function MarketChart({ snapshot, evaluation, selectedTime, onSelect, zoneOverlay, showZoneCloses = false, frozen = false, draftZones, drawing, onDrawingPoint }) {
+export default function MarketChart({ snapshot, evaluation, selectedTime, onSelect, zoneOverlay, showZoneCloses = false, showZonePatterns = false, frozen = false, draftZones, drawing, onDrawingPoint }) {
   const id = useId()
   const hostRef = useRef(null)
   const shadeRef = useRef(null)
@@ -211,7 +211,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     const first = model.rows[model.startIndex]
     const markers = [{ time: first.time, position: 'belowBar', shape: 'circle', color: colors.ma, text: `${period} start` }]
     markers.push({ time: selected.time, position: 'aboveBar', shape: 'arrowDown', color: colors.ma, text: selected.score?.candle_id ?? 'Selected' })
-    markers.push(...zoneChartMarkers(zoneOverlay, model.rows, showZoneCloses))
+    markers.push(...zoneChartMarkers(zoneOverlay, model.rows, showZoneCloses, showZonePatterns))
     api.markers.setMarkers(markers.sort((a, b) => a.time - b.time))
     const range = api.chart.timeScale().getVisibleLogicalRange()
     if (api.lastSelection !== selected.time && range && (selectedIndex < range.from || selectedIndex > range.to)) {
@@ -219,7 +219,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
       api.chart.timeScale().setVisibleLogicalRange({ from: selectedIndex - span / 2, to: selectedIndex + span / 2 })
     }
     api.lastSelection = selected.time
-  }, [selected, selectedIndex, model, identity, period, zoneOverlay, showZoneCloses])
+  }, [selected, selectedIndex, model, identity, period, zoneOverlay, showZoneCloses, showZonePatterns])
 
   useEffect(() => {
     const api = apiRef.current

@@ -10,6 +10,7 @@ export default function MarketReview({ snapshot, evaluation, setupZones }) {
   const [chosenTime, setChosenTime] = useState(null)
   const [zoneId, setZoneId] = useState(null)
   const [showCloses, setShowCloses] = useState(false)
+  const [showPatterns, setShowPatterns] = useState(true)
   const chartRef = useRef(null)
   const selectedZone = setupZones?.find(zone => zone.id === zoneId) ?? setupZones?.[0]
   const available = [...(snapshot?.chart_context?.candles ?? snapshot?.previous_candles ?? []), ...(snapshot?.candles ?? [])]
@@ -18,6 +19,7 @@ export default function MarketReview({ snapshot, evaluation, setupZones }) {
   return <>
     <MarketEvidence snapshot={snapshot} />
     <SetupZoneHistory zones={setupZones} selectedZone={selectedZone} onZoneChange={setZoneId}
+      showPatterns={showPatterns} onShowPatterns={setShowPatterns}
       showCloses={showCloses} onShowCloses={setShowCloses} onSelect={time => {
         setChosenTime(time)
         requestAnimationFrame(() => chartRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
@@ -25,7 +27,7 @@ export default function MarketReview({ snapshot, evaluation, setupZones }) {
     <div ref={chartRef} style={{ scrollMarginTop: '4rem' }}>
     <Suspense fallback={<p className="ss-help" role="status">Loading market chart…</p>}>
       <MarketChart snapshot={snapshot} evaluation={evaluation} selectedTime={selectedTime} onSelect={setChosenTime}
-        zoneOverlay={selectedZone} showZoneCloses={showCloses} frozen={setupZones !== undefined} />
+        zoneOverlay={selectedZone} showZoneCloses={showCloses} showZonePatterns={showPatterns} frozen={setupZones !== undefined} />
     </Suspense>
     </div>
     <StrategyScores evaluation={evaluation} snapshot={snapshot} selectedTime={selectedTime} onSelectCandle={setChosenTime} />

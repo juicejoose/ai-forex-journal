@@ -39,8 +39,8 @@
 .se-submit { margin-top: 1.25rem; gap: 1rem; }
 .se-history > .se-help { margin: .5rem 0; }
 .se-history ul { list-style: none; padding: 0; margin: .8rem 0 0; display: grid; gap: .6rem; }
-.se-history li button { display: flex; flex-direction: column; gap: .2rem; text-align: left; width: 100%; padding: .7rem; }
-.se-history li button[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent-border); }
+.se-history li .se-open-setup { display: flex; flex-direction: column; gap: .2rem; text-align: left; width: 100%; min-width: 0; padding: .7rem; border: 0; background: transparent; }
+.se-history li:has(.se-open-setup[aria-pressed="true"]) { background: var(--accent-bg); border-color: var(--accent-border); }
 .se-history li span, .se-history li small { font-size: .61rem; color: var(--text); }
 .se-history li strong { font-size: .73rem; font-weight: 550; }
 .se-history > .se-row:last-child { margin-top: .8rem; }
@@ -71,6 +71,16 @@
 .se-evidence-group ul, .se-limitations ul { font-size: .71rem; margin: .45rem 0; }
 .se-evidence-group li, .se-limitations li { margin-bottom: .4rem; }
 .se-limitations { margin: 1rem 0; border-top: 1px solid var(--border); padding-top: .75rem; }
+.se-plan-input, .se-plan-result { margin-top: 1rem; border: 1px solid var(--border); border-radius: 9px; padding: .85rem; background: var(--social-bg); }
+.se-plan-fields { grid-template-columns: repeat(3,minmax(0,1fr)); gap: .65rem; }
+.se-plan-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .8rem; margin: .85rem 0; }
+.se-plan-metrics dt { font-size: .65rem; }
+.se-plan-metrics dd { margin: .2rem 0 0; color: var(--text-h); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.se-plan-metrics small { font-size: .65rem; font-weight: 400; }
+.se-plan-table { overflow-x: auto; border: 1px solid var(--border); border-radius: 7px; margin-top: .5rem; }
+.se-plan-table table { width: 100%; min-width: 400px; border-collapse: collapse; font-size: .7rem; }
+.se-plan-table :is(th,td) { padding: .5rem; border-bottom: 1px solid var(--border); text-align: left; }
+.se-plan-table th small { display: block; font-size: .6rem; font-weight: 400; }
 @media (prefers-color-scheme: dark) {
   .se-supported { color: #7ed6a9; }
   .se-contradicted, .se-error { color: #f09aa5; }
@@ -91,6 +101,8 @@
   .se-zone-fields > .se-zone-origin { grid-column: 1 / -1; }
   .se-history ul { grid-template-columns: minmax(0, 1fr); }
   .se-submit .se-primary { width: 100%; }
+  .se-plan-fields { grid-template-columns: 1fr; }
+  .se-plan-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
 .se-preview { margin-top: 1.1rem; border-top: 1px solid var(--border); padding-top: 1rem; scroll-margin-top: 4rem; }
@@ -104,3 +116,16 @@
 
 .se-drawing-status { min-height: 4.5rem; box-sizing: border-box; line-height: 1.6; display: flex; align-items: center; }
 @media (max-width: 600px) { .se-drawing-status { min-height: 6.5rem; } }
+
+.se-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-width: 0; border: 1px solid var(--border); border-radius: 8px; }
+.se-history li:has(.se-open-setup:hover:not(:disabled)) { border-color: var(--accent); }
+.setup-evaluator .se-delete-link { color: #ae3447; min-height: 44px; background: transparent; }
+.se-history .se-delete-link { margin: .35rem .35rem .35rem 0; padding: .3rem .45rem; font-size: .65rem; }
+.se-history h3:focus { outline: 2px solid var(--accent); outline-offset: 4px; }
+.se-delete-dialog { width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.5rem; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); text-align: left; }
+.se-delete-dialog::backdrop { background: rgb(0 0 0 / .6); }
+.se-delete-dialog h2 { font-size: 1.2rem; color: var(--text-h); margin-top: 0; }
+.se-delete-dialog p { margin: 1rem 0; }
+.se-dialog-actions { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: flex-end; margin-top: 1.5rem; }
+.setup-evaluator .se-delete-confirm { background: #b42318; color: #fff; border-color: #b42318; }
+@media (prefers-color-scheme: dark) { .setup-evaluator .se-delete-link { color: #f09aa5; } }

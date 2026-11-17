@@ -1,4 +1,5 @@
 import { chartTime } from './marketChartData.js'
+import { patternMarkers } from './setupPatterns.js'
 
 export function setupChartSnapshot(snapshot, extend = false) {
   const market = snapshot?.market_data
@@ -13,7 +14,7 @@ export function setupChartSnapshot(snapshot, extend = false) {
   return { ...market, chart_context: { purpose: 'display_only', candles: history, extended_zone_history: true } }
 }
 
-export function zoneChartMarkers(zone, rows, showCloses = false) {
+export function zoneChartMarkers(zone, rows, showCloses = false, showPatterns = false) {
   const candles = new Map(rows.map(row => [row.time, row.candle]))
   const markers = (zone?.history?.events ?? []).filter(event => {
     const time = chartTime(event.open_time)
@@ -30,6 +31,7 @@ export function zoneChartMarkers(zone, rows, showCloses = false) {
   if (start !== null && candles.has(start)) markers.push({
     time: start, position: 'aboveBar', shape: 'square', color: '#d8a64b', text: 'Zone history',
   })
+  if (showPatterns) markers.push(...patternMarkers(zone?.patterns, rows))
   return markers.sort((a, b) => a.time - b.time)
 }
 
