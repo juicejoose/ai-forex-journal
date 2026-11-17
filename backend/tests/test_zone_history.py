@@ -171,7 +171,7 @@ class ZoneHistoryIntegrationTests(unittest.TestCase):
     def test_capture_uses_saved_history_without_changing_scores_or_indicators(self):
         zone_input = {**inputs()["zones"][0], "origin_at": "2026-09-21T21:00:00+00:00"}
         snap = snapshot(zones=[zone_input])
-        self.assertEqual(snap["schema_version"], 2)
+        self.assertEqual(snap["schema_version"], 4)
         self.assertEqual(snap["price_action_version"], "zone_history_v1")
         self.assertEqual(snap["rule_evaluation"], view_at()["rule_evaluation"])
         self.assertEqual(snap["market_data"]["candles"], view_at()["market_data"]["candles"])
@@ -210,7 +210,7 @@ class ZoneHistoryIntegrationTests(unittest.TestCase):
         db.init_db()
         sd.init_setup_db()
         entry = inputs()
-        request = SetupInput(**entry).model_dump(mode="json", exclude={"request_id", "preview_id"})
+        request = SetupInput(**entry).model_dump(mode="json", exclude={"request_id", "preview_id", "trade_plan"})
         for item in request["zones"]: item.pop("origin_at", None)
         old = snapshot()
         old["schema_version"] = 1

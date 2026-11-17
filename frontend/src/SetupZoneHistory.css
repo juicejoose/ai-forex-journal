@@ -24,10 +24,30 @@
 .zh-definitions { border-top: 1px solid var(--border); margin-top: .6rem; padding-top: .5rem; }
 .zh-definitions p { font-size: .67rem; margin: .4rem 0; }
 .zone-history :is(select,button,summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.zp-panel { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: 1rem; }
+.zp-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.zp-heading h4 { margin: 0; color: var(--text-h); font-size: .85rem; }
+.zp-heading > span { font-size: .6rem; color: var(--text); }
+.zp-overview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .7rem; margin: .8rem 0; }
+.zp-overview > div { display: flex; flex-direction: column; align-items: start; gap: .35rem; padding: .8rem; background: var(--social-bg); border: 1px solid var(--border); border-radius: 8px; }
+.zp-overview span, .zp-overview small { font-size: .63rem; }
+.zp-overview strong { color: var(--text-h); font-size: .75rem; }
+.zp-event { font-size: .7rem; text-align: left; }
+.zp-event.zp-bullish { color: #249c79; }
+.zp-event.zp-bearish { color: #d65e70; }
+.zp-events { display: grid; gap: .7rem; margin: .6rem 0; max-height: 32rem; overflow: auto; }
+.zp-events article { border: 1px solid var(--border); border-radius: 8px; padding: .8rem; font-size: .68rem; }
+.zp-events article > p { line-height: 1.7; overflow-wrap: anywhere; }
+.zp-candles { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .5rem; }
+.zp-candles button { display: flex; flex-direction: column; gap: .2rem; text-align: left; font-size: .62rem; font-variant-numeric: tabular-nums; }
+.zp-attempts { list-style: none; padding: 0 !important; max-height: 24rem; overflow: auto; }
+.zp-attempts li { display: flex; flex-direction: column; align-items: start; gap: .3rem; border-bottom: 1px solid var(--border); padding: .6rem 0; font-size: .65rem; }
+.zp-panel summary { min-height: 32px; }
 @media (max-width: 600px) {
   .zone-history { padding: .8rem; }
   .zh-heading label { width: 100%; }
   .zh-metrics { grid-template-columns: 1fr 1fr; }
   .zh-metrics > :last-child { grid-column: span 2; }
   .zh-events { grid-template-columns: 1fr; }
+  .zp-overview, .zp-candles { grid-template-columns: 1fr; }
 }

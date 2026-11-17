@@ -15,6 +15,8 @@ import market_data as md
 from strategy_rules import evaluate_strategy
 import today
 from zone_history import analyze_zone_history, VERSION as ZONE_HISTORY_VERSION
+from zone_patterns import analyze_zone_patterns, VERSION as ZONE_PATTERN_VERSION
+from trade_plan import calculate_trade_plan
 
 
 def fetch_quote():
@@ -52,7 +54,7 @@ def validated_quote(raw, cutoff):
 
 def _version_hash():
     root = Path(__file__).parent
-    names = ("indicators.py", "market_data.py", "strategy_rules.py", "today.py", "setup_market.py", "zone_history.py")
+    names = ("indicators.py", "market_data.py", "strategy_rules.py", "today.py", "setup_market.py", "zone_history.py", "zone_patterns.py", "trade_plan.py")
     return hashlib.sha256(b"".join((root / name).read_bytes() for name in names)).hexdigest()
 
 
@@ -114,16 +116,18 @@ def build_setup_snapshot(entry):
     zones = zone_evidence(entry.zones, reference, last)
     for zone in zones:
         zone["history"] = analyze_zone_history(zone, source, cutoff)
-    snapshot = {"schema_version": 2, "mode": entry.mode, "cutoff_at": cutoff.isoformat(),
+        zone["patterns"] = analyze_zone_patterns(zone, source, cutoff, zone["history"])
+    snapshot = {"schema_version": 4, "mode": entry.mode, "cutoff_at": cutoff.isoformat(),
         "received_at": received.isoformat(), "captured_at": datetime.now(md.UTC).isoformat(),
         "data_through": last["close_time"], "calculation_version": _version_hash(),
         "price_action_version": ZONE_HISTORY_VERSION, "instrument": "EUR_USD", "timeframe": "H4",
+        "zone_pattern_version": ZONE_PATTERN_VERSION,
         "entry": entry.model_dump(mode="json", exclude={"request_id"}),
         "observation_provenance": "retrospective_user_input" if entry.mode == "historical" else "user_input_at_capture",
         "prior_session_context": prior_session, "market_state": view["market_state"],
         "source_candles": source, "market_data": market, "rule_evaluation": evaluation,
         "quote": quote_data, "reference_price": reference,
-        "zones": zones}
+        "zones": zones, "trade_plan": calculate_trade_plan(entry.trade_plan, entry.direction, zones)}
     return snapshot
 
 
@@ -147,7 +151,9 @@ def capture_preview(entry, preview):
     zones = zone_evidence(entry.zones, snapshot["reference_price"], snapshot["market_data"]["candles"][-1])
     for zone in zones:
         zone["history"] = analyze_zone_history(zone, snapshot["source_candles"], cutoff)
+        zone["patterns"] = analyze_zone_patterns(zone, snapshot["source_candles"], cutoff, zone["history"])
     snapshot.update(entry=entry.model_dump(mode="json", exclude={"request_id"}), zones=zones,
+        trade_plan=calculate_trade_plan(entry.trade_plan, entry.direction, zones),
         finalized_at=datetime.now(md.UTC).isoformat(), preview_id=preview["id"],
         observation_provenance="retrospective_user_input" if entry.mode == "historical" else "user_input_after_preview")
     return snapshot

@@ -3,7 +3,7 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from openai import APIError
 
 from journal_grounding import InvalidJournalEvidence
@@ -28,6 +28,12 @@ def setup_router(get_client):
             raise HTTPException(404, "Setup snapshot not found.")
         return record
 
+    def finish(identifier, **values):
+        try:
+            return db.finish_evaluation(identifier, **values)
+        except db.SetupNotFound as exc:
+            raise HTTPException(404, str(exc)) from None
+
     @router.post("/setup-previews", status_code=201)
     def create_preview(entry: SetupPreviewInput):
         request = entry.model_dump(mode="json", exclude={"request_id"})
@@ -49,6 +55,8 @@ def setup_router(get_client):
         request = entry.model_dump(mode="json", exclude={"request_id"})
         if request.get("preview_id") is None:
             request.pop("preview_id", None)
+        if request.get("trade_plan") is None:
+            request.pop("trade_plan", None)
         # Preserve request identities from captures made before origin_at existed.
         for zone in request["zones"]:
             if zone.get("origin_at") is None:
@@ -78,6 +86,16 @@ def setup_router(get_client):
     def get_snapshot(snapshot_id: UUID):
         return {**read(snapshot_id), "evaluations": db.list_evaluations(snapshot_id)}
 
+    @router.delete("/setup-snapshots/{snapshot_id}", status_code=204)
+    def delete_snapshot(snapshot_id: UUID):
+        try:
+            deleted = db.delete_snapshot(snapshot_id)
+        except db.SetupConflict as exc:
+            raise HTTPException(409, str(exc)) from None
+        if not deleted:
+            raise HTTPException(404, "Setup snapshot not found.")
+        return Response(status_code=204)
+
     @router.post("/setup-snapshots/{snapshot_id}/evaluate")
     def evaluate(snapshot_id: UUID, entry: SetupEvaluateInput):
         record = read(snapshot_id)
@@ -86,6 +104,8 @@ def setup_router(get_client):
             attempt, created = db.begin_evaluation(snapshot_id, entry.request_id, model, ai.PROMPT_VERSION)
         except db.SetupConflict as exc:
             raise HTTPException(409, str(exc)) from None
+        except db.SetupNotFound as exc:
+            raise HTTPException(404, str(exc)) from None
         if not created:
             return attempt
         response = None
@@ -98,13 +118,13 @@ def setup_router(get_client):
                 raise InvalidJournalEvidence("The AI response was incomplete.")
             result = ai.parse_assessment(response.output_text, record["snapshot"])
         except APIError:
-            return db.finish_evaluation(attempt["id"], error="The AI request failed. Your snapshot is saved; retry when the connection or API access is available.")
+            return finish(attempt["id"], error="The AI request failed. Your snapshot is saved; retry when the connection or API access is available.")
         except InvalidJournalEvidence:
-            return db.finish_evaluation(attempt["id"], error="The AI response was refused, incomplete, or failed its evidence checks. Your snapshot is saved.")
+            return finish(attempt["id"], error="The AI response was refused, incomplete, or failed its evidence checks. Your snapshot is saved.")
         except Exception as exc:
             logger.error("Unexpected setup assessment failure: %s", type(exc).__name__)
-            return db.finish_evaluation(attempt["id"], error="The assessment could not be completed. Your snapshot is saved.")
-        return db.finish_evaluation(attempt["id"], result=result,
+            return finish(attempt["id"], error="The assessment could not be completed. Your snapshot is saved.")
+        return finish(attempt["id"], result=result,
             provider_model=getattr(response, "model", model), response_id=getattr(response, "id", None))
 
     return router

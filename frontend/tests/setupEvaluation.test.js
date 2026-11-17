@@ -32,3 +32,12 @@ test('only stored server evidence with referenced IDs is rendered', () => {
   assert.deepEqual(referencedItems([], facts), [])
   assert.equal(setupTime('invalid'), 'Unavailable')
 })
+
+test('saved setup pagination moves to the nearest remaining page after deletion', async () => {
+  const { setupPageOffset } = await import('../src/setupEvaluation.js')
+  assert.equal(setupPageOffset(10, 10), 0)
+  assert.equal(setupPageOffset(20, 20), 10)
+  assert.equal(setupPageOffset(10, 11), 10)
+  assert.equal(setupPageOffset(0, 0), 0)
+  assert.equal(setupPageOffset(20, 1), 0)
+})

@@ -2,13 +2,14 @@ import { useId } from 'react'
 import { chartStamp, chartTime } from './marketChartData.js'
 import { zoneEventLabel } from './setupHistory.js'
 import './SetupZoneHistory.css'
+import SetupZonePatterns from './SetupZonePatterns.jsx'
 
 const stamp = value => chartTime(value) === null ? 'Unavailable' : chartStamp(chartTime(value))
 const pips = (value, reason) => Number.isFinite(value) ? `${value > 0 ? '+' : ''}${value.toFixed(1)} pips` : reason === 'data_gap' ? 'Unavailable' : 'Pending'
 const statuses = { covered: 'History covered', partial_history: 'Partial history', not_requested: 'Origin not set', no_completed_candles: 'No completed candles' }
 const windowLabels = { complete: 'Full window', cutoff: 'Cutoff reached', next_visit: 'Next visit started', data_gap: 'Stopped at data gap' }
 
-export default function SetupZoneHistory({ zones, selectedZone, onZoneChange, onSelect, showCloses, onShowCloses }) {
+export default function SetupZoneHistory({ zones, selectedZone, onZoneChange, onSelect, showCloses, onShowCloses, showPatterns, onShowPatterns }) {
   const id = useId()
   if (!zones?.length) return null
   const zone = selectedZone ?? zones[0]
@@ -60,9 +61,10 @@ export default function SetupZoneHistory({ zones, selectedZone, onZoneChange, on
         <details className="zh-definitions"><summary>How these observations are counted</summary>
           <p>A visit groups consecutive H4 candles whose high–low ranges overlap the zone, including its edges. It does not count individual intrabar touches. Normal weekend closures do not split consecutive trading candles.</p>
           <p>Followup starts from the last overlapping candle’s close and covers up to three following completed, non-overlapping candles. It stops at a new visit, an unexpected data gap, or the cutoff. Positive/negative movement describes price change, not a trade outcome.</p>
-          <p>The origin is your annotation. These observations do not independently establish when a zone formed, its strength, or a confirmed breakout, rejection or retest.</p>
+          <p>The origin is your annotation. Visit counts do not establish when a zone formed or its strength. Rejection, breakout and retest matches, when available, are evaluated separately below.</p>
         </details>
       </>}
     </>}
+    <SetupZonePatterns patterns={zone.patterns} onSelect={onSelect} showPatterns={showPatterns} onShowPatterns={onShowPatterns} />
   </section>
 }

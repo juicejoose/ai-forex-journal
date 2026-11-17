@@ -13,6 +13,10 @@ class SetupConflict(ValueError):
     pass
 
 
+class SetupNotFound(ValueError):
+    pass
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -57,6 +61,48 @@ def init_setup_db():
                 BEGIN SELECT RAISE(ABORT, 'Preview evidence is fixed'); END""")
             connection.execute("INSERT INTO setup_schema_migrations VALUES (2, ?)", (datetime.now(timezone.utc).isoformat(),))
 
+        if not connection.execute("SELECT 1 FROM setup_schema_migrations WHERE version=3").fetchone():
+            # Retain only identifiers so a delayed capture retry cannot recreate deleted evidence.
+            connection.execute("""CREATE TABLE setup_deletions (
+                snapshot_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, deleted_at TEXT NOT NULL)""")
+            connection.execute("DROP TRIGGER setup_snapshot_no_delete")
+            connection.execute("""CREATE TRIGGER setup_snapshot_no_delete BEFORE DELETE ON setup_snapshots
+                WHEN NOT EXISTS (SELECT 1 FROM setup_deletions WHERE snapshot_id=OLD.id AND request_id=OLD.request_id)
+                BEGIN SELECT RAISE(ABORT, 'Use explicit setup deletion'); END""")
+            connection.execute("DROP TRIGGER setup_evaluation_no_delete")
+            connection.execute("""CREATE TRIGGER setup_evaluation_no_delete BEFORE DELETE ON setup_evaluations
+                WHEN NOT EXISTS (SELECT 1 FROM setup_deletions WHERE snapshot_id=OLD.snapshot_id)
+                BEGIN SELECT RAISE(ABORT, 'Use explicit setup deletion'); END""")
+            connection.execute("""CREATE TRIGGER setup_snapshot_no_recreate BEFORE INSERT ON setup_snapshots
+                WHEN EXISTS (SELECT 1 FROM setup_deletions WHERE snapshot_id=NEW.id OR request_id=NEW.request_id)
+                BEGIN SELECT RAISE(ABORT, 'Deleted setup request cannot be reused'); END""")
+            for action in ("UPDATE", "DELETE"):
+                connection.execute(f"""CREATE TRIGGER setup_deletion_no_{action.lower()} BEFORE {action} ON setup_deletions
+                    BEGIN SELECT RAISE(ABORT, 'Deletion identifiers are fixed'); END""")
+            connection.execute("INSERT INTO setup_schema_migrations VALUES (3, ?)", (datetime.now(timezone.utc).isoformat(),))
+
+
+def _reject_deleted_request(connection, request_id):
+    if connection.execute("SELECT 1 FROM setup_deletions WHERE request_id=?", (str(request_id),)).fetchone():
+        raise SetupConflict("This setup was deleted. Capture a new setup with a new request ID.")
+
+
+def delete_snapshot(identifier):
+    """Remove evidence and all assessments atomically; preserve only retry identifiers."""
+    identifier = str(identifier)
+    now = datetime.now(timezone.utc)
+    with db.get_connection(write=True) as connection:
+        row = connection.execute("SELECT id,request_id FROM setup_snapshots WHERE id=?", (identifier,)).fetchone()
+        if row is None:
+            return bool(connection.execute("SELECT 1 FROM setup_deletions WHERE snapshot_id=?", (identifier,)).fetchone())
+        if connection.execute("""SELECT 1 FROM setup_evaluations
+                WHERE snapshot_id=? AND status='pending' AND created_at>=?""",
+                (identifier, (now-timedelta(minutes=5)).isoformat())).fetchone():
+            raise SetupConflict("An AI assessment is still running. Wait for it to finish, then try deleting again. Interrupted requests can be deleted after five minutes.")
+        connection.execute("INSERT INTO setup_deletions VALUES (?,?,?)", (identifier,row['request_id'],now.isoformat()))
+        connection.execute("DELETE FROM setup_evaluations WHERE snapshot_id=?", (identifier,))
+        connection.execute("DELETE FROM setup_snapshots WHERE id=?", (identifier,))
+        return True
 
 
 def _snapshot(row):
@@ -71,6 +117,7 @@ def _snapshot(row):
 
 def find_snapshot_request(request_id, request):
     with db.get_connection() as connection:
+        _reject_deleted_request(connection, request_id)
         row = connection.execute("SELECT * FROM setup_snapshots WHERE request_id=?", (str(request_id),)).fetchone()
     if row and row["request_json"] != canonical(request):
         raise SetupConflict("This request ID already belongs to different setup inputs.")
@@ -80,6 +127,7 @@ def find_snapshot_request(request_id, request):
 def store_snapshot(request_id, request, snapshot):
     raw = canonical(snapshot)
     with db.get_connection(write=True) as connection:
+        _reject_deleted_request(connection, request_id)
         row = connection.execute("SELECT * FROM setup_snapshots WHERE request_id=?", (str(request_id),)).fetchone()
         if row:
             if row["request_json"] != canonical(request):
@@ -127,6 +175,9 @@ def list_evaluations(snapshot_id):
 def begin_evaluation(snapshot_id, request_id, model, prompt_version):
     now = datetime.now(timezone.utc)
     with db.get_connection(write=True) as connection:
+        # Serialize against deletion before reserving an AI attempt.
+        if not connection.execute("SELECT 1 FROM setup_snapshots WHERE id=?", (str(snapshot_id),)).fetchone():
+            raise SetupNotFound("Setup snapshot not found.")
         # Expire before looking up an idempotency key so retrying a lost response
         # also recovers a request whose process stopped before finalization.
         connection.execute("""UPDATE setup_evaluations SET status='failed',completed_at=?,error_message=?
@@ -152,7 +203,10 @@ def finish_evaluation(identifier, *, result=None, error=None, provider_model=Non
             provider_model=?,provider_response_id=? WHERE id=? AND status='pending'""", (
             "failed" if error else "completed",datetime.now(timezone.utc).isoformat(),canonical(result) if result else None,
             error,provider_model,response_id,str(identifier)))
-        return _evaluation(connection.execute("SELECT * FROM setup_evaluations WHERE id=?", (str(identifier),)).fetchone())
+        row = connection.execute("SELECT * FROM setup_evaluations WHERE id=?", (str(identifier),)).fetchone()
+        if row is None:
+            raise SetupNotFound("The setup or assessment is no longer available.")
+        return _evaluation(row)
 
 
 def _preview(row):

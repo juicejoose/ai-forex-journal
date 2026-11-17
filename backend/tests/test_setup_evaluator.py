@@ -54,7 +54,7 @@ def valid_assessment(snap):
     return {"assessment": verdict,
         "explanation": "The proposed direction has support, but opposing momentum and unconfirmed price action call for caution.",
         "supporting_facts": support, "conflicting_facts": conflicts,
-        "context_facts": [f["id"] for f in facts if "zone" in f["evidence"] or "reference" in f["evidence"]],
+        "context_facts": [f["id"] for f in facts if any(key in f["evidence"] for key in ("zone", "reference", "trade_plan"))],
         "watch_conditions": [c["id"] for c in snap["catalog"]["conditions"] if c["kind"] == "watch"][:2],
         "invalidation_conditions": [c["id"] for c in snap["catalog"]["conditions"] if c["kind"] == "invalidation"][:1]}
 
@@ -272,7 +272,7 @@ class SetupPersistenceAndAPITests(unittest.TestCase):
         for statement in ("UPDATE setup_snapshots SET snapshot_json='{}'", "DELETE FROM setup_snapshots"):
             with self.assertRaises(sqlite3.IntegrityError), db.get_connection(write=True) as connection:
                 connection.execute(statement)
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(sd.SetupNotFound):
             sd.begin_evaluation(uuid4(), uuid4(), "test", ai.PROMPT_VERSION)
         self.assertEqual(sd.fetch_snapshot(record["id"])["snapshot"], self.snap)
 
@@ -292,7 +292,7 @@ class SetupPersistenceAndAPITests(unittest.TestCase):
         first = self.client.post(url, json=body).json()
         self.assertEqual(first["status"], "completed")
         self.assertEqual(first["provider_model"], "test-model")
-        self.assertEqual(first["prompt_version"], "setup_review_v2_zone_history")
+        self.assertEqual(first["prompt_version"], "setup_review_v4_trade_plan")
         self.assertEqual(self.client.post(url, json=body).json(), first)
         self.provider.assert_called_once()
         args = self.provider.call_args.kwargs
