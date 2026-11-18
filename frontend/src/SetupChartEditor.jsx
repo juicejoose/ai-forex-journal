@@ -9,10 +9,11 @@ const MarketChart = lazy(() => import('./MarketChart.jsx'))
 export default function SetupChartEditor({ preview, zones, onZonesChange, drawing, onDrawingChange, disabled }) {
   const [selectedTime, setSelectedTime] = useState(null)
   const market = useMemo(() => setupChartSnapshot(preview.snapshot, true), [preview.snapshot])
-  const extra = useChartContext(market,false)
+  const extra = useChartContext(market,false,preview.snapshot.mode === 'live' ? preview.snapshot.cutoff_at : null)
   const point = value => {
     if (disabled || !drawing) return
     if (drawing.kind === 'origin') {
+      if (value.candle.complete === false) return
       onZonesChange(zones.map(zone => zone.key === drawing.key ? { ...zone, originAt: localInputTime(value.candle.open_time) } : zone))
       onDrawingChange(null)
     } else if (drawing.first === undefined) onDrawingChange({ ...drawing, first: value.price })
@@ -34,7 +35,7 @@ export default function SetupChartEditor({ preview, zones, onZonesChange, drawin
       {drawing && <button type="button" onClick={() => onDrawingChange(null)}>Cancel drawing</button>}
     </div>
     <p className="se-drawing-status" role="status">{drawing?.kind === 'origin'
-      ? `Select an origin candle in the price chart for ${zones.find(zone => zone.key === drawing.key)?.label || 'this zone'}.`
+      ? `Select a completed origin candle in the price chart for ${zones.find(zone => zone.key === drawing.key)?.label || 'this zone'}.`
       : drawing ? drawing.first === undefined ? 'Select the first price boundary on the price chart.'
         : `First boundary: ${drawing.first.toFixed(5)}. Select the second price boundary.`
         : 'Choose a drawing tool, then click or tap two price boundaries. You can refine prices and names below. Origin selection is optional and separate.'}</p>

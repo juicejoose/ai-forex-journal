@@ -4,14 +4,20 @@ export const CONTEXT_CANDLES = 160
 
 export function chartBoundaries(snapshot, includeAfter) {
   const rows = snapshot?.candles ?? []
-  return { before:rows[0]?.open_time ?? null, after:includeAfter ? rows.at(-1)?.close_time ?? null : null }
+  return { before:rows[0]?.open_time ?? snapshot?.session?.start_utc ?? null, after:includeAfter ? rows.at(-1)?.close_time ?? null : null }
 }
 
-export function validChartContext(data, before, after) {
+export function validChartContext(data, before, after, formingAt=null) {
   const start = chartTime(before), end = chartTime(after), retrieved = chartTime(data?.retrieved_at)
   const ordered = rows => rows.every((row,index) => validCandle(row) &&
     (index === 0 || chartTime(row.open_time) >= chartTime(rows[index-1].close_time)))
-  return start !== null && retrieved !== null && data?.schema_version === 1 &&
+  const forming = data?.forming_candle
+  const liveAt = chartTime(formingAt)
+  const validForming = chartTime(data?.forming_at) === liveAt && (!forming ||
+    (liveAt !== null && end === null && validCandle(forming) && forming.complete === false &&
+      chartTime(forming.open_time) >= start && chartTime(forming.open_time) <= liveAt &&
+      liveAt <= retrieved && retrieved < chartTime(forming.close_time)))
+  return validForming && start !== null && retrieved !== null && data?.schema_version === 1 &&
     data.purpose === 'display_only' && data.instrument === 'EUR_USD' && data.timeframe === 'H4' &&
     data.target_count === CONTEXT_CANDLES && chartTime(data.before_at) === start && chartTime(data.after_at) === end &&
     Array.isArray(data.preceding) && data.preceding.length <= CONTEXT_CANDLES && ordered(data.preceding) &&
@@ -34,6 +40,7 @@ export function withChartContext(snapshot, context) {
   })
   return {...snapshot,
     chart_context:{purpose:'display_only',candles:history,reconstructed_context:Boolean(context)},
-    chart_followup:{purpose:'display_only',candles:context?.following ?? []},
+    chart_followup:{purpose:'display_only',as_of:context?.retrieved_at,candles:context?.following ?? []},
+    chart_forming:{purpose:'display_only',candle:context?.forming_candle ?? null},
   }
 }

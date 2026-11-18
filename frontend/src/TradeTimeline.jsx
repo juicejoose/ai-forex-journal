@@ -45,24 +45,32 @@ export default function TradeTimeline({ record, active }) {
   }, [id, exitAt, active, reload])
 
   return <section className="trade-card trade-timeline" aria-label="Trade timeline">
-    <div className="trade-row"><div><h3>Trade timeline</h3><p className="trade-help">{exitAt ? 'Entry, exit and up to 160 candles afterward' : 'Entry through the latest available candle · refreshes every minute'}</p></div>
-      <button type="button" onClick={() => setReload(value => value + 1)} disabled={fetching}>{fetching ? 'Refreshing chart…' : 'Refresh chart'}</button></div>
-    <p className="trade-help">Market prices after entry are for reviewing the trade. Your saved four-factor assessment stays unchanged.</p>
+    <div className="trade-timeline-toolbar">
+      <p className="trade-help">{view ? `Checked ${stamp(view.as_of)}` : 'Trade timeline'} · {exitAt ? 'Refresh for later candles' : 'Updates every minute'} · OANDA midpoint</p>
+      <button type="button" onClick={() => setReload(value => value + 1)} disabled={fetching}>{fetching ? 'Refreshing chart…' : 'Refresh chart'}</button>
+    </div>
     {error && <p className="trade-error" role="alert">{error} {view && 'Showing the last successful chart; it may be outdated.'}</p>}
     {!view && !error && <p role="status">Loading the trade’s candles and indicators…</p>}
     {view && <>
-      <dl className="trade-metrics">{view.events.map(event => <div key={event.kind}><dt>{event.kind === 'entry' ? 'Entry' : 'Exit'} · actual fill</dt><dd>{event.price}<small>{stamp(event.at)}</small></dd></div>)}
-        <div><dt>Chart checked</dt><dd>{stamp(view.as_of)}<small>OANDA midpoint prices</small></dd></div></dl>
-      {exitAt && <p className="trade-notice"><strong>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 160} candles after exit</strong> · Market context only; these candles do not affect your trade result or entry assessment.
-        {(view.coverage.after_exit_complete_count ?? 0) < (view.coverage.after_exit_target ?? 160) && ' Refresh later as more candles become available.'}</p>}
-      {view.coverage.forming_count > 0 && <p className="trade-notice">Forming H4 candle · its price and indicator values can change until it closes. It does not receive strategy points.</p>}
-      {view.coverage.contains_post_exit_prices && <p className="trade-notice">The exit happened during an H4 candle. That full candle includes prices after your exit; those prices are not part of your trade result.</p>}
-      {view.coverage.exit_candle_pending && <p className="trade-notice">The exit candle is still forming. Refresh after its scheduled close to see the full candle. This closed trade does not refresh automatically.</p>}
-      {view.coverage.missing_candle_count > 0 && <p className="trade-notice">{view.coverage.missing_candle_count} scheduled H4 candle(s) are unavailable, starting {stamp(view.coverage.first_missing_open)}. This can reflect a market closure or a data gap; the chart and indicators use only the available candles.</p>}
-      {!view.candles.length && <p className="trade-notice">No candle is available from the entry onward yet. Showing earlier market context.</p>}
-      {view.events.some(event => !event.candle_open_time) && <p className="trade-help">An entry or exit occurred outside the available candles. Its exact time is shown above; no marker is placed on an unrelated candle.</p>}
+      <div className="trade-chart-status">
+        {exitAt && <span>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 160} candles after exit</span>}
+        <span>Chart context only · entry scores stay fixed</span>
+        {view.coverage.contains_post_exit_prices && <span>Exit candle includes prices after exit</span>}
+        {view.coverage.exit_candle_pending && <span>Exit candle still forming</span>}
+      </div>
+      {view.coverage.missing_candle_count > 0 && <p className="trade-error" role="status">{view.coverage.missing_candle_count} scheduled H4 candle(s) unavailable. See chart details below.</p>}
+      {!view.candles.length && <p className="trade-help">No candle is available from entry onward yet. Showing earlier context.</p>}
       <Suspense fallback={<p role="status">Loading chart…</p>}><MarketChart snapshot={view} selectedTime={selected} onSelect={setSelected} tradeTimeline /></Suspense>
-      <p className="trade-help">Entry and exit arrows identify their H4 candles; exact fill times and prices are listed above. A full entry candle may also contain prices from before entry. Chart prices are midpoint data and may differ from your broker’s fills.</p>
+      <details className="trade-chart-details"><summary>Chart details & timing</summary>
+        <dl className="trade-metrics">{view.events.map(event => <div key={event.kind}><dt>{event.kind === 'entry' ? 'Entry' : 'Exit'} · actual fill</dt><dd>{event.price}<small>{stamp(event.at)}</small></dd></div>)}</dl>
+        <p className="trade-help">Arrows mark the H4 candles containing each fill. Exact fill times are shown here and in the trade overview. Midpoint prices may differ from your broker fills. A full entry candle may include prices from before entry.</p>
+        {exitAt && <p className="trade-help">The first 160 available candles after the exit candle provide review context. Refresh later for more candles if fewer are available; closed trades do not refresh automatically.</p>}
+        {view.coverage.contains_post_exit_prices && <p className="trade-help">Your exit happened partway through an H4 candle. Its full prices include movement after exit and do not affect your recorded result.</p>}
+        {view.coverage.forming_count > 0 && <p className="trade-help">Forming prices and indicators change until the candle closes. They never receive strategy points or change your saved entry assessment.</p>}
+        {view.coverage.exit_candle_pending && <p className="trade-help">Refresh after the exit candle’s scheduled close to see the full candle.</p>}
+        {view.coverage.missing_candle_count > 0 && <p className="trade-help">Missing candles start at {stamp(view.coverage.first_missing_open)}. This can reflect a market closure or data gap; prices are never filled in.</p>}
+        {view.events.some(event => !event.candle_open_time) && <p className="trade-help">An entry or exit occurred outside available candles; no marker is placed on an unrelated candle.</p>}
+      </details>
     </>}
   </section>
 }

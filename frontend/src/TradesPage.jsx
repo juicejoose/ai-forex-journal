@@ -79,7 +79,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
 
   function edit(values) { setForm(current => ({ ...current, ...values })); setEntryDirty(true); setError(''); setMessage('') }
   function present(value) {
-    setRecord(value); setExit(blankExit()); setReview({ discipline: value.review.discipline, notes: value.review.notes }); setReviewBase(value.review); setComparisonSource(preferredAnalysis(value))
+    setHistoryOpen(false); setRecord(value); setExit(blankExit()); setReview({ discipline: value.review.discipline, notes: value.review.notes }); setReviewBase(value.review); setComparisonSource(preferredAnalysis(value))
     requestAnimationFrame(() => { detailRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); detailRef.current?.focus({ preventScroll: true }) })
   }
   async function save(kind, path, body) {
@@ -190,7 +190,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   const evidence = record?.context?.setup?.snapshot
   const entry = record?.entry
   return <section id="trades-panel" className="trade-page" hidden={!active} tabIndex={-1} aria-label="Trades">
-    <header className="trade-heading"><div><p className="trade-eyebrow">EUR/USD · H4 · MANUAL TRADE LOG</p><h2>Your trades</h2><p>Record your execution. Review your decisions separately from the outcome.</p></div>
+    <header className="trade-heading"><div><h2>Your trades</h2><p>EUR/USD · H4 · Manual trade log</p></div>
       <button type="button" className="trade-primary" disabled={Boolean(busy)} onClick={startNew}>Record trade</button></header>
     {error && <p ref={errorRef} className="trade-error" role="alert">{error}</p>}
     {(busy || message) && <p className="trade-notice" role="status">{busy || message}</p>}
@@ -229,12 +229,25 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
         </div>
       </aside>
       {record ? <article className="trade-detail" ref={detailRef} tabIndex={-1} aria-label="Selected trade">
-        <section className="trade-card"><div className="trade-row"><h3>{entry.title || `${entry.direction === 'long' ? 'Long' : 'Short'} EUR/USD`}</h3><button type="button" className="trade-delete-link" disabled={Boolean(busy)} onClick={event => askDelete(record,event.currentTarget)}>Delete trade</button><span className="trade-badge">{record.status === 'open' ? 'Open trade' : 'Closed trade'}</span></div>
-          <p className="trade-help">EUR/USD · H4 · {entry.direction === 'long' ? 'Long' : 'Short'} · Logged {setupTime(record.created_at)}</p>
-          <dl className="trade-metrics"><div><dt>Actual entry</dt><dd>{entry.entry_price}</dd></div><div><dt>Entry time</dt><dd>{setupTime(entry.entry_at)}</dd></div><div><dt>Initial stop</dt><dd>{shownPrice(entry.initial_stop_loss)}</dd></div><div><dt>Initial target</dt><dd>{shownPrice(entry.initial_take_profit)}</dd></div></dl>
-          <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>{entry.entry_observations && <><h4>Entry observations</h4><p className="trade-prose">{entry.entry_observations}</p></>}
+        <section className="trade-card trade-overview" aria-label="Trade overview">
+          <div className="trade-overview-heading"><h3>{entry.title || 'EUR/USD trade'}</h3>
+            <span className="trade-badge">{entry.direction === 'long' ? 'Long' : 'Short'} · {record.status === 'open' ? 'Open' : 'Closed'}</span>
+            {record.result && <strong className={`trade-result-chip trade-${record.result.outcome}`}>{record.result.pips} pips{record.result.r_display !== null && ` · ${record.result.r_display} R`}</strong>}
+            <button type="button" className="trade-delete-link" disabled={Boolean(busy)} onClick={event => askDelete(record,event.currentTarget)}>Delete trade</button>
+          </div>
+          <dl className="trade-overview-metrics">
+            <div><dt>Entry · actual fill</dt><dd>{entry.entry_price}<small>{setupTime(entry.entry_at)}</small></dd></div>
+            {record.exit && <div><dt>Exit · actual fill</dt><dd>{record.exit.exit_price}<small>{setupTime(record.exit.exit_at)}</small></dd></div>}
+            <div><dt>Initial stop</dt><dd>{shownPrice(entry.initial_stop_loss)}</dd></div>
+            <div><dt>Initial target</dt><dd>{shownPrice(entry.initial_take_profit)}</dd></div>
+          </dl>
         </section>
         <TradeTimeline key={`${record.id}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} />
+        <details className="trade-card trade-entry-notes" key={`notes-${record.id}`}><summary>Entry reasoning & observations</summary>
+          <p className="trade-help">Logged {setupTime(record.created_at)} · EUR/USD · H4</p>
+          <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>
+          {entry.entry_observations && <><h4>Entry observations</h4><p className="trade-prose">{entry.entry_observations}</p></>}
+        </details>
         <TradeAlignment key={`${record.id}:${comparisonSource}`} record={record} source={comparisonSource} onSourceChange={setComparisonSource} onAnalyze={analyze} busy={Boolean(busy)} active={active} />
         <section className="trade-card"><h3>Original entry context</h3>{evidence ? <>
           <p className="trade-help">{record.context.setup.snapshot.entry.title || 'Saved setup'} · cutoff {setupTime(evidence.cutoff_at)}</p>

@@ -65,3 +65,32 @@
 .trade-delete-dialog { box-sizing: border-box; width: min(32rem,calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.5rem; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); text-align: left; }
 .trade-delete-dialog::backdrop { background: rgb(0 0 0 / 50%); }
 .trade-page .trade-delete-confirm { color: #fff; background: #a5273b; border-color: #a5273b; }
+
+.trade-heading { margin-bottom: .8rem; }
+.trade-heading p { margin: .15rem 0 0; font-size: .7rem; }
+.trade-workspace { gap: .75rem; }
+.trade-detail { gap: .75rem; }
+.trade-history { padding: .65rem 1rem; }
+.trade-overview { padding: .8rem 1rem; }
+.trade-overview-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; }
+.trade-overview-heading h3 { margin: 0; flex: 1; min-width: min(100%,12rem); }
+.trade-result-chip { font-size: .72rem; font-variant-numeric: tabular-nums; }
+.trade-overview-metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap: .5rem 1rem; margin: .6rem 0 0; }
+.trade-overview-metrics dt { font-size: .62rem; color: var(--text); }
+.trade-overview-metrics dd { font-size: .82rem; margin: .15rem 0 0; color: var(--text-h); font-variant-numeric: tabular-nums; }
+.trade-overview-metrics small { display: block; font-size: .6rem; color: var(--text); }
+.trade-timeline { padding: .8rem 1rem; }
+.trade-timeline-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.trade-timeline-toolbar p { margin: 0; font-size: .62rem; }
+.trade-timeline-toolbar button { flex-shrink: 0; }
+.trade-chart-status { display: flex; flex-wrap: wrap; gap: .2rem .8rem; margin: .35rem 0; font-size: .62rem; color: var(--text); }
+.trade-chart-status span + span::before { content: '·'; margin-right: .8rem; }
+.trade-timeline .market-chart { margin-top: .4rem; }
+.trade-entry-notes { padding: .25rem 1rem; }
+.trade-entry-notes summary, .trade-chart-details summary { font-size: .72rem; color: var(--text-h); }
+@media (max-width: 600px) {
+  .trade-overview-heading h3 { flex-basis: 100%; }
+  .trade-overview-heading .trade-delete-link { margin-left: auto; }
+  .trade-overview-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .trade-chart-status { font-size: .6rem; }
+}

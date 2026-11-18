@@ -77,3 +77,50 @@ test('failed context loads retain bounded saved history without fabricating indi
   assert.strictEqual(view.candles,original.candles)
   assert.equal(withChartContext(null,null),null)
 })
+
+test('live forming context is validated separately, never as a completed or historical bar',()=>{
+  const extra=context(); extra.following=[]; extra.after_at=null
+  extra.forming_candle={...candle(2),complete:false}; extra.forming_at=new Date(origin+2.2*14400000).toISOString()
+  extra.retrieved_at=new Date(origin+2.5*14400000).toISOString()
+  assert.equal(validChartContext(extra,extra.before_at,null,extra.forming_at),true)
+  for(const mutate of [value=>{value.forming_candle.complete=true},value=>{value.forming_candle=candle(3)},
+    value=>{value.forming_candle={...candle(1),complete:false}},value=>{value.retrieved_at=candle(4).open_time}]) {
+    const bad=structuredClone(extra); mutate(bad)
+    assert.equal(validChartContext(bad,extra.before_at,null,extra.forming_at),false)
+  }
+  assert.equal(validChartContext(extra,extra.before_at,null,null),false)
+})
+
+test('forming chart-only indicators have no score or effect on the reviewed interval',()=>{
+  const original=snapshot(),extra=context(); extra.following=[]
+  extra.forming_candle={...candle(2),complete:false}
+  const evaluation={candles:[...original.candles,{...candle(2),candle_id:'must-not-attach'}]}
+  const chart=withChartContext(original,extra)
+  const data=buildChartData(chart,evaluation)
+  assert.equal(data.rows.length,163)
+  assert.equal(data.reviewedCount,2); assert.equal(data.endIndex,161); assert.equal(data.historyCount,160)
+  assert.equal(data.rows.at(-1).score,null)
+  assert.equal(data.rows.at(-1).analyzed,false)
+  assert.equal(data.rows.at(-1).candle.timeline_phase,'forming')
+  assert.strictEqual(chart.candles,original.candles)
+})
+
+test('before the first close the chart shows earlier history plus a forming bar with zero reviewed candles',()=>{
+  const empty={analysis_kind:'intraday',session:{start_utc:candle(0).open_time},candles:[]}
+  const extra=context(); extra.following=[]; extra.forming_candle={...candle(0),complete:false}
+  assert.equal(chartBoundaries(empty,false).before,candle(0).open_time)
+  const data=buildChartData(withChartContext(empty,extra))
+  assert.equal(data.rows.length,161); assert.equal(data.historyCount,160)
+  assert.equal(data.reviewedCount,0); assert.equal(data.endIndex,-1)
+  assert.ok(data.rows.every(row=>!row.analyzed))
+})
+
+test('a completed refresh supersedes stale forming data without a duplicate or altered saved price',()=>{
+  const original=snapshot(),extra=context(); extra.following=[]
+  original.candles.push(candle(2)); extra.forming_candle={...candle(2),close:1.119,complete:false}
+  const data=buildChartData(withChartContext(original,extra))
+  assert.equal(data.rows.length,163)
+  assert.equal(data.rows.at(-1).candle.close,1.11)
+  assert.equal(data.rows.at(-1).candle.complete,true)
+  assert.equal(data.reviewedCount,3)
+})

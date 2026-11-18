@@ -62,3 +62,7 @@
 .mc-context-status { display: flex; gap: .8rem; align-items: center; justify-content: space-between; margin: .8rem 0; text-align: left; }
 .mc-context-status button { flex-shrink: 0; min-height: 44px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text-h); padding: .5rem .75rem; cursor: pointer; }
 @media (max-width: 600px) { .mc-context-status { align-items: stretch; flex-direction: column; } }
+
+.mc-forming-note { margin: .25rem 0 .5rem; font-size: .65rem; color: var(--text); }
+.mc-forming-note strong { color: #c38a30; }
+@media (prefers-color-scheme: dark) { .mc-forming-note strong { color: #edc47b; } }

@@ -122,11 +122,12 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
               <strong>{slot.candle_id}</strong><span>{clock(slot.open_time)} – {clock(slot.close_time)}</span>
               <span>{slot.status === 'completed' ? 'Completed' : slot.status === 'forming' ? 'Forming · score pending' : 'Upcoming · pending'}</span>
             </li>)}</ol>
-            <p>Checks for completed candles every minute while this page is visible. The backend must be running. AI summaries refresh only when you request them.</p>
+            <p>Refreshes completed candles and the forming chart candle every minute while this page is visible. The backend must be running. AI summaries refresh only when you request them.</p>
           </div>
         </details>
-        {view.market_data ? <MarketReview snapshot={view.market_data} evaluation={view.rule_evaluation} />
-          : <div className="today-empty"><h3>Waiting for the first completed candle</h3><p>The first H4 candle closes at {clock(view.slots[0].close_time)}. Scores and an AI review become available after that close. Previous-session candles provide indicator history only.</p></div>}
+        {!view.market_data && <div className="today-empty"><h3>Waiting for the first completed candle</h3><p>The first H4 candle closes at {clock(view.slots[0].close_time)}. Scores and an AI review become available after that close. Previous-session candles provide indicator history only.</p></div>}
+        <MarketReview snapshot={view.market_data ?? {analysis_kind:'intraday', session:{...view.session,start_utc:view.session.start,end_utc:view.session.end}, candles:[]}}
+          evaluation={view.rule_evaluation} formingAt={view.slots.some(slot => slot.status === 'forming') ? view.as_of : null} />
       </>}
       <section className="today-ai" aria-labelledby="today-ai-heading"><div><p className="jv-eyebrow">YOUR SESSION REVIEW</p><h3 id="today-ai-heading">Generate when you’re ready</h3>
         <p>The AI receives the completed candles, Python scores, and current coverage. Saving keeps this exact review in Saved journals, labeled with its cutoff.</p></div>

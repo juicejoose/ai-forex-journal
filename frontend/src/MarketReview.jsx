@@ -8,20 +8,20 @@ import ChartContextStatus from './ChartContextStatus.jsx'
 
 const MarketChart = lazy(() => import('./MarketChart.jsx'))
 
-export default function MarketReview({ snapshot, evaluation, setupZones, includeAfter = false }) {
+export default function MarketReview({ snapshot, evaluation, setupZones, includeAfter = false, formingAt = null }) {
   const [chosenTime, setChosenTime] = useState(null)
   const [zoneId, setZoneId] = useState(null)
   const [showCloses, setShowCloses] = useState(false)
   const [showPatterns, setShowPatterns] = useState(true)
   const chartRef = useRef(null)
-  const extra = useChartContext(snapshot,includeAfter)
+  const extra = useChartContext(snapshot,includeAfter,formingAt)
   const [selectionNotice,setSelectionNotice] = useState('')
   const selectedZone = setupZones?.find(zone => zone.id === zoneId) ?? setupZones?.[0]
-  const available = [...(extra.chart?.chart_context?.candles ?? []), ...(snapshot?.candles ?? []), ...(extra.chart?.chart_followup?.candles ?? [])]
+  const available = [...(extra.chart?.chart_context?.candles ?? []), ...(snapshot?.candles ?? []), ...(extra.chart?.chart_followup?.candles ?? []), ...(extra.chart?.chart_forming?.candle ? [extra.chart.chart_forming.candle] : [])]
   const selectedTime = available.some(candle => chartTime(candle.open_time) === chosenTime)
     ? chosenTime : chartTime(snapshot?.candles?.at(-1)?.open_time)
   return <>
-    <MarketEvidence snapshot={snapshot} />
+    {snapshot?.candles?.length !== 0 && <MarketEvidence snapshot={snapshot} />}
     <SetupZoneHistory zones={setupZones} selectedZone={selectedZone} onZoneChange={setZoneId}
       showPatterns={showPatterns} onShowPatterns={setShowPatterns}
       showCloses={showCloses} onShowCloses={setShowCloses} onSelect={time => {
