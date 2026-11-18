@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { API } from './api.js'
 import { setupTime, setupPageOffset } from './setupEvaluation.js'
 import TradeAlignment from './TradeAlignment.jsx'
+import TradeTimeline from './TradeTimeline.jsx'
 import { preferredAnalysis } from './tradeAlignment.js'
 import SavedTradePlan from './SetupTradePlan.jsx'
 import { blankTrade, blankExit, formFromSetup, tradeRequest, exitRequest, reviewChanged, disciplineLabels } from './tradeLog.js'
@@ -172,8 +173,9 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       <div className="trade-actions"><button type="button" onClick={cancelEntry}>Cancel entry</button><button className="trade-primary" type="submit">Save trade entry</button></div></fieldset>
     </form>}
     <div className="trade-workspace">
-      <aside className="trade-card trade-history"><div className="trade-row"><h3>Trade history</h3><button type="button" disabled={Boolean(busy)} onClick={() => setRefresh(v => v + 1)}>Refresh</button></div>
+      <aside className="trade-card trade-history" aria-label="Trade history"><div className="trade-history-toolbar"><h3>Trade history</h3>
         <label>Show trades<select value={status} disabled={Boolean(busy)} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="all">All trades</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
+        <button type="button" disabled={Boolean(busy)} onClick={() => setRefresh(v => v + 1)}>Refresh</button></div>
         {historyError && <p role="alert" className="trade-error">{historyError}</p>}
         {!historyError && !history.total && <p className="trade-help">No {status === 'all' ? '' : status+' '}trades recorded yet.</p>}
         <ul>{history.items.map(item => <li key={item.id}><button type="button" disabled={Boolean(busy)} aria-pressed={item.id === record?.id} onClick={() => open(item.id)}>
@@ -189,6 +191,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
           <dl className="trade-metrics"><div><dt>Actual entry</dt><dd>{entry.entry_price}</dd></div><div><dt>Entry time</dt><dd>{setupTime(entry.entry_at)}</dd></div><div><dt>Initial stop</dt><dd>{shownPrice(entry.initial_stop_loss)}</dd></div><div><dt>Initial target</dt><dd>{shownPrice(entry.initial_take_profit)}</dd></div></dl>
           <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>{entry.entry_observations && <><h4>Entry observations</h4><p className="trade-prose">{entry.entry_observations}</p></>}
         </section>
+        <TradeTimeline key={`${record.id}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} />
         <TradeAlignment key={`${record.id}:${comparisonSource}`} record={record} source={comparisonSource} onSourceChange={setComparisonSource} onAnalyze={analyze} busy={Boolean(busy)} active={active} />
         <section className="trade-card"><h3>Original entry context</h3>{evidence ? <>
           <p className="trade-help">{record.context.setup.snapshot.entry.title || 'Saved setup'} · cutoff {setupTime(evidence.cutoff_at)}</p>

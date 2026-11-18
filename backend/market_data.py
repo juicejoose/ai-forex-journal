@@ -45,6 +45,7 @@ class Candle:
     low: float
     close: float
     price_updates: int
+    complete: bool = True
 
     @property
     def close_time(self) -> datetime:
@@ -61,7 +62,10 @@ def session_bounds(journal_date: date) -> tuple[datetime, datetime]:
     return start.astimezone(UTC), end.astimezone(UTC)
 
 
-def _fetch_candles(end: datetime, count: int = WARMUP_COUNT + 50) -> dict:
+def _fetch_candles(end: datetime | None, count: int = WARMUP_COUNT + 50, *, start: datetime | None = None) -> dict:
+    """Fetch backward from end, or forward from start; never mix count with both."""
+    if (end is None) == (start is None):
+        raise ValueError("Provide exactly one candle boundary.")
     token = os.getenv("OANDA_API_TOKEN", "").strip()
     account_id = os.getenv("OANDA_ACCOUNT_ID", "").strip()
     base_url = os.getenv("OANDA_API_URL", "").strip().rstrip("/")
@@ -74,7 +78,7 @@ def _fetch_candles(end: datetime, count: int = WARMUP_COUNT + 50) -> dict:
         "granularity": "H4",
         "price": "M",
         "count": count,
-        "to": end.isoformat(),
+        **({"from": start.isoformat()} if start is not None else {"to": end.isoformat()}),
         "dailyAlignment": 17,
         "alignmentTimezone": "America/New_York",
         "smooth": "false",
@@ -106,8 +110,8 @@ def _fetch_candles(end: datetime, count: int = WARMUP_COUNT + 50) -> dict:
     return data
 
 
-def _parse_candles(data: dict, cutoff: datetime) -> list[Candle]:
-    """Use only completed, well-formed candles that finish by the cutoff."""
+def _parse_candles(data: dict, cutoff: datetime, *, include_forming=False) -> list[Candle]:
+    """Completed candles by default; forming candles are opt-in for display only."""
     try:
         if (not isinstance(data, dict) or data.get("instrument") != "EUR_USD"
                 or data.get("granularity") != "H4" or not isinstance(data.get("candles"), list)):
@@ -116,13 +120,17 @@ def _parse_candles(data: dict, cutoff: datetime) -> list[Candle]:
         for item in data["candles"]:
             if type(item["complete"]) is not bool:
                 raise ValueError("Invalid completion flag")
-            if not item["complete"]:
+            if not item["complete"] and not include_forming:
                 continue
             opened_at = datetime.fromisoformat(item["time"].replace("Z", "+00:00"))
             if opened_at.tzinfo is None:
                 raise ValueError("Missing timestamp timezone")
             opened_at = opened_at.astimezone(UTC)
-            if opened_at + CANDLE_DURATION > cutoff:
+            if item["complete"]:
+                if opened_at + CANDLE_DURATION > cutoff:
+                    continue
+            elif not opened_at <= cutoff < opened_at + CANDLE_DURATION:
+                # Never display an old incomplete bar as if it were current.
                 continue
             local = opened_at.astimezone(NY)
             if (local.hour not in (1, 5, 9, 13, 17, 21)
@@ -137,7 +145,7 @@ def _parse_candles(data: dict, cutoff: datetime) -> list[Candle]:
             volume = item["volume"]
             if type(volume) is not int or volume < 0:
                 raise ValueError("Invalid price-update count")
-            candles.append(Candle(opened_at, opened, high, low, closed, volume))
+            candles.append(Candle(opened_at, opened, high, low, closed, volume, item["complete"]))
 
         candles.sort(key=lambda candle: candle.open_time)
         if len({candle.open_time for candle in candles}) != len(candles):
@@ -177,9 +185,8 @@ def get_market_data(journal_date: date, *, include_source=False) -> dict:
     return _build_snapshot(journal_date, start, end, session, warmup, retrieved_at, include_source=include_source)
 
 
-def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at, *, include_source=False):
-    """Calculate indicators once over the complete history and requested candles."""
-    series = warmup + session
+def _indicator_rows(series, start_index):
+    """Shared deterministic indicator display; no strategy scoring or storage."""
     closes = [candle.close for candle in series]
     highs = [candle.high for candle in series]
     lows = [candle.low for candle in series]
@@ -193,10 +200,7 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at, *, 
     )
 
     rows = []
-    # Save a bounded part of the existing warmup for chart context. Calculate it
-    # in the same pass so displayed indicators agree with the analyzed candles.
-    history_count = min(CHART_HISTORY_COUNT, len(warmup))
-    for index in range(len(warmup) - history_count, len(series)):
+    for index in range(start_index, len(series)):
         candle = series[index]
         squeeze_values = {key: values[index] for key, values in squeeze.items()}
         if (ema_values[index] is None or sma_values[index] is None
@@ -223,6 +227,14 @@ def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at, *, 
             },
         })
 
+    return rows
+
+
+def _build_snapshot(journal_date, start, end, session, warmup, retrieved_at, *, include_source=False):
+    """Calculate indicators once over the complete history and requested candles."""
+    history_count = min(CHART_HISTORY_COUNT, len(warmup))
+    series = warmup + session
+    rows = _indicator_rows(series, len(warmup) - history_count)
     change = session[-1].close - session[0].open
     return {
         **({"calculation_inputs": [{"open_time": c.open_time.isoformat(), "close_time": c.close_time.isoformat(),

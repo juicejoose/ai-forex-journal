@@ -82,7 +82,7 @@ class HostedTests(unittest.TestCase):
         from tests.test_trade_log import trade, full_exit
         from uuid import uuid4
         with self.client() as client:
-            for method, path in [('GET','/api/trades'),('POST','/api/trades'),('POST','/api/trades/'+str(uuid4())+'/close'),('POST','/api/trades/'+str(uuid4())+'/reviews'),('POST','/api/trades/'+str(uuid4())+'/strategy-analysis')]:
+            for method, path in [('GET','/api/trades'),('GET','/api/trades/'+str(uuid4())+'/timeline'),('POST','/api/trades'),('POST','/api/trades/'+str(uuid4())+'/close'),('POST','/api/trades/'+str(uuid4())+'/reviews'),('POST','/api/trades/'+str(uuid4())+'/strategy-analysis')]:
                 self.assertEqual(client.request(method,path).status_code,401)
             for headers in ({'Origin':'https://other.example'},{'Sec-Fetch-Site':'cross-site'}):
                 self.assertEqual(client.post('/api/trades',json=trade(),auth=self.login,headers=headers).status_code,403)

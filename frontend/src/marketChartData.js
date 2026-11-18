@@ -31,13 +31,14 @@ function validCandle(candle) {
 
 export function buildChartData(snapshot, evaluation) {
   const candles = Array.isArray(snapshot?.candles) ? snapshot.candles.filter(validCandle) : []
-  if (!candles.length) return { rows: [], startIndex: 0, hasRsiMa: false, guides: [] }
-  const first = Math.min(...candles.map(candle => chartTime(candle.open_time)))
+  const timeline = snapshot?.analysis_kind === 'trade_timeline'
+  if (!candles.length && !timeline) return { rows: [], startIndex: 0, hasRsiMa: false, guides: [] }
+  const first = candles.length ? Math.min(...candles.map(candle => chartTime(candle.open_time))) : chartTime(snapshot.entry_at)
   const storedHistory = snapshot.chart_context?.candles
   const history = Array.isArray(storedHistory) ? storedHistory
     : Array.isArray(snapshot.previous_candles) ? snapshot.previous_candles
       : snapshot.previous_candle ? [snapshot.previous_candle] : []
-  const scores = new Map((evaluation?.candles ?? []).map(score => [chartTime(score.open_time), score]))
+  const scores = new Map((timeline ? [] : evaluation?.candles ?? []).map(score => [chartTime(score.open_time), score]))
   const byTime = new Map()
   for (const candle of history) {
     if (validCandle(candle) && chartTime(candle.close_time) <= first) {
@@ -47,11 +48,11 @@ export function buildChartData(snapshot, evaluation) {
   for (const candle of candles) {
     const time = chartTime(candle.open_time)
     const score = scores.get(time)
-    byTime.set(time, { time, candle, analyzed: true,
+    byTime.set(time, { time, candle, analyzed: !timeline || candle.timeline_phase !== 'after_exit',
       score: chartTime(score?.close_time) === chartTime(candle.close_time) ? score : null })
   }
   const rows = [...byTime.values()].sort((a, b) => a.time - b.time)
-  const factor = evaluation?.rule_set?.factors?.find(item => item.id === 'rsi_extreme')
+  const factor = !timeline && evaluation?.rule_set?.factors?.find(item => item.id === 'rsi_extreme')
   const guides = factor ? [
     { value: factor.trend?.lower_threshold ?? (evaluation.rule_set.version === 1 ? 30 : 40), label: 'Oversold' },
     { value: factor.trend?.upper_threshold ?? (evaluation.rule_set.version === 1 ? 70 : 60), label: 'Overbought' },
@@ -60,7 +61,8 @@ export function buildChartData(snapshot, evaluation) {
     guides.push({ value: factor.trend_reduction.bearish_max, label: 'Near oversold', proximity: true },
       { value: factor.trend_reduction.bullish_min, label: 'Near overbought', proximity: true })
   }
-  return { rows, startIndex: rows.findIndex(row => row.analyzed),
+  const reviewed = rows.filter(row => row.analyzed)
+  return { rows, reviewedCount: reviewed.length, endIndex: rows.findLastIndex(row => row.analyzed), startIndex: rows.some(row => row.analyzed) ? rows.findIndex(row => row.analyzed) : rows.length,
     hasRsiMa: rows.some(row => Number.isFinite(row.candle.indicators?.rsi14_sma14)),
     rsiSource: factor?.source === 'rsi14_sma14' ? 'RSI MA' : 'RSI14', guides }
 }

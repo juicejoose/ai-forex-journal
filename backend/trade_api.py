@@ -5,6 +5,7 @@ import trade_database as db
 from trade_models import TradeInput, TradeCloseInput, TradeReviewInput, TradeAnalysisInput
 from trade_calculations import TradeInputError
 from market_data import MarketDataError
+from trade_timeline import fetch_timeline
 from journal_grounding import InvalidJournalEvidence
 
 router=APIRouter(tags=['Trade log'])
@@ -42,3 +43,7 @@ def review(identifier:UUID,entry:TradeReviewInput): return execute(db.review_tra
 
 @router.post('/trades/{identifier}/strategy-analysis')
 def analysis(identifier:UUID,entry:TradeAnalysisInput): return execute(db.analyze_trade,identifier,entry)
+
+
+@router.get('/trades/{identifier}/timeline')
+def timeline(identifier:UUID): return execute(fetch_timeline,identifier)
