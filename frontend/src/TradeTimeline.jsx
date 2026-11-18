@@ -45,7 +45,7 @@ export default function TradeTimeline({ record, active }) {
   }, [id, exitAt, active, reload])
 
   return <section className="trade-card trade-timeline" aria-label="Trade timeline">
-    <div className="trade-row"><div><h3>Trade timeline</h3><p className="trade-help">{exitAt ? 'Entry, exit and up to 60 candles afterward' : 'Entry through the latest available candle · refreshes every minute'}</p></div>
+    <div className="trade-row"><div><h3>Trade timeline</h3><p className="trade-help">{exitAt ? 'Entry, exit and up to 160 candles afterward' : 'Entry through the latest available candle · refreshes every minute'}</p></div>
       <button type="button" onClick={() => setReload(value => value + 1)} disabled={fetching}>{fetching ? 'Refreshing chart…' : 'Refresh chart'}</button></div>
     <p className="trade-help">Market prices after entry are for reviewing the trade. Your saved four-factor assessment stays unchanged.</p>
     {error && <p className="trade-error" role="alert">{error} {view && 'Showing the last successful chart; it may be outdated.'}</p>}
@@ -53,8 +53,8 @@ export default function TradeTimeline({ record, active }) {
     {view && <>
       <dl className="trade-metrics">{view.events.map(event => <div key={event.kind}><dt>{event.kind === 'entry' ? 'Entry' : 'Exit'} · actual fill</dt><dd>{event.price}<small>{stamp(event.at)}</small></dd></div>)}
         <div><dt>Chart checked</dt><dd>{stamp(view.as_of)}<small>OANDA midpoint prices</small></dd></div></dl>
-      {exitAt && <p className="trade-notice"><strong>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 60} candles after exit</strong> · Market context only; these candles do not affect your trade result or entry assessment.
-        {(view.coverage.after_exit_complete_count ?? 0) < (view.coverage.after_exit_target ?? 60) && ' Refresh later as more candles become available.'}</p>}
+      {exitAt && <p className="trade-notice"><strong>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 160} candles after exit</strong> · Market context only; these candles do not affect your trade result or entry assessment.
+        {(view.coverage.after_exit_complete_count ?? 0) < (view.coverage.after_exit_target ?? 160) && ' Refresh later as more candles become available.'}</p>}
       {view.coverage.forming_count > 0 && <p className="trade-notice">Forming H4 candle · its price and indicator values can change until it closes. It does not receive strategy points.</p>}
       {view.coverage.contains_post_exit_prices && <p className="trade-notice">The exit happened during an H4 candle. That full candle includes prices after your exit; those prices are not part of your trade result.</p>}
       {view.coverage.exit_candle_pending && <p className="trade-notice">The exit candle is still forming. Refresh after its scheduled close to see the full candle. This closed trade does not refresh automatically.</p>}

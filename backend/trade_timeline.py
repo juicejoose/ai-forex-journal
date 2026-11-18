@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 
 import market_data as md
 import trade_database as db
+from chart_context import CONTEXT_CANDLES, DISPLAY_WARMUP
 
 MAX_CANDLES = 10000
 PAGE_SIZE = 5000
-POST_EXIT_CANDLES = 60
+POST_EXIT_CANDLES = CONTEXT_CANDLES
 
 
 def bar_start(at):
@@ -36,9 +37,9 @@ def scheduled_bars(start, end):
 
 def _history(start, cutoff):
     # Backward pages cover the whole trade plus warmup; no silent truncation.
-    count = min(PAGE_SIZE, max(md.WARMUP_COUNT + 50, int((cutoff-start) / md.CANDLE_DURATION) + md.WARMUP_COUNT + 50))
+    count = min(PAGE_SIZE, max(DISPLAY_WARMUP + 50, int((cutoff-start) / md.CANDLE_DURATION) + DISPLAY_WARMUP + 50))
     cursor, by_time = cutoff, {}
-    for _ in range((MAX_CANDLES + md.WARMUP_COUNT) // PAGE_SIZE + 2):
+    for _ in range((MAX_CANDLES + DISPLAY_WARMUP) // PAGE_SIZE + 2):
         page = md._parse_candles(md._fetch_candles(cursor, count=count), cursor, include_forming=cursor == cutoff)
         page = [c for c in page if c.open_time < cursor and trading_bar(c.open_time)]
         if not page:
@@ -48,9 +49,9 @@ def _history(start, cutoff):
         if len([c for c in by_time.values() if c.open_time >= start]) > MAX_CANDLES:
             raise md.MarketDataError(f'The trade timeline supports up to {MAX_CANDLES:,} H4 candles. This trade is too long to chart in full.', 422)
         earlier = sorted((c for c in by_time.values() if c.close_time <= start and c.complete), key=lambda c: c.open_time)
-        if len(earlier) >= md.WARMUP_COUNT:
+        if len(earlier) >= DISPLAY_WARMUP:
             selected = sorted((c for c in by_time.values() if start <= c.open_time < cutoff), key=lambda c: c.open_time)
-            return earlier[-md.WARMUP_COUNT:], selected
+            return earlier[-DISPLAY_WARMUP:], selected
         oldest = min(c.open_time for c in page)
         if oldest >= cursor:
             break
@@ -62,7 +63,7 @@ def _after_exit(start, now):
     if start >= now:
         return []
     # Forward retrieval keeps the first candles after exit even for old trades.
-    # The extra row tolerates an inclusive boundary overlap; never show >60.
+    # The extra row tolerates an inclusive boundary overlap; never show more than the context limit.
     raw = md._fetch_candles(None, count=POST_EXIT_CANDLES + 1, start=start)
     rows = md._parse_candles(raw, now, include_forming=True)
     return [c for c in rows if start <= c.open_time < now and trading_bar(c.open_time)][:POST_EXIT_CANDLES]
@@ -87,16 +88,16 @@ def build_timeline(record, now):
     after_exit = _after_exit(end, now) if exited else []
     selected += after_exit
     if exited and end < now:
-        # Once all 60 are available, later days must not expand the window.
+        # Once the full context is available, later days must not expand the window.
         cutoff = min(now, after_exit[-1].close_time) if len(after_exit) == POST_EXIT_CANDLES else now
     all_candles = warmup + selected
-    rows = md._indicator_rows(all_candles, len(warmup) - md.CHART_HISTORY_COUNT)
-    for row, candle in zip(rows, all_candles[len(warmup) - md.CHART_HISTORY_COUNT:]):
+    rows = md._indicator_rows(all_candles, len(warmup) - CONTEXT_CANDLES)
+    for row, candle in zip(rows, all_candles[len(warmup) - CONTEXT_CANDLES:]):
         row['complete'] = candle.complete
         row['timeline_phase'] = 'before_entry' if candle.close_time <= start else 'after_exit' if exited and candle.open_time >= end else 'trade'
         row['contains_post_exit_prices'] = bool(exited and candle.open_time < exited < min(candle.close_time, cutoff))
-    history = rows[:md.CHART_HISTORY_COUNT]
-    candles = rows[md.CHART_HISTORY_COUNT:]
+    history = rows[:CONTEXT_CANDLES]
+    candles = rows[CONTEXT_CANDLES:]
     expected = list(scheduled_bars(start, cutoff))
     available = {c.open_time for c in selected}
     missing = [at for at in expected if at not in available]

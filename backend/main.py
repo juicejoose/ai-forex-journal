@@ -35,6 +35,7 @@ from setup_database import init_setup_db
 from setup_api import setup_router
 from trade_database import init_trade_db
 from trade_api import router as trade_router
+from chart_context import router as chart_router
 
 load_dotenv(Path(__file__).with_name(".env"))
 
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(setup_router(lambda: client))
 app.include_router(trade_router)
+app.include_router(chart_router)
 
 app.add_middleware(
     CORSMiddleware,

@@ -341,7 +341,7 @@ export default function SetupEvaluator({ active, onBusyChange, onDirtyChange, on
         <details className="se-limitations" open><summary>Missing confirmation &amp; limits</summary><ul>{snapshot.catalog.limitations.map(text => <li key={text}>{text}</li>)}</ul></details>
         <details className="se-help"><summary>All calculated evidence</summary><ul>{snapshot.catalog.facts.map(item => <li key={item.id}>{item.text}</li>)}</ul></details>
       </div>
-      {active && <MarketReview key={record.id} snapshot={chartSnapshot} evaluation={snapshot.rule_evaluation} setupZones={snapshot.zones} />}
+      {active && <MarketReview includeAfter key={record.id} snapshot={chartSnapshot} evaluation={snapshot.rule_evaluation} setupZones={snapshot.zones} />}
     </div>}
     {deleteTarget && <DeleteSetupDialog setup={deleteTarget} pending={Boolean(busy)} error={deleteError}
       onCancel={cancelDelete} onConfirm={confirmDelete} />}

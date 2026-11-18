@@ -3,6 +3,7 @@ import { API } from './api.js'
 import { setupTime, setupPageOffset } from './setupEvaluation.js'
 import TradeAlignment from './TradeAlignment.jsx'
 import TradeTimeline from './TradeTimeline.jsx'
+import DeleteTradeDialog from './DeleteTradeDialog.jsx'
 import { preferredAnalysis } from './tradeAlignment.js'
 import SavedTradePlan from './SetupTradePlan.jsx'
 import { blankTrade, blankExit, formFromSetup, tradeRequest, exitRequest, reviewChanged, disciplineLabels } from './tradeLog.js'
@@ -35,6 +36,12 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [history, setHistory] = useState({ items: [], total: 0 })
+  const [historyOpen, setHistoryOpen] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteError, setDeleteError] = useState('')
+  const historyRevision = useRef(0)
+  const historyToggleRef = useRef(null)
+  const deleteReturnRef = useRef(null)
   const [historyError, setHistoryError] = useState('')
   const [status, setStatus] = useState('all')
   const [offset, setOffset] = useState(0)
@@ -59,13 +66,14 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   useEffect(() => {
     if (!active) return
     const controller = new AbortController()
+    const revision = historyRevision.current
     request(`/trades?status=${status}&limit=20&offset=${offset}`, undefined, controller.signal)
       .then(data => {
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted || revision !== historyRevision.current) return
         const page = setupPageOffset(offset, data.total, 20)
         if (page !== offset) { setOffset(page); return }
         setHistory(data); setHistoryError('')
-      }).catch(err => { if (!controller.signal.aborted) setHistoryError(err.message) })
+      }).catch(err => { if (!controller.signal.aborted && revision === historyRevision.current) setHistoryError(err.message) })
     return () => controller.abort()
   }, [active, status, offset, refresh])
 
@@ -136,6 +144,39 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       setMessage('Four-factor comparison saved. The original entry evidence remains unchanged.')
     } catch (err) { setError(err.message) } finally { setBusy('') }
   }
+  function askDelete(target, opener) {
+    if (busy) return
+    deleteReturnRef.current = opener
+    setDeleteError(''); setDeleteTarget(target)
+  }
+  function cancelDelete() {
+    setDeleteTarget(null)
+    requestAnimationFrame(() => deleteReturnRef.current?.focus())
+  }
+  async function confirmDelete() {
+    if (busy || !deleteTarget) return
+    const target = deleteTarget
+    setBusy('Deleting trade…'); setDeleteError('')
+    try {
+      const response = await fetch(`${API}/trades/${target.id}`, {method:'DELETE'})
+      if (!response.ok && response.status !== 404) {
+        const data = await response.json().catch(() => null)
+        throw new Error(typeof data?.detail === 'string' ? data.detail : 'Could not delete the trade. Please retry.')
+      }
+      historyRevision.current += 1
+      const matchesFilter = status === 'all' || target.status === status
+      const removed = matchesFilter ? 1 : 0
+      setHistory(current => ({...current, items:current.items.filter(item => item.id !== target.id), total:Math.max(0,current.total-removed)}))
+      setOffset(current => setupPageOffset(current,Math.max(0,history.total-removed),20))
+      if (record?.id === target.id) {
+        setRecord(null); setExit(blankExit()); setReview(neutralReview()); setReviewBase({...neutralReview(),revision:0})
+        for (const key of ['exit','review','analysis']) delete requests.current[key]
+      }
+      setDeleteTarget(null); setError(''); setMessage('Trade and its related records deleted.'); setRefresh(value => value+1)
+      requestAnimationFrame(() => historyToggleRef.current?.focus())
+    } catch (err) { setDeleteError(err.message) } finally { setBusy('') }
+  }
+
   function startNew() {
     if (entryDirty && !window.confirm('Replace the unsaved entry form?')) return
     setForm(blankTrade()); setLinkedSetup(null); setEntryDirty(false); setCreating(true); setError(''); setMessage('')
@@ -173,20 +214,22 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       <div className="trade-actions"><button type="button" onClick={cancelEntry}>Cancel entry</button><button className="trade-primary" type="submit">Save trade entry</button></div></fieldset>
     </form>}
     <div className="trade-workspace">
-      <aside className="trade-card trade-history" aria-label="Trade history"><div className="trade-history-toolbar"><h3>Trade history</h3>
-        <label>Show trades<select value={status} disabled={Boolean(busy)} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="all">All trades</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
-        <button type="button" disabled={Boolean(busy)} onClick={() => setRefresh(v => v + 1)}>Refresh</button></div>
+      <aside className="trade-card trade-history" aria-label="Trade history"><div className="trade-history-toolbar"><h3><button type="button" ref={historyToggleRef} className="trade-history-toggle" aria-expanded={historyOpen} aria-controls="trade-history-content" onClick={() => setHistoryOpen(value => !value)}>Trade history <span aria-hidden="true">{historyOpen ? '▾' : '▸'}</span><small>{history.total} {history.total === 1 ? 'trade' : 'trades'}</small></button></h3>
+        {historyOpen && <><label>Show trades<select value={status} disabled={Boolean(busy)} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="all">All trades</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
+        <button type="button" disabled={Boolean(busy)} onClick={() => setRefresh(v => v + 1)}>Refresh</button></>}</div>
+        <div id="trade-history-content" hidden={!historyOpen}>
         {historyError && <p role="alert" className="trade-error">{historyError}</p>}
         {!historyError && !history.total && <p className="trade-help">No {status === 'all' ? '' : status+' '}trades recorded yet.</p>}
-        <ul>{history.items.map(item => <li key={item.id}><button type="button" disabled={Boolean(busy)} aria-pressed={item.id === record?.id} onClick={() => open(item.id)}>
+        <ul>{history.items.map(item => <li key={item.id}><button className="trade-history-open" type="button" disabled={Boolean(busy)} aria-pressed={item.id === record?.id} onClick={() => open(item.id)}>
           <strong>{item.entry.title || `${item.entry.direction === 'long' ? 'Long' : 'Short'} EUR/USD`}</strong><span>{setupTime(item.entry.entry_at)}</span>
           <span>{item.entry.direction.toUpperCase()} · {item.status === 'open' ? 'Open' : 'Closed'}</span>
           {item.result && <span className={`trade-${item.result.outcome}`}>{item.result.pips} pips · {item.result.r_display !== null ? `${item.result.r_display} R` : 'R unavailable'}</span>}
-          <small>{disciplineLabels[item.review.discipline]}</small></button></li>)}</ul>
+          <small>{disciplineLabels[item.review.discipline]}</small></button><button type="button" className="trade-delete-link" disabled={Boolean(busy)} aria-label={`Delete ${item.entry.title || 'trade'}`} onClick={event => askDelete(item,event.currentTarget)}>Delete</button></li>)}</ul>
         {history.total > 20 && <div className="trade-row"><button type="button" disabled={Boolean(busy) || !offset} onClick={() => setOffset(v => Math.max(0,v-20))}>Previous</button><span>{offset+1}–{Math.min(offset+20,history.total)} / {history.total}</span><button type="button" disabled={Boolean(busy) || offset+20>=history.total} onClick={() => setOffset(v => v+20)}>Next</button></div>}
+        </div>
       </aside>
       {record ? <article className="trade-detail" ref={detailRef} tabIndex={-1} aria-label="Selected trade">
-        <section className="trade-card"><div className="trade-row"><h3>{entry.title || `${entry.direction === 'long' ? 'Long' : 'Short'} EUR/USD`}</h3><span className="trade-badge">{record.status === 'open' ? 'Open trade' : 'Closed trade'}</span></div>
+        <section className="trade-card"><div className="trade-row"><h3>{entry.title || `${entry.direction === 'long' ? 'Long' : 'Short'} EUR/USD`}</h3><button type="button" className="trade-delete-link" disabled={Boolean(busy)} onClick={event => askDelete(record,event.currentTarget)}>Delete trade</button><span className="trade-badge">{record.status === 'open' ? 'Open trade' : 'Closed trade'}</span></div>
           <p className="trade-help">EUR/USD · H4 · {entry.direction === 'long' ? 'Long' : 'Short'} · Logged {setupTime(record.created_at)}</p>
           <dl className="trade-metrics"><div><dt>Actual entry</dt><dd>{entry.entry_price}</dd></div><div><dt>Entry time</dt><dd>{setupTime(entry.entry_at)}</dd></div><div><dt>Initial stop</dt><dd>{shownPrice(entry.initial_stop_loss)}</dd></div><div><dt>Initial target</dt><dd>{shownPrice(entry.initial_take_profit)}</dd></div></dl>
           <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>{entry.entry_observations && <><h4>Entry observations</h4><p className="trade-prose">{entry.entry_observations}</p></>}
@@ -220,5 +263,6 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
         </section>
       </article> : <div className="trade-card trade-empty"><h3>Keep the decision and the result together</h3><p>Open a trade to record its exit and review your execution. You can also start from a saved setup to retain its strategy and zone evidence.</p></div>}
     </div>
+    {deleteTarget && <DeleteTradeDialog trade={deleteTarget} pending={Boolean(busy)} error={deleteError} hasUnsavedEdits={record?.id === deleteTarget.id && (exitDirty || reviewDirty)} onCancel={cancelDelete} onConfirm={confirmDelete} />}
   </section>
 }

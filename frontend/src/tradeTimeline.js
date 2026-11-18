@@ -24,6 +24,6 @@ export function tradeTimelineMarkers(view, rows) {
 }
 
 export function timelineCandleState(candle) {
-  return [candle.timeline_phase === 'after_exit' ? 'After exit' : null, candle.complete === false ? 'Forming · provisional' : 'Completed',
+  return [candle.timeline_phase === 'after_exit' ? 'After exit' : candle.timeline_phase === 'after_review' ? 'After review' : null, candle.complete === false ? 'Forming · provisional' : 'Completed',
     candle.contains_post_exit_prices ? 'Includes prices after exit' : null].filter(Boolean).join(' · ')
 }

@@ -1,6 +1,6 @@
 from typing import Literal
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 import trade_database as db
 from trade_models import TradeInput, TradeCloseInput, TradeReviewInput, TradeAnalysisInput
 from trade_calculations import TradeInputError
@@ -47,3 +47,9 @@ def analysis(identifier:UUID,entry:TradeAnalysisInput): return execute(db.analyz
 
 @router.get('/trades/{identifier}/timeline')
 def timeline(identifier:UUID): return execute(fetch_timeline,identifier)
+
+
+@router.delete('/trades/{identifier}',status_code=204)
+def delete(identifier:UUID):
+    execute(db.delete_trade,identifier)
+    return Response(status_code=204)

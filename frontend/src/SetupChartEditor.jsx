@@ -2,11 +2,14 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import { setupChartSnapshot } from './setupHistory.js'
 import { setupTime } from './setupEvaluation.js'
 import { drawnZone, localInputTime } from './setupDrawing.js'
+import useChartContext from './useChartContext.js'
+import ChartContextStatus from './ChartContextStatus.jsx'
 const MarketChart = lazy(() => import('./MarketChart.jsx'))
 
 export default function SetupChartEditor({ preview, zones, onZonesChange, drawing, onDrawingChange, disabled }) {
   const [selectedTime, setSelectedTime] = useState(null)
   const market = useMemo(() => setupChartSnapshot(preview.snapshot, true), [preview.snapshot])
+  const extra = useChartContext(market,false)
   const point = value => {
     if (disabled || !drawing) return
     if (drawing.kind === 'origin') {
@@ -35,8 +38,9 @@ export default function SetupChartEditor({ preview, zones, onZonesChange, drawin
       : drawing ? drawing.first === undefined ? 'Select the first price boundary on the price chart.'
         : `First boundary: ${drawing.first.toFixed(5)}. Select the second price boundary.`
         : 'Choose a drawing tool, then click or tap two price boundaries. You can refine prices and names below. Origin selection is optional and separate.'}</p>
+    <ChartContextStatus {...extra} onRefresh={extra.refresh} />
     <Suspense fallback={<p role="status">Loading chart…</p>}>
-      <MarketChart snapshot={market} evaluation={preview.snapshot.rule_evaluation} selectedTime={selectedTime} onSelect={setSelectedTime}
+      <MarketChart snapshot={extra.chart} evaluation={preview.snapshot.rule_evaluation} selectedTime={selectedTime} onSelect={setSelectedTime}
         frozen draftZones={zones} drawing={disabled ? null : drawing} onDrawingPoint={point} />
     </Suspense>
   </section>

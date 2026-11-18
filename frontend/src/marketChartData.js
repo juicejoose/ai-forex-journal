@@ -23,7 +23,7 @@ export function candleLabel(candle) {
 }
 export const chartNumber = (value, digits = 5) => Number.isFinite(value) ? value.toFixed(digits) : 'Unavailable'
 
-function validCandle(candle) {
+export function validCandle(candle) {
   return chartTime(candle?.open_time) !== null && chartTime(candle?.close_time) > chartTime(candle?.open_time) &&
     ['open', 'high', 'low', 'close'].every(key => Number.isFinite(candle[key]) && candle[key] > 0) &&
     candle.low <= Math.min(candle.open, candle.close) && candle.high >= Math.max(candle.open, candle.close)
@@ -51,6 +51,13 @@ export function buildChartData(snapshot, evaluation) {
     byTime.set(time, { time, candle, analyzed: !timeline || candle.timeline_phase !== 'after_exit',
       score: chartTime(score?.close_time) === chartTime(candle.close_time) ? score : null })
   }
+  const lastClose = Math.max(...candles.map(candle => chartTime(candle.close_time)))
+  for (const candle of snapshot.chart_followup?.candles ?? []) {
+    const time = chartTime(candle.open_time)
+    if (validCandle(candle) && time >= lastClose && !byTime.has(time)) {
+      byTime.set(time,{time,candle:{...candle,timeline_phase:'after_review'},analyzed:false,score:null})
+    }
+  }
   const rows = [...byTime.values()].sort((a, b) => a.time - b.time)
   const factor = !timeline && evaluation?.rule_set?.factors?.find(item => item.id === 'rsi_extreme')
   const guides = factor ? [
@@ -62,7 +69,7 @@ export function buildChartData(snapshot, evaluation) {
       { value: factor.trend_reduction.bullish_min, label: 'Near overbought', proximity: true })
   }
   const reviewed = rows.filter(row => row.analyzed)
-  return { rows, reviewedCount: reviewed.length, endIndex: rows.findLastIndex(row => row.analyzed), startIndex: rows.some(row => row.analyzed) ? rows.findIndex(row => row.analyzed) : rows.length,
+  return { rows, reviewedCount: reviewed.length, followingCount: rows.filter(row => ['after_exit','after_review'].includes(row.candle.timeline_phase)).length, endIndex: rows.findLastIndex(row => row.analyzed), startIndex: rows.some(row => row.analyzed) ? rows.findIndex(row => row.analyzed) : rows.length,
     hasRsiMa: rows.some(row => Number.isFinite(row.candle.indicators?.rsi14_sma14)),
     rsiSource: factor?.source === 'rsi14_sma14' ? 'RSI MA' : 'RSI14', guides }
 }

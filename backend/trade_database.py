@@ -51,6 +51,36 @@ def init_trade_db():
                     SELECT RAISE(ABORT,'Trade strategy evidence is immutable'); END""")
             con.execute('INSERT INTO trade_schema_migrations VALUES (2,?)',(datetime.now(timezone.utc).isoformat(),))
 
+        if not con.execute('SELECT 1 FROM trade_schema_migrations WHERE version=3').fetchone():
+            con.execute('CREATE TABLE trade_deletions (trade_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, deleted_at TEXT NOT NULL)')
+            for table in ('trades','trade_exits','trade_reviews','trade_strategy_analyses'):
+                con.execute(f'DROP TRIGGER {table}_no_delete')
+                key = 'OLD.id' if table == 'trades' else 'OLD.trade_id'
+                con.execute(f"""CREATE TRIGGER {table}_no_delete BEFORE DELETE ON {table}
+                    WHEN NOT EXISTS (SELECT 1 FROM trade_deletions WHERE trade_id={key})
+                    BEGIN SELECT RAISE(ABORT,'Use explicit trade deletion'); END""")
+            con.execute("""CREATE TRIGGER trades_no_recreate BEFORE INSERT ON trades
+                WHEN EXISTS (SELECT 1 FROM trade_deletions WHERE trade_id=NEW.id OR request_id=NEW.request_id)
+                BEGIN SELECT RAISE(ABORT,'Deleted trade request cannot be reused'); END""")
+            for action in ('UPDATE','DELETE'):
+                con.execute(f"""CREATE TRIGGER trade_deletions_no_{action.lower()} BEFORE {action} ON trade_deletions
+                    BEGIN SELECT RAISE(ABORT,'Deletion identifiers are fixed'); END""")
+            con.execute('INSERT INTO trade_schema_migrations VALUES (3,?)',(datetime.now(timezone.utc).isoformat(),))
+
+
+def delete_trade(identifier):
+    """Explicit, atomic removal; retain only retry IDs to prevent resurrection."""
+    identifier = str(identifier)
+    with db.get_connection(write=True) as con:
+        row = con.execute('SELECT request_id FROM trades WHERE id=?',(identifier,)).fetchone()
+        if row is None:
+            if con.execute('SELECT 1 FROM trade_deletions WHERE trade_id=?',(identifier,)).fetchone(): return
+            raise TradeNotFound('Trade not found.')
+        con.execute('INSERT INTO trade_deletions VALUES (?,?,?)',(identifier,row['request_id'],datetime.now(timezone.utc).isoformat()))
+        for table in ('trade_strategy_analyses','trade_reviews','trade_exits'):
+            con.execute(f'DELETE FROM {table} WHERE trade_id=?',(identifier,))
+        con.execute('DELETE FROM trades WHERE id=?',(identifier,))
+
 
 
 def _hash(entry, context):
@@ -82,6 +112,8 @@ def create_trade(entry):
     values['entry_at']=utc(entry.entry_at)
     request=sd.canonical(values)
     with db.get_connection(write=True) as con:
+        if con.execute('SELECT 1 FROM trade_deletions WHERE request_id=?',(str(entry.request_id),)).fetchone():
+            raise TradeConflict('This trade was deleted. Start a new entry with a new save request.')
         found=con.execute('SELECT id,request_json FROM trades WHERE request_id=?',(str(entry.request_id),)).fetchone()
         if found:
             if found['request_json']!=request: raise TradeConflict('This save request belongs to different trade inputs.')

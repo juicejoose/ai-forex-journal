@@ -57,7 +57,7 @@ export default function JournalView({ preview, savedJournal, text, onChange, onS
     </details>
 
     {partial && <p className="jv-session-window">Review data through: {cutoffText} · {preview.market_data.candles.length} of 6 candles · Remaining candles were pending. This snapshot does not update with the live page.</p>}
-    {showEvidence && <MarketReview snapshot={preview.market_data} evaluation={preview.rule_evaluation} />}
+    {showEvidence && <MarketReview includeAfter={Boolean(savedJournal) || preview.market_data?.session?.complete === true} snapshot={preview.market_data} evaluation={preview.rule_evaluation} />}
 
     <details className="jv-context">
       <summary><span>Strategy & observations</span><span className="jv-summary-hint">Your inputs for this {customRange ? 'range' : 'session'}</span></summary>

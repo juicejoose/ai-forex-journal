@@ -54,3 +54,14 @@
 @media (max-width: 600px) { .trade-page { padding: 1.2rem .85rem; } .trade-page h2 { font-size: 1.5rem; } .trade-card { padding: 1rem; } .trade-fields, .trade-history ul { grid-template-columns: minmax(0,1fr); } .trade-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .trade-history-toolbar h3 { flex-basis: 100%; } .trade-history-toolbar label { flex: 1; justify-content: space-between; } .trade-detail { scroll-margin-top: 4.5rem; } }
 
 .trade-timeline .market-chart { margin: 1rem 0 0; padding: 0; border: 0; background: transparent; }
+
+.trade-history-content[hidden], #trade-history-content[hidden] { display: none; }
+.trade-history-toggle { display: inline-flex; align-items: center; gap: .6rem; }
+.trade-history-toggle small { color: var(--text); font-weight: 400; }
+.trade-history li { position: relative; display: grid; grid-template-columns: minmax(0,1fr) auto; border: 1px solid var(--border); border-radius: 8px; }
+.trade-history li .trade-history-open { border: 0; }
+.trade-history li .trade-delete-link { width: auto; height: auto; align-self: start; margin: .4rem; padding: .4rem; }
+.trade-page .trade-delete-link { color: #c84e65; font-size: .65rem; }
+.trade-delete-dialog { box-sizing: border-box; width: min(32rem,calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 1.5rem; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); text-align: left; }
+.trade-delete-dialog::backdrop { background: rgb(0 0 0 / 50%); }
+.trade-page .trade-delete-confirm { color: #fff; background: #a5273b; border-color: #a5273b; }

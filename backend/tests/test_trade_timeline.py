@@ -37,6 +37,8 @@ def record(exit_at=None, entry_at=ENTERED):
 
 def provider(now=NOW):
     source = range_payload(date(2026, 11, 20))
+    tail = source['candles'][-1]['time']
+    source['candles'].extend(row for row in range_payload(date(2026, 12, 10))['candles'] if row['time'] > tail)
     def fetch(end, count=350, *, start=None):
         if start is not None:
             rows = deepcopy([r for r in source['candles'] if start <= at(r['time']) < now])[:count]
@@ -55,7 +57,7 @@ class TimelineTests(unittest.TestCase):
 
     def test_open_trade_includes_post_entry_and_current_forming_candle(self):
         view = self.build()
-        self.assertEqual(len(view['chart_context']['candles']), 60)
+        self.assertEqual(len(view['chart_context']['candles']), 160)
         self.assertEqual(len(view['candles']), 7)
         self.assertEqual(view['candles'][0]['open_time'], at('2026-11-09T09:00:00-05:00').isoformat())
         self.assertEqual(view['candles'][-1]['open_time'], at('2026-11-10T09:00:00-05:00').isoformat())
@@ -144,7 +146,7 @@ class TimelineTests(unittest.TestCase):
         now = at('2026-11-07T12:00:00-05:00')
         view = self.build(record(entry_at='2026-11-07T10:00:00-05:00'), now)
         self.assertEqual(view['candles'], [])
-        self.assertEqual(len(view['chart_context']['candles']), 60)
+        self.assertEqual(len(view['chart_context']['candles']), 160)
         self.assertIsNone(view['events'][0]['candle_open_time'])
         self.assertEqual(view['coverage']['missing_candle_count'], 0)
 
@@ -185,31 +187,32 @@ class TimelineTests(unittest.TestCase):
             with self.assertRaisesRegex(md.MarketDataError, 'Unavailable'): tl.build_timeline(record(), NOW)
 
 
-    def test_old_trade_gets_first_sixty_after_exit_not_most_recent_sixty(self):
+    def test_old_trade_gets_first_160_after_exit_not_most_recent_160(self):
         rec = record('2026-10-20T14:30:00-04:00', entry_at='2026-10-19T10:00:00-04:00')
-        view = self.build(rec)
+        now = at('2026-12-01T11:00:00-05:00')
+        view = self.build(rec, now)
         after = [c for c in view['candles'] if c['timeline_phase'] == 'after_exit']
-        self.assertEqual(len(after), 60)
+        self.assertEqual(len(after), 160)
         self.assertEqual(after[0]['open_time'], at('2026-10-20T17:00:00-04:00').isoformat())
-        self.assertEqual(after[-1]['close_time'], at('2026-11-03T17:00:00-05:00').isoformat())
+        self.assertEqual(after[-1]['close_time'], at('2026-11-26T09:00:00-05:00').isoformat())
         self.assertEqual(view['display_through'], after[-1]['close_time'])
-        self.assertEqual(view['coverage']['after_exit_complete_count'], 60)
+        self.assertEqual(view['coverage']['after_exit_complete_count'], 160)
         self.assertEqual(view['coverage']['missing_candle_count'], 0)
-        later = self.build(rec, NOW+timedelta(days=4))
+        later = self.build(rec, now+timedelta(days=4))
         self.assertEqual(view['candles'], later['candles'])
         self.assertEqual(view['events'], later['events'])
 
-    def test_sixtieth_forming_bar_is_included_but_a_sixty_first_is_not(self):
-        now = at('2026-11-03T15:00:00-05:00')
+    def test_160th_forming_bar_is_included_but_161st_is_not(self):
+        now = at('2026-11-26T07:00:00-05:00')
         rec = record('2026-10-20T14:30:00-04:00', entry_at='2026-10-19T10:00:00-04:00')
         view = self.build(rec, now)
-        self.assertEqual(view['coverage']['after_exit_count'], 60)
-        self.assertEqual(view['coverage']['after_exit_complete_count'], 59)
+        self.assertEqual(view['coverage']['after_exit_count'], 160)
+        self.assertEqual(view['coverage']['after_exit_complete_count'], 159)
         self.assertFalse(view['candles'][-1]['complete'])
         self.assertEqual(view['candles'][-1]['timeline_phase'], 'after_exit')
         later = self.build(rec, now+timedelta(hours=4))
-        self.assertEqual(later['coverage']['after_exit_count'], 60)
-        self.assertEqual(later['coverage']['after_exit_complete_count'], 60)
+        self.assertEqual(later['coverage']['after_exit_count'], 160)
+        self.assertEqual(later['coverage']['after_exit_complete_count'], 160)
 
     def test_forward_context_skips_weekend_and_dst_and_excludes_future_prices(self):
         now = at('2026-11-02T10:00:00-05:00')
@@ -222,8 +225,8 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(view['coverage']['missing_candle_count'],0)
         self.assertEqual(view['coverage']['trade_candle_count'],1)
 
-    def test_post_exit_gap_is_reported_and_does_not_shorten_sixty_available_candles(self):
-        now = NOW; fetch = provider(now)
+    def test_post_exit_gap_is_reported_and_does_not_shorten_160_available_candles(self):
+        now = at('2026-12-01T11:00:00-05:00'); fetch = provider(now)
         gap = at('2026-10-20T21:00:00-04:00')
         def missing(end,count=350,*,start=None):
             raw = fetch(end,count,start=start)
@@ -231,7 +234,7 @@ class TimelineTests(unittest.TestCase):
             return raw
         rec = record('2026-10-20T14:30:00-04:00', entry_at='2026-10-19T10:00:00-04:00')
         with patch.object(md,'_fetch_candles',side_effect=missing): view = tl.build_timeline(rec,now)
-        self.assertEqual(view['coverage']['after_exit_count'],60)
+        self.assertEqual(view['coverage']['after_exit_count'],160)
         self.assertEqual(view['coverage']['missing_candle_count'],1)
         self.assertEqual(view['coverage']['first_missing_open'],gap.isoformat())
         self.assertNotIn(gap.isoformat(),[c['open_time'] for c in view['candles']])
@@ -259,10 +262,10 @@ class TimelineTests(unittest.TestCase):
     def test_forward_request_uses_from_and_count_without_to(self):
         raw = {'instrument':'EUR_USD','granularity':'H4','candles':[]}
         with patch.dict(os.environ,ENVIRONMENT,clear=True), patch.object(md,'urlopen',return_value=io.BytesIO(json.dumps(raw).encode())) as request:
-            md._fetch_candles(None,count=61,start=NOW)
+            md._fetch_candles(None,count=161,start=NOW)
         params = parse_qs(urlsplit(request.call_args.args[0].full_url).query)
         self.assertEqual(params['from'],[NOW.isoformat()])
-        self.assertEqual(params['count'],['61'])
+        self.assertEqual(params['count'],['161'])
         self.assertNotIn('to',params)
         self.assertEqual(params['granularity'],['H4'])
         self.assertEqual(params['dailyAlignment'],['17'])

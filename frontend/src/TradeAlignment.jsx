@@ -57,6 +57,6 @@ export default function TradeAlignment({ record, source, onSourceChange, onAnaly
       </div>)}</details>
     </>}
     {snapshot && <><button type="button" className="ta-evidence-toggle" aria-expanded={showMarket} onClick={() => setShowMarket(value => !value)}>{showMarket ? 'Hide comparison market evidence' : 'View comparison market evidence'}</button>
-      {active && showMarket && <MarketReview snapshot={setupChartSnapshot(snapshot)} evaluation={snapshot.rule_evaluation} setupZones={snapshot.zones} />}</>}
+      {active && showMarket && <MarketReview includeAfter snapshot={setupChartSnapshot(snapshot)} evaluation={snapshot.rule_evaluation} setupZones={snapshot.zones} />}</>}
   </section>
 }
