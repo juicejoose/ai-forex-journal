@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 import market_data as md
 import trade_database as db
+from trade_calculations import trade_outcome
 from chart_context import CONTEXT_CANDLES, DISPLAY_WARMUP
 
 MAX_CANDLES = 10000
@@ -112,10 +113,21 @@ def build_timeline(record, now):
             anchor = next((c for c in all_candles if c.open_time <= at < c.close_time), None)
         events.append({'kind': kind, 'at': at.isoformat(), 'price': price,
                        'candle_open_time': anchor.open_time.isoformat() if anchor else None})
+    # A display-only pip estimate uses the same validated midpoint as the chart.
+    # Never save it as an exit or let after-exit review prices alter a closed result.
+    price_result = None
+    if not exited and selected:
+        latest = selected[-1]
+        result = trade_outcome(entry, {'exit_price': str(latest.close)})
+        price_result = {'version': 'trade_live_pips_v1', 'pips': result['pips'], 'outcome': result['outcome'],
+                        'price_basis': 'midpoint', 'reference_price': str(latest.close),
+                        'reference_kind': 'completed' if latest.complete else 'forming',
+                        'reference_at': (latest.close_time if latest.complete else now).isoformat()}
     return {
         'schema_version': 1, 'analysis_kind': 'trade_timeline', 'trade_id': record['id'],
         'status': record['status'], 'direction': entry['direction'], 'source': 'OANDA',
         'instrument': 'EUR_USD', 'timeframe': 'H4', 'price_basis': 'midpoint',
+        'price_result': price_result,
         'as_of': now.isoformat(), 'entry_at': entered.isoformat(), 'exit_at': exited.isoformat() if exited else None,
         'display_through': cutoff.isoformat(), 'events': events,
         'session': {'start_utc': start.isoformat(), 'end_utc': end.isoformat()},

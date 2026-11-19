@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildChartData, chartTime } from '../src/marketChartData.js'
-import { validTradeTimeline, tradeTimelineMarkers, timelineCandleState } from '../src/tradeTimeline.js'
+import { validTradeTimeline, tradeTimelineMarkers, timelineCandleState, timelinePriceResult } from '../src/tradeTimeline.js'
 
 const candle = hour => ({open_time: `2026-11-10T${hour}:00:00Z`, close_time: `2026-11-10T${Number(hour)+4}:00:00Z`,
   open: 1.1, high: 1.102, low: 1.099, close: 1.101, complete: true, indicators: {rsi14_sma14: 52}})
@@ -82,4 +82,28 @@ test('post-exit context alone cannot create a trade shading interval', () => {
   assert.equal(result.reviewedCount,0)
   assert.equal(result.endIndex,-1)
   assert.equal(result.startIndex,result.rows.length)
+})
+
+
+const liveView=()=>({...view(),price_result:{version:'trade_live_pips_v1',pips:'+12.5',outcome:'positive',price_basis:'midpoint',reference_price:'1.101',reference_kind:'forming',reference_at:'2026-11-10T16:00:00Z'}})
+
+test('live pip estimates require the latest chart midpoint and a matching timestamp',()=>{
+  assert.equal(timelinePriceResult(liveView()).pips,'+12.5')
+  for(const change of [{reference_at:'2026-11-10T17:00:00Z'},{reference_at:null},{reference_price:'NaN'},{reference_price:'1.2'},{pips:null}]){
+    const data=liveView();Object.assign(data.price_result,change)
+    assert.equal(timelinePriceResult(data),null)
+  }
+})
+
+test('closed trades and absent prices cannot acquire a live pip result',()=>{
+  assert.equal(timelinePriceResult({...liveView(),status:'closed'}),null)
+  assert.equal(timelinePriceResult({...liveView(),candles:[]}),null)
+  assert.equal(timelinePriceResult(view()),null)
+})
+
+test('completed fallback retains its older close time instead of pretending to be live',()=>{
+  const data=liveView();data.candles=[first];data.price_result.reference_kind='completed';data.price_result.reference_at=first.close_time
+  assert.equal(timelinePriceResult(data).reference_kind,'completed')
+  data.price_result.reference_at=data.as_of
+  assert.equal(timelinePriceResult(data),null)
 })

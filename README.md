@@ -190,6 +190,23 @@ Migration **trade v2** adds `trade_strategy_analyses`, with one immutable record
 
 Offline tests cover actual long/short direction, mixed session histories, missing versus neutral readings, reduced points, saved rule versions, future-data rejection, exact H4 cutoffs, rollover/weekend/DST timing, immutable reconstruction, old trades, source deletion, provider failure/retry, concurrent requests, request conflicts and authenticated same-origin access. Market and strategy calculations are unchanged.
 
+## Entry and full-trade scores
+
+Opening a trade displays two independent Python-calculated summaries above the chart:
+
+- **Entry score:** supporting and conflicting points from the single latest completed H4 candle at or before the recorded entry. Bullish points support a long; bearish points support a short. The underlying bullish-minus-bearish net always describes market direction. This automatically creates or reuses the immutable **Reconstruct at entry** evidence; it does not use the earlier saved setup or the pre-entry session average. The original session comparison remains available under **Entry session context**.
+- **Full trade score:** the equal-weight average of every completed H4 candle whose close is strictly after entry and at or before the recorded exit. Bullish and bearish points are averaged separately; net is average bullish minus average bearish. Open positions show **Trade-to-date score**, refreshing every minute while visible. A candle closing exactly at entry belongs only to the entry context; one closing exactly at exit counts in the trade average.
+
+The entry-containing candle counts if it closes while the trade is open, using its full H4 prices (including prices before entry). A candle closing after a mid-bar exit is excluded, even when the chart displays it. Forming candles and the chart's preceding/post-exit review context never enter the average. No completed closes means **Unavailable**, not zero. Missing scheduled candles cause a visible retryable error; a valid saved entry score remains visible. Missing indicator inputs withhold the average rather than counting as zero. These scores measure rule alignment, not profit, discipline or win probability; there is no new pass/fail threshold.
+
+Each score card has an **Evidence** button that opens the breakdown and moves keyboard focus to the corresponding section below the chart. The trade overview places direction/status beside the title and shows **Pips** after Initial target. Open trades display a provisional entry-to-latest-chart-midpoint estimate that refreshes with the chart every minute. Python uses the same signed pip calculation as closed trades, reversed for shorts. The price timestamp is displayed; when only a completed candle is available, it is labeled **Last H4 close** instead of live. Missing/failed prices stay unavailable, never zero. This estimate excludes spread/fees and is not a broker liquidation quote. Closed trades always show the saved entry-to-exit pips; later chart prices cannot alter that result. No estimate becomes a recorded exit or changes strategy scores.
+
+**Entry & full-trade score evidence** below the chart shows the entry's four factors, exact cutoff, and every candle included in the trade average. The existing versioned four-factor weights, thresholds and reduced points are unchanged. Full-period calculation uses the saved entry strategy definition and 300 earlier completed warmup candles, with no data beyond its cutoff. Retrospective entry reconstruction remains labeled; it does not establish what the trader knew at entry.
+
+`POST /trades/{id}/scores` accepts only `{}`. The server owns entry/exit times, strategy version and points; there are no AI calls. Existing login and same-origin protections apply. Trade migration **v4** adds `trade_score_snapshots`. The first successful closed-trade calculation is immutable, hashed and bound to the saved entry evidence, entry analysis and exit. Reopening reuses it without provider calls. Open averages remain provisional and are recalculated; the entry evidence stays fixed. Long provider requests run outside write transactions, with closure/deletion rechecked before saving. Explicit trade deletion also removes its score snapshot. Restart the backend to apply the additive migration.
+
+Offline tests cover entry versus session scoring, long/short alignment, close boundaries, no eligible candles, missing data and retry, forming/future-price exclusion, multi-session/weekend/DST averages, frozen final results, migration, authentication, concurrent closure/deletion and duplicate calculations. Frontend checks reject stale or mismatched responses and distinguish unavailable values from zero.
+
 ## Trade deletion and collapsible history
 
 **Trade history** is collapsible; its heading keeps the current filter's count visible while the selected trade remains available below. Each history card has a **Delete** button, also available in selected-trade details. A confirmation names the trade and explains that deletion removes its entry, exit, reviews, copied evidence and saved comparisons. Unsaved exit/review changes are explicitly warned about. Cancel and Escape leave the record intact; failed requests keep the dialog available for retry. Deleting this record does not close any broker position.
@@ -397,7 +414,7 @@ All automated backend tests live in `backend/tests/`. Run discovery from `backen
 ./.venv/bin/python -B -m unittest -v tests.test_journal_calendar
 ```
 
-The current backend suite contains **270 tests**:
+Selected backend test coverage:
 
 | File | Tests | Coverage |
 | --- | ---: | --- |
@@ -423,7 +440,7 @@ The current backend suite contains **270 tests**:
 | `tests/test_ema_distance.py` | 11 | Inclusive 60-pip boundaries in both directions, full precision, missing inputs, fixed denominator, combined reductions, daily/range/Today reuse, AI inputs and immutable historical v4 revisions |
 | `tests/test_today.py` | 19 | Empty/partial/full sessions, close boundaries, rollover, weekend/DST history, future-data exclusion, delayed candles, partial grounding and averages, cache expiry, AI snapshot consistency, immutable saving and calendar semantics |
 
-These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with `Ran 270 tests` and `OK`.
+These tests use dummy credentials, simulated provider responses, and temporary databases. They do not make live OANDA/OpenAI requests or change your saved journals. No running backend server or real `.env` is required. Some tests intentionally log an evidence-rejection message; a successful run ends with the total test count and `OK`.
 
 From the repository root, check the frontend:
 
@@ -434,7 +451,7 @@ npm run lint
 npm run build
 ```
 
-The 39 frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage and signed average-net formatting, version-aware RSI/momentum badges, range validation and preview mapping, Today snapshot consistency/freshness and summary changes, current strategy choices and retired-profile handling, journal-name fallbacks and unsaved-name detection, and preservation of daily/range/intraday journal text. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
+The frontend tests cover date placement, leap years, month/year navigation, New York date boundaries, percentage and signed average-net formatting, version-aware RSI/momentum badges, range validation and preview mapping, Today snapshot consistency/freshness and summary changes, current strategy choices and retired-profile handling, journal-name fallbacks and unsaved-name detection, and preservation of daily/range/intraday journal text. The build writes generated frontend assets to `frontend/dist`. It does not start the backend or publish the app.
 
 The separate `backend/check_oanda.py` and `backend/check_openai.py` scripts are optional **live connection checks**, not part of the automated suite. They use real credentials and contact the providers; the OpenAI check uses API tokens. The OpenAI check uses the configured model with medium reasoning and a smaller 2,048-token limit. It prints the requested and returned model, response status, and usage, and exits with an error for incomplete or empty replies. The OANDA check currently uses the fixed session date 2026-10-20.
 

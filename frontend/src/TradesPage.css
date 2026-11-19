@@ -73,7 +73,9 @@
 .trade-history { padding: .65rem 1rem; }
 .trade-overview { padding: .8rem 1rem; }
 .trade-overview-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; }
-.trade-overview-heading h3 { margin: 0; flex: 1; min-width: min(100%,12rem); }
+.trade-overview-title { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; flex: 1; min-width: 0; }
+.trade-overview-title h3 { margin: 0; }
+.trade-overview-title .trade-badge { flex-shrink: 0; }
 .trade-result-chip { font-size: .72rem; font-variant-numeric: tabular-nums; }
 .trade-overview-metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap: .5rem 1rem; margin: .6rem 0 0; }
 .trade-overview-metrics dt { font-size: .62rem; color: var(--text); }
@@ -89,7 +91,7 @@
 .trade-entry-notes { padding: .25rem 1rem; }
 .trade-entry-notes summary, .trade-chart-details summary { font-size: .72rem; color: var(--text-h); }
 @media (max-width: 600px) {
-  .trade-overview-heading h3 { flex-basis: 100%; }
+  .trade-overview-title { flex-basis: 100%; }
   .trade-overview-heading .trade-delete-link { margin-left: auto; }
   .trade-overview-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .trade-chart-status { font-size: .6rem; }

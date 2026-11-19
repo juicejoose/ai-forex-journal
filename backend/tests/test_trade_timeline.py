@@ -1,6 +1,7 @@
 """Offline timeline coverage, provisional prices and immutable entry evidence."""
 from copy import deepcopy
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 import os
 import io
 import json
@@ -66,6 +67,43 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(view['coverage']['missing_candle_count'], 0)
         self.assertEqual(view['events'][0]['at'], at(ENTERED).isoformat())
         self.assertNotIn('rule_evaluation', view)
+
+    def test_live_pips_use_latest_midpoint_with_long_short_and_fractional_precision(self):
+        latest=Decimal(str(self.build()['candles'][-1]['close']))
+        for direction,delta,expected in [('long','0.00125','+12.5'),('short','0.00125','-12.5'),('short','-0.00125','+12.5'),('long','0','0.0')]:
+            rec=record();rec['entry'].update(direction=direction,entry_price=str(latest-Decimal(delta)),initial_stop_loss=None)
+            result=self.build(rec)['price_result']
+            self.assertEqual(result['pips'],expected)
+            self.assertEqual(result['price_basis'],'midpoint')
+            self.assertEqual(result['reference_kind'],'forming')
+            self.assertEqual(result['reference_at'],NOW.isoformat())
+            self.assertEqual(Decimal(result['reference_price']),latest)
+
+    def test_no_forming_price_labels_completed_close_with_its_actual_timestamp(self):
+        fetch=provider()
+        def missing_forming(end,count=350,*,start=None):
+            raw=fetch(end,count,start=start)
+            raw['candles']=[c for c in raw['candles'] if c['complete']]
+            return raw
+        with patch.object(md,'_fetch_candles',side_effect=missing_forming):view=tl.build_timeline(record(),NOW)
+        self.assertEqual(view['price_result']['reference_kind'],'completed')
+        self.assertEqual(view['price_result']['reference_at'],view['candles'][-1]['close_time'])
+        self.assertLess(at(view['price_result']['reference_at']),NOW)
+
+    def test_weekend_price_stays_completed_and_no_post_entry_price_stays_missing(self):
+        now=at('2026-11-07T12:00:00-05:00')
+        weekend=self.build(record(entry_at='2026-11-06T10:00:00-05:00'),now)
+        self.assertEqual(weekend['price_result']['reference_kind'],'completed')
+        self.assertEqual(weekend['price_result']['reference_at'],at('2026-11-06T17:00:00-05:00').isoformat())
+        empty=self.build(record(entry_at='2026-11-07T10:00:00-05:00'),now)
+        self.assertIsNone(empty['price_result'])
+
+    def test_closed_timeline_never_supplies_live_result_even_with_after_exit_prices(self):
+        rec=record('2026-11-09T14:30:00-05:00')
+        original=deepcopy(rec)
+        self.assertIsNone(self.build(rec)['price_result'])
+        self.assertIsNone(self.build(rec,NOW+timedelta(days=4))['price_result'])
+        self.assertEqual(rec,original)
 
     def test_forming_data_is_opt_in_and_never_changes_default_parser(self):
         raw = provider()(NOW)
@@ -141,6 +179,7 @@ class TimelineTests(unittest.TestCase):
         with patch.object(md, '_fetch_candles', side_effect=changed): later = tl.build_timeline(record(), NOW)
         self.assertEqual(baseline['candles'][:-1], later['candles'][:-1])
         self.assertNotEqual(baseline['candles'][-1]['indicators'], later['candles'][-1]['indicators'])
+        self.assertNotEqual(baseline['price_result']['pips'],later['price_result']['pips'])
 
     def test_weekend_entry_without_market_candles_still_returns_context(self):
         now = at('2026-11-07T12:00:00-05:00')

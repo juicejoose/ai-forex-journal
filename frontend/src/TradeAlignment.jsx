@@ -17,9 +17,9 @@ export default function TradeAlignment({ record, source, onSourceChange, onAnaly
   const snapshot = source === 'saved_setup' ? record.context?.setup?.snapshot : analysis?.reconstructed_snapshot
   const coverage = analysis?.coverage
   const latest = analysis?.factors[0]?.latest
-  return <section className="trade-card trade-alignment" aria-label="Four-factor trade comparison">
-    <div className="trade-row"><h3>Four-factor trade comparison</h3><span className="trade-badge">{record.entry.direction === 'long' ? 'Long' : 'Short'} entry</span></div>
-    <p className="trade-help">Supporting means the factor agrees with your recorded direction; conflicting means it points the other way. Existing point weights and reductions are preserved.</p>
+  return <section className="trade-card trade-alignment" aria-label="Entry session context">
+    <div className="trade-row"><h3>Entry session context</h3><span className="trade-badge">{record.entry.direction === 'long' ? 'Long' : 'Short'} entry</span></div>
+    <p className="trade-help">These averages describe the session before entry. The Entry score above uses only the latest completed candle; the Full trade score averages closes during the trade. Supporting factors agree with your recorded direction; conflicting factors point the other way.</p>
     <div className="ta-sources" role="group" aria-label="Comparison evidence source">
       {record.context?.setup && <button type="button" aria-pressed={source === 'saved_setup'} disabled={busy} onClick={() => onSourceChange('saved_setup')}>Saved setup evidence</button>}
       <button type="button" aria-pressed={source === 'entry_time'} disabled={busy} onClick={() => onSourceChange('entry_time')}>At entry · reconstructed</button>

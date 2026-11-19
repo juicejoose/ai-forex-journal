@@ -452,9 +452,7 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
     """Only current/past candles influence a score; missing history is explicit."""
     catalog = build_evidence_catalog(snapshot, allow_partial=allow_partial)
     definition = rule_set_definition(rule_set_id)
-    definitions = definition["factors"]
     max_points = definition["max_points"]
-    rsi_low, rsi_high = (30, 70) if rule_set_id == LEGACY_RULE_SET_ID else (40, 60)
     settings = snapshot.get("indicator_settings", {})
     if (snapshot.get("instrument") != "EUR_USD" or snapshot.get("timeframe") != "H4"
             or settings.get("ema", {}).get("period") != 20
@@ -465,11 +463,25 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
             settings.get("rsi_ma", {}).get(key) != expected
             for key, expected in (("source", "rsi14"), ("type", "sma"), ("period", 14))):
         raise InvalidJournalEvidence("The RSI-based MA strategy requires SMA14 smoothing of RSI14.")
-    rows = []
     previous = snapshot.get("previous_candle")
     history = snapshot.get("previous_candles")
     older = history[0] if isinstance(history, list) and len(history) == 2 and history[1] == previous else None
-    for index, candle in enumerate(snapshot["candles"]):
+    rows = score_candles(snapshot["candles"], older, previous, definition, catalog)
+    session_end = {"method": "final_candle", "candle_id": rows[-1]["candle_id"], **_score(rows[-1]["factors"], max_points)}
+    result = {"schema_version": 1, "rule_set": definition, "candles": rows, "summary": session_end}
+    if rule_set_id in SESSION_RULE_SET_IDS:
+        result.update(summary=_session_average(rows, max_points), session_end=session_end)
+    return result
+
+
+def score_candles(candles, older, previous, definition, catalog):
+    """Shared four-factor kernel; callers validate their own period and evidence bounds."""
+    rule_set_id = definition['id']
+    definitions = definition['factors']
+    max_points = definition['max_points']
+    rsi_low, rsi_high = (30, 70) if rule_set_id == LEGACY_RULE_SET_ID else (40, 60)
+    rows = []
+    for index, candle in enumerate(candles):
         candle_id = f"C{index + 1}"
         previous_id = "P0" if index == 0 else f"C{index}"
         older_id = "P-1" if index == 0 else "P0" if index == 1 else f"C{index - 1}"
@@ -527,8 +539,4 @@ def evaluate_strategy(snapshot, rule_set_id=RULE_SET_ID, *, allow_partial=False)
                      "close_time_local": catalog[candle_id]["close_time_local"],
                      "factors": factors, **_score(factors, max_points)})
         older, previous = previous, candle
-    session_end = {"method": "final_candle", "candle_id": rows[-1]["candle_id"], **_score(rows[-1]["factors"], max_points)}
-    result = {"schema_version": 1, "rule_set": definition, "candles": rows, "summary": session_end}
-    if rule_set_id in SESSION_RULE_SET_IDS:
-        result.update(summary=_session_average(rows, max_points), session_end=session_end)
-    return result
+    return rows

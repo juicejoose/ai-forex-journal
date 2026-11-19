@@ -1,0 +1,23 @@
+.trade-score-panel { margin: .6rem 0; }
+.trade-score-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .6rem; }
+.trade-score-cards > div { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .8rem; background: var(--social-bg); min-width: 0; }
+.trade-score-cards h4 { margin: 0 0 .2rem; font-size: .68rem; font-weight: 500; }
+.trade-score-cards strong { display: block; font-size: .95rem; font-variant-numeric: tabular-nums; }
+.trade-score-cards p { margin: .2rem 0; font-size: .65rem; }
+.trade-score-cards small { font-size: .6rem; color: var(--text); }
+.trade-page .trade-score-footnote { margin: .35rem 0 0; font-size: .59rem; }
+.trade-score-details { border-top: 1px solid var(--border); margin-top: .5rem; }
+.trade-score-details summary { color: var(--text-h); font-size: .72rem; }
+.trade-score-table { overflow-x: auto; margin: .7rem 0; border: 1px solid var(--border); border-radius: 8px; }
+.trade-score-table:focus-visible { outline: 2px solid var(--accent); }
+.trade-score-table table { border-collapse: collapse; min-width: 520px; width: 100%; text-align: left; font-size: .68rem; }
+.trade-score-table caption { text-align: left; padding: .6rem; font-size: .65rem; }
+.trade-score-table th,.trade-score-table td { padding: .6rem; border-top: 1px solid var(--border); }
+.trade-score-table tbody th { font-weight: 500; }
+@media(max-width:600px) { .trade-score-cards > div { padding: .5rem; } .trade-score-cards strong { font-size: .8rem; } }
+
+.trade-score-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem; margin-bottom: .2rem; }
+.trade-page .trade-score-heading h4 { margin: 0; }
+.trade-page .trade-score-evidence-link { padding: .15rem .35rem; min-height: 32px; font-size: .6rem; white-space: nowrap; }
+.trade-score-evidence-heading { scroll-margin-top: 4.5rem; }
+.trade-score-evidence-heading:focus { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }

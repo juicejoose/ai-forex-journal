@@ -27,3 +27,15 @@ export function timelineCandleState(candle) {
   return [candle.timeline_phase === 'after_exit' ? 'After exit' : candle.timeline_phase === 'after_review' ? 'After review' : null, candle.complete === false ? 'Forming · provisional' : 'Completed',
     candle.contains_post_exit_prices ? 'Includes prices after exit' : null].filter(Boolean).join(' · ')
 }
+
+
+export function timelinePriceResult(view) {
+  const result=view?.price_result, row=view?.candles?.at(-1)
+  const at=chartTime(result?.reference_at), entered=chartTime(view?.entry_at), asOf=chartTime(view?.as_of)
+  if (view?.status!=='open' || !row || !result || result.version!=='trade_live_pips_v1' || result.price_basis!=='midpoint' ||
+      !['forming','completed'].includes(result.reference_kind) || typeof result.pips!=='string' || !/^[+-]?\d+\.\d$/.test(result.pips) ||
+      !['positive','negative','flat'].includes(result.outcome) || !Number.isFinite(Number(result.reference_price)) || Number(result.reference_price)<=0 ||
+      Number(result.reference_price)!==row.close || at===null || entered===null || asOf===null || at<entered || at>asOf ||
+      (result.reference_kind==='forming' ? row.complete!==false || at!==asOf : row.complete!==true || at!==chartTime(row.close_time))) return null
+  return result
+}

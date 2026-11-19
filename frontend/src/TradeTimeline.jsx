@@ -1,12 +1,27 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
 import { API } from './api.js'
 import { chartStamp, chartTime } from './marketChartData.js'
-import { validTradeTimeline } from './tradeTimeline.js'
+import useTradeScores from './useTradeScores.js'
+import { TradeScoreCards,TradeScoreDetails } from './TradeScores.jsx'
+import { validTradeTimeline,timelinePriceResult } from './tradeTimeline.js'
 
 const MarketChart = lazy(() => import('./MarketChart.jsx'))
 const stamp = value => chartStamp(chartTime(value))
 
-export default function TradeTimeline({ record, active }) {
+export default function TradeTimeline({ record, active, onEntryAnalysis, onPriceResult }) {
+  const scores=useTradeScores(record,active,onEntryAnalysis)
+  const priceCallback=useRef(onPriceResult)
+  useEffect(()=>{priceCallback.current=onPriceResult},[onPriceResult])
+  const evidenceId=useId()
+  const evidenceRef=useRef(null), entryEvidenceRef=useRef(null), fullEvidenceRef=useRef(null)
+  const evidenceIds={entry:`${evidenceId}-entry`,full:`${evidenceId}-full`}
+  function showEvidence(kind) {
+    const target=kind==='entry' ? entryEvidenceRef.current : fullEvidenceRef.current
+    if (!evidenceRef.current || !target) return
+    evidenceRef.current.open=true
+    target.focus({preventScroll:true})
+    target.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'})
+  }
   const [view, setView] = useState(null)
   const [selected, setSelected] = useState(null)
   const [error, setError] = useState('')
@@ -28,8 +43,9 @@ export default function TradeTimeline({ record, active }) {
         const data = await response.json().catch(() => null)
         if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : 'Could not load the trade timeline.')
         if (!validTradeTimeline(data, id, exitAt)) throw new Error('The trade changed or its chart response is unsupported. Reopen the trade to refresh its details.')
-        if (!disposed) { setView(data); setError('') }
+        if (!disposed) { setView(data); setError(''); priceCallback.current?.({tradeId:id,result:timelinePriceResult(data),error:false}) }
       } catch (err) {
+        if (!disposed) priceCallback.current?.({tradeId:id,result:null,error:true})
         if (!disposed) setError(err.name === 'AbortError' ? 'The chart refresh timed out. Please retry.' : err.message)
       } finally {
         clearTimeout(timeout)
@@ -47,10 +63,11 @@ export default function TradeTimeline({ record, active }) {
   return <section className="trade-card trade-timeline" aria-label="Trade timeline">
     <div className="trade-timeline-toolbar">
       <p className="trade-help">{view ? `Checked ${stamp(view.as_of)}` : 'Trade timeline'} · {exitAt ? 'Refresh for later candles' : 'Updates every minute'} · OANDA midpoint</p>
-      <button type="button" onClick={() => setReload(value => value + 1)} disabled={fetching}>{fetching ? 'Refreshing chart…' : 'Refresh chart'}</button>
+      <button type="button" onClick={() => {setReload(value => value + 1);scores.refresh()}} disabled={fetching}>{fetching ? 'Refreshing chart…' : 'Refresh chart'}</button>
     </div>
     {error && <p className="trade-error" role="alert">{error} {view && 'Showing the last successful chart; it may be outdated.'}</p>}
     {!view && !error && <p role="status">Loading the trade’s candles and indicators…</p>}
+    <TradeScoreCards scores={scores} record={record} evidenceIds={evidenceIds} onShowEvidence={showEvidence} />
     {view && <>
       <div className="trade-chart-status">
         {exitAt && <span>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 160} candles after exit</span>}
@@ -72,5 +89,6 @@ export default function TradeTimeline({ record, active }) {
         {view.events.some(event => !event.candle_open_time) && <p className="trade-help">An entry or exit occurred outside available candles; no marker is placed on an unrelated candle.</p>}
       </details>
     </>}
+    <TradeScoreDetails value={scores.value} evidenceRef={evidenceRef} entryRef={entryEvidenceRef} fullRef={fullEvidenceRef} evidenceIds={evidenceIds} />
   </section>
 }

@@ -1,5 +1,7 @@
 from typing import Literal
 from uuid import UUID
+from pydantic import BaseModel, ConfigDict
+from trade_scores import calculate_scores
 from fastapi import APIRouter, HTTPException, Query, Response
 import trade_database as db
 from trade_models import TradeInput, TradeCloseInput, TradeReviewInput, TradeAnalysisInput
@@ -53,3 +55,12 @@ def timeline(identifier:UUID): return execute(fetch_timeline,identifier)
 def delete(identifier:UUID):
     execute(db.delete_trade,identifier)
     return Response(status_code=204)
+
+
+class TradeScoresInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+
+@router.post('/trades/{identifier}/scores')
+def scores(identifier: UUID, entry: TradeScoresInput):
+    return execute(calculate_scores,identifier)

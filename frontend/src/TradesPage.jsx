@@ -28,6 +28,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   const [creating, setCreating] = useState(Boolean(seed))
   const [entryDirty, setEntryDirty] = useState(Boolean(seed))
   const [record, setRecord] = useState(null)
+  const [livePrice, setLivePrice] = useState(null)
   const [exit, setExit] = useState(blankExit)
   const [review, setReview] = useState(neutralReview)
   const [reviewBase, setReviewBase] = useState(() => ({ ...neutralReview(), revision: 0 }))
@@ -79,7 +80,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
 
   function edit(values) { setForm(current => ({ ...current, ...values })); setEntryDirty(true); setError(''); setMessage('') }
   function present(value) {
-    setHistoryOpen(false); setRecord(value); setExit(blankExit()); setReview({ discipline: value.review.discipline, notes: value.review.notes }); setReviewBase(value.review); setComparisonSource(preferredAnalysis(value))
+    setHistoryOpen(false); setRecord(value); setLivePrice(null); setExit(blankExit()); setReview({ discipline: value.review.discipline, notes: value.review.notes }); setReviewBase(value.review); setComparisonSource(preferredAnalysis(value))
     requestAnimationFrame(() => { detailRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); detailRef.current?.focus({ preventScroll: true }) })
   }
   async function save(kind, path, body) {
@@ -189,6 +190,10 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
 
   const evidence = record?.context?.setup?.snapshot
   const entry = record?.entry
+  const priceUpdate = livePrice?.tradeId===record?.id ? livePrice : null
+  const pipResult = record?.status==='closed' ? record.result : priceUpdate?.result
+  const pipNote = record?.status==='closed' ? 'Entry to exit' : pipResult ?
+    `${pipResult.reference_kind==='forming' ? 'Live estimate' : 'Last H4 close'} · midpoint` : priceUpdate?.error ? 'Price refresh failed' : priceUpdate ? 'No price available' : 'Loading price…'
   return <section id="trades-panel" className="trade-page" hidden={!active} tabIndex={-1} aria-label="Trades">
     <header className="trade-heading"><div><h2>Your trades</h2><p>EUR/USD · H4 · Manual trade log</p></div>
       <button type="button" className="trade-primary" disabled={Boolean(busy)} onClick={startNew}>Record trade</button></header>
@@ -230,9 +235,9 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       </aside>
       {record ? <article className="trade-detail" ref={detailRef} tabIndex={-1} aria-label="Selected trade">
         <section className="trade-card trade-overview" aria-label="Trade overview">
-          <div className="trade-overview-heading"><h3>{entry.title || 'EUR/USD trade'}</h3>
-            <span className="trade-badge">{entry.direction === 'long' ? 'Long' : 'Short'} · {record.status === 'open' ? 'Open' : 'Closed'}</span>
-            {record.result && <strong className={`trade-result-chip trade-${record.result.outcome}`}>{record.result.pips} pips{record.result.r_display !== null && ` · ${record.result.r_display} R`}</strong>}
+          <div className="trade-overview-heading"><div className="trade-overview-title"><h3>{entry.title || 'EUR/USD trade'}</h3>
+            <span className="trade-badge">{entry.direction === 'long' ? 'Long' : 'Short'} · {record.status === 'open' ? 'Open' : 'Closed'}</span></div>
+            {record.result?.r_display != null && <strong className={`trade-result-chip trade-${record.result.outcome}`}>{record.result.r_display} R</strong>}
             <button type="button" className="trade-delete-link" disabled={Boolean(busy)} onClick={event => askDelete(record,event.currentTarget)}>Delete trade</button>
           </div>
           <dl className="trade-overview-metrics">
@@ -240,9 +245,13 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
             {record.exit && <div><dt>Exit · actual fill</dt><dd>{record.exit.exit_price}<small>{setupTime(record.exit.exit_at)}</small></dd></div>}
             <div><dt>Initial stop</dt><dd>{shownPrice(entry.initial_stop_loss)}</dd></div>
             <div><dt>Initial target</dt><dd>{shownPrice(entry.initial_take_profit)}</dd></div>
+            <div><dt>Pips</dt><dd className={pipResult ? `trade-${pipResult.outcome}` : undefined}>{pipResult?.pips ?? 'Unavailable'}<small>{pipNote}</small>{record.status==='open' && pipResult && <small>{setupTime(pipResult.reference_at)}</small>}</dd></div>
           </dl>
         </section>
-        <TradeTimeline key={`${record.id}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} />
+        <TradeTimeline key={`${record.id}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} onPriceResult={setLivePrice} onEntryAnalysis={analysis => setRecord(current => {
+          if (!current || current.id !== record.id || current.strategy_analyses.some(item => item.id===analysis.id)) return current
+          return {...current,strategy_analyses:[...current.strategy_analyses,analysis]}
+        })} />
         <details className="trade-card trade-entry-notes" key={`notes-${record.id}`}><summary>Entry reasoning & observations</summary>
           <p className="trade-help">Logged {setupTime(record.created_at)} · EUR/USD · H4</p>
           <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>

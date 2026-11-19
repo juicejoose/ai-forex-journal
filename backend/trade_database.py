@@ -67,6 +67,18 @@ def init_trade_db():
                     BEGIN SELECT RAISE(ABORT,'Deletion identifiers are fixed'); END""")
             con.execute('INSERT INTO trade_schema_migrations VALUES (3,?)',(datetime.now(timezone.utc).isoformat(),))
 
+        if not con.execute('SELECT 1 FROM trade_schema_migrations WHERE version=4').fetchone():
+            con.execute("""CREATE TABLE trade_score_snapshots (
+                trade_id TEXT PRIMARY KEY REFERENCES trades(id) ON DELETE RESTRICT,
+                entry_analysis_id TEXT NOT NULL REFERENCES trade_strategy_analyses(id) ON DELETE RESTRICT,
+                exit_hash TEXT NOT NULL, score_json TEXT NOT NULL, score_hash TEXT NOT NULL, created_at TEXT NOT NULL)""")
+            con.execute("""CREATE TRIGGER trade_score_snapshots_no_update BEFORE UPDATE ON trade_score_snapshots
+                BEGIN SELECT RAISE(ABORT,'Closed trade scores are fixed'); END""")
+            con.execute("""CREATE TRIGGER trade_score_snapshots_no_delete BEFORE DELETE ON trade_score_snapshots
+                WHEN NOT EXISTS (SELECT 1 FROM trade_deletions WHERE trade_id=OLD.trade_id)
+                BEGIN SELECT RAISE(ABORT,'Use explicit trade deletion'); END""")
+            con.execute('INSERT INTO trade_schema_migrations VALUES (4,?)',(datetime.now(timezone.utc).isoformat(),))
+
 
 def delete_trade(identifier):
     """Explicit, atomic removal; retain only retry IDs to prevent resurrection."""
@@ -77,7 +89,7 @@ def delete_trade(identifier):
             if con.execute('SELECT 1 FROM trade_deletions WHERE trade_id=?',(identifier,)).fetchone(): return
             raise TradeNotFound('Trade not found.')
         con.execute('INSERT INTO trade_deletions VALUES (?,?,?)',(identifier,row['request_id'],datetime.now(timezone.utc).isoformat()))
-        for table in ('trade_strategy_analyses','trade_reviews','trade_exits'):
+        for table in ('trade_score_snapshots','trade_strategy_analyses','trade_reviews','trade_exits'):
             con.execute(f'DELETE FROM {table} WHERE trade_id=?',(identifier,))
         con.execute('DELETE FROM trades WHERE id=?',(identifier,))
 
@@ -237,3 +249,36 @@ def analyze_trade(identifier, entry):
         if _analysis_exists(con,identifier,entry): return record
         _store_analysis(con,identifier,entry.source,analysis,entry.request_id)
         return _record(con,identifier)
+
+
+def _score_snapshot(con, identifier, record, saved):
+    row = con.execute('SELECT * FROM trade_score_snapshots WHERE trade_id=?',(str(identifier),)).fetchone()
+    if row is None: return None
+    value = json.loads(row['score_json'])
+    if (row['score_hash'] != hashlib.sha256(sd.canonical(value).encode()).hexdigest() or
+            row['exit_hash'] != hashlib.sha256(sd.canonical(record['exit']).encode()).hexdigest() or
+            row['entry_analysis_id'] != saved['id'] or value['entry_analysis_hash'] != saved['analysis_hash'] or
+            value['entry_evidence_hash'] != record['evidence_hash']):
+        raise TradeConflict('The saved trade scores failed their integrity check.')
+    return {**value,'saved_at':row['created_at']}
+
+
+def fetch_score_snapshot(identifier, record, saved):
+    with db.get_connection() as con:
+        latest = _record(con,identifier)
+        if latest['exit'] != record['exit']: return None
+        return _score_snapshot(con,identifier,latest,saved)
+
+
+def finish_scores(identifier, original, saved, value):
+    with db.get_connection(write=True) as con:
+        latest = _record(con,identifier)
+        if latest['exit'] != original['exit']: return None
+        cached = _score_snapshot(con,identifier,latest,saved)
+        if cached is not None: return cached
+        if latest['status']=='open': return {**value,'saved_at':None}
+        encoded = sd.canonical(value)
+        con.execute('INSERT INTO trade_score_snapshots VALUES (?,?,?,?,?,?)',
+                    (str(identifier),saved['id'],hashlib.sha256(sd.canonical(latest['exit']).encode()).hexdigest(),
+                     encoded,hashlib.sha256(encoded.encode()).hexdigest(),datetime.now(timezone.utc).isoformat()))
+        return _score_snapshot(con,identifier,latest,saved)
