@@ -5,10 +5,8 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 from setup_models import Price
 
 
-class TradeInput(BaseModel):
+class EntryDetails(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
-    request_id: UUID
-    setup_id: UUID | None = None
     title: str = Field(default='', max_length=120)
     instrument: Literal['EUR_USD'] = 'EUR_USD'
     timeframe: Literal['H4'] = 'H4'
@@ -33,12 +31,29 @@ class TradeInput(BaseModel):
         return self
 
 
-class TradeCloseInput(BaseModel):
-    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+class TradeInput(EntryDetails):
     request_id: UUID
+    setup_id: UUID | None = None
+
+
+class ExitDetails(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     exit_price: Price
     exit_at: AwareDatetime
     exit_notes: str = Field(default='', max_length=5000)
+
+
+class TradeCloseInput(ExitDetails):
+    request_id: UUID
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
+
+
+class TradeEditInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: UUID
+    expected_revision: int = Field(ge=0, strict=True)
+    entry: EntryDetails
+    exit: ExitDetails | None
 
 
 class TradeReviewInput(BaseModel):

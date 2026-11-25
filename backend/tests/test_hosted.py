@@ -82,7 +82,7 @@ class HostedTests(unittest.TestCase):
         from tests.test_trade_log import trade, full_exit
         from uuid import uuid4
         with self.client() as client:
-            for method, path in [('GET','/api/chart-context'),('DELETE','/api/trades/'+str(uuid4())),('GET','/api/trades'),('GET','/api/trades/'+str(uuid4())+'/timeline'),('POST','/api/trades'),('POST','/api/trades/'+str(uuid4())+'/close'),('POST','/api/trades/'+str(uuid4())+'/reviews'),('POST','/api/trades/'+str(uuid4())+'/strategy-analysis'),('POST','/api/trades/'+str(uuid4())+'/scores')]:
+            for method, path in [('GET','/api/chart-context'),('DELETE','/api/trades/'+str(uuid4())),('GET','/api/trades'),('GET','/api/trades/'+str(uuid4())+'/timeline'),('POST','/api/trades'),('POST','/api/trades/'+str(uuid4())+'/close'),('POST','/api/trades/'+str(uuid4())+'/reviews'),('POST','/api/trades/'+str(uuid4())+'/strategy-analysis'),('POST','/api/trades/'+str(uuid4())+'/edits'),('POST','/api/trades/'+str(uuid4())+'/scores')]:
                 self.assertEqual(client.request(method,path).status_code,401)
             for headers in ({'Origin':'https://other.example'},{'Sec-Fetch-Site':'cross-site'}):
                 self.assertEqual(client.post('/api/trades',json=trade(),auth=self.login,headers=headers).status_code,403)
@@ -92,7 +92,21 @@ class HostedTests(unittest.TestCase):
             self.assertEqual(client.post('/api/trades/'+record['id']+'/reviews',json={},auth=self.login,headers={'Origin':'null'}).status_code,403)
             self.assertEqual(client.post('/api/trades/'+record['id']+'/strategy-analysis',json={'source':'entry_time','request_id':str(uuid4())},auth=self.login,headers={'Origin':'https://other.example'}).status_code,403)
 
+            self.assertEqual(client.post('/api/trades/'+record['id']+'/edits',json={},auth=self.login,headers={'Origin':'https://other.example'}).status_code,403)
             self.assertEqual(client.post('/api/trades/'+record['id']+'/scores',json={},auth=self.login,headers={'Origin':'https://other.example'}).status_code,403)
+
+    def test_coach_routes_require_login_and_same_origin(self):
+        from tests.test_trade_log import trade
+        from uuid import uuid4
+        with self.client() as client:
+            path='/api/trades/'+str(uuid4())+'/coach-reviews'
+            for method,url in [('GET',path),('POST',path),('GET',path+'/'+str(uuid4()))]:
+                self.assertEqual(client.request(method,url).status_code,401)
+            record=client.post('/api/trades',json=trade(),auth=self.login).json()
+            path='/api/trades/'+record['id']+'/coach-reviews'
+            self.assertEqual(client.get(path,auth=self.login).json()['total'],0)
+            for headers in ({'Origin':'https://other.example'},{'Origin':'null'},{'Sec-Fetch-Site':'cross-site'}):
+                self.assertEqual(client.post(path,json={'request_id':str(uuid4())},auth=self.login,headers=headers).status_code,403)
 
     def test_trade_delete_requires_same_origin(self):
         from tests.test_trade_log import trade

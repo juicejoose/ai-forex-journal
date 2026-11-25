@@ -1,6 +1,7 @@
+import { localInputTime } from '../src/setupDrawing.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { blankTrade, formFromSetup, tradeRequest, exitRequest, reviewChanged, disciplineLabels } from '../src/tradeLog.js'
+import { blankTrade, formFromSetup, tradeRequest, tradeEditRequest, exitRequest, reviewChanged, disciplineLabels, tradeDuration } from '../src/tradeLog.js'
 const now=Date.parse('2026-11-01T12:00:00Z')
 const form={...blankTrade(),entryPrice:'1.10000',stopLoss:'1.09800',takeProfit:'1.10400',entryAt:'2026-10-20T09:00:00-04:00',reason:'Entered at support.'}
 
@@ -35,4 +36,37 @@ test('discipline is explicit self-report and remains independent of outcome fiel
  assert.equal(reviewChanged({discipline:'followed',notes:' Followed my plan. '},saved),false)
  assert.equal(reviewChanged({discipline:'deviated',notes:saved.notes},saved),true)
  assert.equal(disciplineLabels.followed,'Followed my plan')
+})
+
+
+test('closed duration uses the fixed exit and counts full days and remaining hours',()=>{
+ assert.equal(tradeDuration('2026-11-10T14:00:00Z','2026-11-12T19:45:00Z',0),'2d 5h')
+ assert.equal(tradeDuration('2026-11-10T14:00:00Z','2026-11-10T14:00:00Z'),'0d 0h')
+ assert.equal(tradeDuration('2026-11-10T14:00:00Z','2026-11-10T14:59:59Z'),'<1 hour')
+})
+test('open duration advances with time while invalid or future timestamps stay unavailable',()=>{
+ const entry='2026-11-10T14:00:00Z', now=Date.parse('2026-11-11T15:00:00Z')
+ assert.equal(tradeDuration(entry,null,now),'1d 1h')
+ assert.equal(tradeDuration(entry,undefined,now+3600000),'1d 2h')
+ assert.equal(tradeDuration(entry,null,0),'Unavailable')
+ assert.equal(tradeDuration('bad',null,now),'Unavailable')
+ assert.equal(tradeDuration(entry,'bad',now),'Unavailable')
+})
+test('duration measures elapsed hours across daylight saving and market weekends',()=>{
+ assert.equal(tradeDuration('2026-11-01T01:30:00-04:00','2026-11-01T01:30:00-05:00'),'0d 1h')
+ assert.equal(tradeDuration('2026-10-30T17:00:00-04:00','2026-11-02T17:00:00-05:00'),'3d 1h')
+})
+
+test('edits preserve exact saved times including seconds during the DST fallback', () => {
+  const entered = '2026-11-01T01:15:42.100588-05:00', exited = '2026-11-01T01:45:21-05:00'
+  const record = {entry:{entry_at:entered},exit:{exit_at:exited},revision:2}
+  const draft = {...form,entryAt:localInputTime(entered),setupId:'original'}
+  const exit = {at:localInputTime(exited),price:'1.109',notes:'Updated exit'}
+  const body = tradeEditRequest(record,draft,exit,now)
+  assert.equal(body.entry.entry_at, entered)
+  assert.equal(body.exit.exit_at, exited)
+  assert.equal(body.expected_revision, 2)
+  assert.equal('setup_id' in body.entry, false)
+  assert.throws(() => tradeEditRequest(record,draft,{...exit,at:'2026-10-29T01:00Z'},now))
+  assert.equal(tradeEditRequest({...record,exit:null},draft,null,now).exit,null)
 })

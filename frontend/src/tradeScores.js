@@ -12,6 +12,7 @@ export function validTradeScores(data,record) {
       chartTime(row.close_time)>entered && chartTime(row.close_time)<=cutoff &&
       (i===0 || chartTime(row.open_time)>=chartTime(rows[i-1].close_time)))
   return periodValid && data?.schema_version === 1 && data.version === 'trade_scores_v1' && data.trade_id === record.id &&
+    (data.trade_revision ?? 0) === (record.revision ?? 0) &&
     data.status === record.status && data.trade_direction === record.entry.direction &&
     chartTime(data.entry_at) === entered && chartTime(data.exit_at) === exited &&
     entered !== null && through !== null && asOf !== null && asOf >= entered &&

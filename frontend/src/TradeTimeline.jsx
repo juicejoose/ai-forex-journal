@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
 import { API } from './api.js'
 import { chartStamp, chartTime } from './marketChartData.js'
+import TradeCoach from './TradeCoach.jsx'
 import useTradeScores from './useTradeScores.js'
 import { TradeScoreCards,TradeScoreDetails } from './TradeScores.jsx'
 import { validTradeTimeline,timelinePriceResult } from './tradeTimeline.js'
@@ -8,7 +9,7 @@ import { validTradeTimeline,timelinePriceResult } from './tradeTimeline.js'
 const MarketChart = lazy(() => import('./MarketChart.jsx'))
 const stamp = value => chartStamp(chartTime(value))
 
-export default function TradeTimeline({ record, active, onEntryAnalysis, onPriceResult }) {
+export default function TradeTimeline({ record, active, onEntryAnalysis, onPriceResult, onCoachBusyChange, onCoachDirtyChange }) {
   const scores=useTradeScores(record,active,onEntryAnalysis)
   const priceCallback=useRef(onPriceResult)
   useEffect(()=>{priceCallback.current=onPriceResult},[onPriceResult])
@@ -27,7 +28,7 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
   const [error, setError] = useState('')
   const [fetching, setFetching] = useState(false)
   const [reload, setReload] = useState(0)
-  const id = record.id, exitAt = record.exit?.exit_at ?? null
+  const id = record.id, revision = record.revision ?? 0, exitAt = record.exit?.exit_at ?? null
 
   useEffect(() => {
     if (!active) return
@@ -42,7 +43,7 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
         const response = await fetch(`${API}/trades/${id}/timeline`, { signal: controller.signal, cache: 'no-store' })
         const data = await response.json().catch(() => null)
         if (!response.ok) throw new Error(typeof data?.detail === 'string' ? data.detail : 'Could not load the trade timeline.')
-        if (!validTradeTimeline(data, id, exitAt)) throw new Error('The trade changed or its chart response is unsupported. Reopen the trade to refresh its details.')
+        if (!validTradeTimeline(data, id, exitAt, revision)) throw new Error('The trade changed or its chart response is unsupported. Reopen the trade to refresh its details.')
         if (!disposed) { setView(data); setError(''); priceCallback.current?.({tradeId:id,result:timelinePriceResult(data),error:false}) }
       } catch (err) {
         if (!disposed) priceCallback.current?.({tradeId:id,result:null,error:true})
@@ -58,7 +59,7 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
     const poll = !exitAt ? setInterval(refresh, 60000) : null
     document.addEventListener('visibilitychange', visibility)
     return () => { disposed = true; controller?.abort(); clearInterval(poll); document.removeEventListener('visibilitychange', visibility) }
-  }, [id, exitAt, active, reload])
+  }, [id, revision, exitAt, active, reload])
 
   return <section className="trade-card trade-timeline" aria-label="Trade timeline">
     <div className="trade-timeline-toolbar">
@@ -67,7 +68,7 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
     </div>
     {error && <p className="trade-error" role="alert">{error} {view && 'Showing the last successful chart; it may be outdated.'}</p>}
     {!view && !error && <p role="status">Loading the trade’s candles and indicators…</p>}
-    <TradeScoreCards scores={scores} record={record} evidenceIds={evidenceIds} onShowEvidence={showEvidence} />
+    <TradeScoreCards scores={scores} record={record} evidenceIds={evidenceIds} onShowEvidence={showEvidence} coach={<TradeCoach record={record} active={active} latestClose={scores.error ? null : scores.value?.full_trade?.data_through ?? scores.value?.entry_score?.data_through} onBusyChange={onCoachBusyChange} onDirtyChange={onCoachDirtyChange} />} />
     {view && <>
       <div className="trade-chart-status">
         {exitAt && <span>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 160} candles after exit</span>}

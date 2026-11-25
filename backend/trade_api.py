@@ -1,10 +1,11 @@
 from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict
+from trade_edits import save_edit
 from trade_scores import calculate_scores
 from fastapi import APIRouter, HTTPException, Query, Response
 import trade_database as db
-from trade_models import TradeInput, TradeCloseInput, TradeReviewInput, TradeAnalysisInput
+from trade_models import TradeInput, TradeCloseInput, TradeReviewInput, TradeAnalysisInput, TradeEditInput
 from trade_calculations import TradeInputError
 from market_data import MarketDataError
 from trade_timeline import fetch_timeline
@@ -13,8 +14,8 @@ from journal_grounding import InvalidJournalEvidence
 router=APIRouter(tags=['Trade log'])
 
 
-def execute(action,*args):
-    try: return action(*args)
+def execute(action,*args,**kwargs):
+    try: return action(*args,**kwargs)
     except db.TradeNotFound as exc: raise HTTPException(404,str(exc)) from None
     except db.TradeConflict as exc: raise HTTPException(409,str(exc)) from None
     except TradeInputError as exc: raise HTTPException(422,str(exc)) from None
@@ -33,6 +34,11 @@ def listing(status:Literal['all','open','closed']='all',limit:int=Query(20,ge=1,
 
 @router.get('/trades/{identifier}')
 def read(identifier:UUID): return execute(db.fetch_trade,identifier)
+
+
+@router.post('/trades/{identifier}/edits')
+def edit(identifier:UUID, entry:TradeEditInput):
+    return execute(save_edit,identifier,entry)
 
 
 @router.post('/trades/{identifier}/close')

@@ -77,7 +77,7 @@
 .trade-overview-title h3 { margin: 0; }
 .trade-overview-title .trade-badge { flex-shrink: 0; }
 .trade-result-chip { font-size: .72rem; font-variant-numeric: tabular-nums; }
-.trade-overview-metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap: .5rem 1rem; margin: .6rem 0 0; }
+.trade-overview-metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,7.5rem),1fr)); gap: .5rem 1rem; margin: .6rem 0 0; }
 .trade-overview-metrics dt { font-size: .62rem; color: var(--text); }
 .trade-overview-metrics dd { font-size: .82rem; margin: .15rem 0 0; color: var(--text-h); font-variant-numeric: tabular-nums; }
 .trade-overview-metrics small { display: block; font-size: .6rem; color: var(--text); }
@@ -96,3 +96,17 @@
   .trade-overview-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .trade-chart-status { font-size: .6rem; }
 }
+
+.trade-direction-long { color: #1d4ed8; }
+.trade-direction-short { color: #b91c1c; }
+.trade-status-open { color: #a16207; }
+@media (prefers-color-scheme: dark) {
+  .trade-direction-long { color: #7db3ff; }
+  .trade-direction-short { color: #f28b91; }
+  .trade-status-open { color: #f5c45e; }
+}
+
+.trade-edit-dialog { width: min(44rem,calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; padding: 1.25rem; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 12px; }
+.trade-edit-dialog::backdrop { background: rgb(0 0 0 / 60%); }
+.trade-edit-dialog h3 { margin-top: 1rem; }
+.trade-edit-history { margin-top: .4rem; }

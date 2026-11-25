@@ -124,7 +124,7 @@ def build_timeline(record, now):
                         'reference_kind': 'completed' if latest.complete else 'forming',
                         'reference_at': (latest.close_time if latest.complete else now).isoformat()}
     return {
-        'schema_version': 1, 'analysis_kind': 'trade_timeline', 'trade_id': record['id'],
+        'schema_version': 1, 'analysis_kind': 'trade_timeline', 'trade_id': record['id'], 'trade_revision': record.get('revision', 0),
         'status': record['status'], 'direction': entry['direction'], 'source': 'OANDA',
         'instrument': 'EUR_USD', 'timeframe': 'H4', 'price_basis': 'midpoint',
         'price_result': price_result,
@@ -148,6 +148,6 @@ def fetch_timeline(identifier):
     # If a full exit was saved during the provider request, discard the open
     # view and honor the exit boundary and bounded after-exit context before returning prices.
     latest = db.fetch_trade(identifier)
-    if latest['exit'] != record['exit']:
+    if latest['revision'] != record['revision'] or latest['exit'] != record['exit']:
         view = build_timeline(latest, datetime.now(md.UTC))
     return view

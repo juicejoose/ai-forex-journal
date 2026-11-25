@@ -91,7 +91,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
         textColor: style.getPropertyValue('--text').trim() }
     }
     const chart = createChart(host, {
-      autoSize: true, height: 560, layout: { ...theme(), fontSize: 11, attributionLogo: true,
+      autoSize: true, height: 610, layout: { ...theme(), fontSize: 11, attributionLogo: true,
         panes: { enableResize: false, separatorColor: 'rgba(130,130,150,0.15)' } },
       grid: { vertLines: { visible: false }, horzLines: { color: 'rgba(130,130,150,0.12)' } },
       crosshair: { mode: CrosshairMode.Normal },

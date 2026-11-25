@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { API } from './api.js'
 import { setupTime, setupPageOffset } from './setupEvaluation.js'
+import TradeEditDialog, { TradeEditHistory } from './TradeEditDialog.jsx'
+import TradeEntryFields from './TradeEntryFields.jsx'
 import TradeAlignment from './TradeAlignment.jsx'
 import TradeTimeline from './TradeTimeline.jsx'
+import TradeDuration from './TradeDuration.jsx'
 import DeleteTradeDialog from './DeleteTradeDialog.jsx'
 import { preferredAnalysis } from './tradeAlignment.js'
 import SavedTradePlan from './SetupTradePlan.jsx'
@@ -34,6 +37,10 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   const [reviewBase, setReviewBase] = useState(() => ({ ...neutralReview(), revision: 0 }))
   const [comparisonSource, setComparisonSource] = useState('entry_time')
   const [busy, setBusy] = useState('')
+  const [editing, setEditing] = useState(null)
+  const [editDirty, setEditDirty] = useState(false)
+  const [coachBusy, setCoachBusy] = useState(false), [coachDirty, setCoachDirty] = useState(false)
+  const waiting = Boolean(busy) || coachBusy
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [history, setHistory] = useState({ items: [], total: 0 })
@@ -53,9 +60,9 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const exitDirty = Object.values(exit).some(value => value.trim())
   const reviewDirty = Boolean(record && reviewChanged(review, reviewBase))
-  const dirty = entryDirty || exitDirty || reviewDirty
+  const dirty = entryDirty || exitDirty || reviewDirty || coachDirty || editDirty
 
-  useEffect(() => { onBusyChange(Boolean(busy)) }, [busy, onBusyChange])
+  useEffect(() => { onBusyChange(waiting) }, [waiting, onBusyChange])
   useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
   useEffect(() => {
     if (!dirty) return
@@ -93,10 +100,10 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   }
   async function create(event) {
     event.preventDefault()
-    if (busy) return
+    if (waiting) return
     setError(''); setMessage('')
     try {
-      if ((exitDirty || reviewDirty) && !window.confirm('Discard the unsaved exit or self-review when opening this new trade?')) return
+      if ((exitDirty || reviewDirty || coachDirty) && !window.confirm('Discard the unsaved exit, self-review or coach inputs when opening this new trade?')) return
       const body = tradeRequest(form)
       setBusy('Saving your trade and entry evidence…')
       const data = await save('entry', '/trades', body)
@@ -106,16 +113,17 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
     finally { setBusy('') }
   }
   async function open(id) {
-    if (busy || ((exitDirty || reviewDirty) && !window.confirm('Discard unsaved exit or review changes and open this trade?'))) return
+    if (waiting || ((exitDirty || reviewDirty || coachDirty) && !window.confirm('Discard unsaved exit, review or coach changes and open this trade?'))) return
     setBusy('Opening saved trade…'); setError(''); setMessage('')
     try { present(await request(`/trades/${id}`)) } catch (err) { setError(err.message) } finally { setBusy('') }
   }
   async function close(event) {
     event.preventDefault()
-    if (busy) return
+    if (waiting) return
     setError(''); setMessage('')
     try {
-      const body = exitRequest(exit, record.entry.entry_at)
+      if (coachDirty && !window.confirm('Discard unsaved coach inputs and record this exit? Saved coach reviews are kept.')) return
+      const body = {...exitRequest(exit, record.entry.entry_at), expected_revision: record.revision}
       setBusy('Saving the full exit and calculating the result…')
       const data = await save('exit', `/trades/${record.id}/close`, body)
       // Keep any unsaved self-review separate from the exit save.
@@ -124,9 +132,22 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       setMessage('Full exit saved. The result does not determine your discipline rating.')
     } catch (err) { setError(err.message) } finally { setBusy('') }
   }
+  async function saveEdit(body) {
+    if (coachDirty && !window.confirm('Discard your unsaved coach inputs and save these trade corrections?')) return
+    setBusy('Saving trade corrections…')
+    try {
+      const updated = await save('edit', `/trades/${editing.id}/edits`, body)
+      setRecord(updated)
+      setLivePrice(null)
+      setComparisonSource(preferredAnalysis(updated))
+      setEditDirty(false)
+      setEditing(null)
+      setMessage('Trade updated. Earlier details are in Edit history.')
+    } finally { setBusy('') }
+  }
   async function saveReview(event) {
     event.preventDefault()
-    if (busy) return
+    if (waiting) return
     setBusy('Saving your self-review…'); setError(''); setMessage('')
     try {
       const data = await save('review', `/trades/${record.id}/reviews`, { discipline: review.discipline, notes: review.notes.trim(), expected_revision: reviewBase.revision })
@@ -134,7 +155,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
     } catch (err) { setError(err.message) } finally { setBusy('') }
   }
   async function analyze(source) {
-    if (busy) return
+    if (waiting) return
     setBusy(source === 'entry_time' ? 'Reconstructing completed candles at entry…' : 'Comparing saved four-factor evidence…')
     setError(''); setMessage('')
     try {
@@ -146,7 +167,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
     } catch (err) { setError(err.message) } finally { setBusy('') }
   }
   function askDelete(target, opener) {
-    if (busy) return
+    if (waiting) return
     deleteReturnRef.current = opener
     setDeleteError(''); setDeleteTarget(target)
   }
@@ -155,7 +176,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
     requestAnimationFrame(() => deleteReturnRef.current?.focus())
   }
   async function confirmDelete() {
-    if (busy || !deleteTarget) return
+    if (waiting || !deleteTarget) return
     const target = deleteTarget
     setBusy('Deleting trade…'); setDeleteError('')
     try {
@@ -196,49 +217,43 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
     `${pipResult.reference_kind==='forming' ? 'Live estimate' : 'Last H4 close'} · midpoint` : priceUpdate?.error ? 'Price refresh failed' : priceUpdate ? 'No price available' : 'Loading price…'
   return <section id="trades-panel" className="trade-page" hidden={!active} tabIndex={-1} aria-label="Trades">
     <header className="trade-heading"><div><h2>Your trades</h2><p>EUR/USD · H4 · Manual trade log</p></div>
-      <button type="button" className="trade-primary" disabled={Boolean(busy)} onClick={startNew}>Record trade</button></header>
+      <button type="button" className="trade-primary" disabled={waiting} onClick={startNew}>Record trade</button></header>
     {error && <p ref={errorRef} className="trade-error" role="alert">{error}</p>}
     {(busy || message) && <p className="trade-notice" role="status">{busy || message}</p>}
     {creating && <form className="trade-card trade-entry-form trade-form" onSubmit={create}>
       <h3 id="trade-entry-title" tabIndex={-1}>Record an entry</h3>
-      <p className="trade-help">Enter actual execution details. Entry details and linked evidence are fixed after saving; check the prices and time first.</p>
+      <p className="trade-help">Enter actual execution details. You can correct trade details later using Edit trade.</p>
       {linkedSetup ? <div className="trade-notice"><strong>Linked setup: {linkedSetup.snapshot.entry.title || 'Saved setup'}</strong><p>Evidence cutoff: {setupTime(linkedSetup.snapshot.cutoff_at)}. It must be at or before your entry time.</p>
         {linkedSetup.snapshot.trade_plan && <p>Planned prices were copied into this form. Verify the actual entry fill and the initial stop and target you used.</p>}
-        <button type="button" disabled={Boolean(busy)} onClick={() => { setLinkedSetup(null); edit({ setupId: null }) }}>Remove setup link</button></div>
+        <button type="button" disabled={waiting} onClick={() => { setLinkedSetup(null); edit({ setupId: null }) }}>Remove setup link</button></div>
         : <p className="trade-help">Manual entry: after saving, you can reconstruct market evidence at entry. To preserve an existing setup instead, open it and choose Record trade.</p>}
-      <fieldset disabled={Boolean(busy)}><div className="trade-fields">
-        <label>Trade name <span>(optional)</span><input value={form.title} maxLength={120} onChange={e => edit({ title: e.target.value })} placeholder="e.g. London support reaction" /></label>
-        <label>Direction<select value={form.direction} onChange={e => edit({ direction: e.target.value })}><option value="long">Long</option><option value="short">Short</option></select></label>
-        <label>Actual entry price<input required inputMode="decimal" value={form.entryPrice} onChange={e => edit({ entryPrice: e.target.value })} placeholder="1.10000" /></label>
-        <label>Entry time · {timezone}<input required type="datetime-local" value={form.entryAt} onChange={e => edit({ entryAt: e.target.value })} /></label>
-        <label>Initial stop loss <span>(optional)</span><input inputMode="decimal" value={form.stopLoss} onChange={e => edit({ stopLoss: e.target.value })} placeholder="No initial stop" /></label>
-        <label>Initial take profit <span>(optional)</span><input inputMode="decimal" value={form.takeProfit} onChange={e => edit({ takeProfit: e.target.value })} placeholder="No initial target" /></label>
-        <label className="trade-wide">Reason for entry<textarea required maxLength={5000} rows={3} value={form.reason} onChange={e => edit({ reason: e.target.value })} placeholder="What supported your decision at entry?" /></label>
-        <label className="trade-wide">Support/resistance and entry observations <span>(optional)</span><textarea maxLength={5000} rows={2} value={form.observations} onChange={e => edit({ observations: e.target.value })} /></label>
+      <fieldset disabled={waiting}><div className="trade-fields">
+        <TradeEntryFields form={form} edit={edit} timezone={timezone} />
       </div><p className="trade-help">No stop recorded means R will be unavailable. These fields record your actions; they do not define mandatory trading rules.</p>
       <div className="trade-actions"><button type="button" onClick={cancelEntry}>Cancel entry</button><button className="trade-primary" type="submit">Save trade entry</button></div></fieldset>
     </form>}
     <div className="trade-workspace">
       <aside className="trade-card trade-history" aria-label="Trade history"><div className="trade-history-toolbar"><h3><button type="button" ref={historyToggleRef} className="trade-history-toggle" aria-expanded={historyOpen} aria-controls="trade-history-content" onClick={() => setHistoryOpen(value => !value)}>Trade history <span aria-hidden="true">{historyOpen ? '▾' : '▸'}</span><small>{history.total} {history.total === 1 ? 'trade' : 'trades'}</small></button></h3>
-        {historyOpen && <><label>Show trades<select value={status} disabled={Boolean(busy)} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="all">All trades</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
-        <button type="button" disabled={Boolean(busy)} onClick={() => setRefresh(v => v + 1)}>Refresh</button></>}</div>
+        {historyOpen && <><label>Show trades<select value={status} disabled={waiting} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="all">All trades</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
+        <button type="button" disabled={waiting} onClick={() => setRefresh(v => v + 1)}>Refresh</button></>}</div>
         <div id="trade-history-content" hidden={!historyOpen}>
         {historyError && <p role="alert" className="trade-error">{historyError}</p>}
         {!historyError && !history.total && <p className="trade-help">No {status === 'all' ? '' : status+' '}trades recorded yet.</p>}
-        <ul>{history.items.map(item => <li key={item.id}><button className="trade-history-open" type="button" disabled={Boolean(busy)} aria-pressed={item.id === record?.id} onClick={() => open(item.id)}>
+        <ul>{history.items.map(item => <li key={item.id}><button className="trade-history-open" type="button" disabled={waiting} aria-pressed={item.id === record?.id} onClick={() => open(item.id)}>
           <strong>{item.entry.title || `${item.entry.direction === 'long' ? 'Long' : 'Short'} EUR/USD`}</strong><span>{setupTime(item.entry.entry_at)}</span>
-          <span>{item.entry.direction.toUpperCase()} · {item.status === 'open' ? 'Open' : 'Closed'}</span>
+          <span><span className={`trade-direction-${item.entry.direction}`}>{item.entry.direction.toUpperCase()}</span> · <span className={item.status === 'open' ? 'trade-status-open' : undefined}>{item.status === 'open' ? 'Open' : 'Closed'}</span></span>
           {item.result && <span className={`trade-${item.result.outcome}`}>{item.result.pips} pips · {item.result.r_display !== null ? `${item.result.r_display} R` : 'R unavailable'}</span>}
-          <small>{disciplineLabels[item.review.discipline]}</small></button><button type="button" className="trade-delete-link" disabled={Boolean(busy)} aria-label={`Delete ${item.entry.title || 'trade'}`} onClick={event => askDelete(item,event.currentTarget)}>Delete</button></li>)}</ul>
-        {history.total > 20 && <div className="trade-row"><button type="button" disabled={Boolean(busy) || !offset} onClick={() => setOffset(v => Math.max(0,v-20))}>Previous</button><span>{offset+1}–{Math.min(offset+20,history.total)} / {history.total}</span><button type="button" disabled={Boolean(busy) || offset+20>=history.total} onClick={() => setOffset(v => v+20)}>Next</button></div>}
+          <small>{disciplineLabels[item.review.discipline]}</small></button><button type="button" className="trade-delete-link" disabled={waiting} aria-label={`Delete ${item.entry.title || 'trade'}`} onClick={event => askDelete(item,event.currentTarget)}>Delete</button></li>)}</ul>
+        {history.total > 20 && <div className="trade-row"><button type="button" disabled={waiting || !offset} onClick={() => setOffset(v => Math.max(0,v-20))}>Previous</button><span>{offset+1}–{Math.min(offset+20,history.total)} / {history.total}</span><button type="button" disabled={waiting || offset+20>=history.total} onClick={() => setOffset(v => v+20)}>Next</button></div>}
         </div>
       </aside>
       {record ? <article className="trade-detail" ref={detailRef} tabIndex={-1} aria-label="Selected trade">
         <section className="trade-card trade-overview" aria-label="Trade overview">
           <div className="trade-overview-heading"><div className="trade-overview-title"><h3>{entry.title || 'EUR/USD trade'}</h3>
-            <span className="trade-badge">{entry.direction === 'long' ? 'Long' : 'Short'} · {record.status === 'open' ? 'Open' : 'Closed'}</span></div>
+            <span className="trade-badge"><span className={`trade-direction-${entry.direction}`}>{entry.direction === 'long' ? 'Long' : 'Short'}</span> · <span className={record.status === 'open' ? 'trade-status-open' : undefined}>{record.status === 'open' ? 'Open' : 'Closed'}</span></span></div>
             {record.result?.r_display != null && <strong className={`trade-result-chip trade-${record.result.outcome}`}>{record.result.r_display} R</strong>}
-            <button type="button" className="trade-delete-link" disabled={Boolean(busy)} onClick={event => askDelete(record,event.currentTarget)}>Delete trade</button>
+            <button type="button" disabled={waiting} onClick={()=>setEditing(record)}>Edit trade</button>
+            <button type="button" className="trade-delete-link" disabled={waiting} onClick={event => askDelete(record,event.currentTarget)}>Delete trade</button>
           </div>
           <dl className="trade-overview-metrics">
             <div><dt>Entry · actual fill</dt><dd>{entry.entry_price}<small>{setupTime(entry.entry_at)}</small></dd></div>
@@ -246,10 +261,12 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
             <div><dt>Initial stop</dt><dd>{shownPrice(entry.initial_stop_loss)}</dd></div>
             <div><dt>Initial target</dt><dd>{shownPrice(entry.initial_take_profit)}</dd></div>
             <div><dt>Pips</dt><dd className={pipResult ? `trade-${pipResult.outcome}` : undefined}>{pipResult?.pips ?? 'Unavailable'}<small>{pipNote}</small>{record.status==='open' && pipResult && <small>{setupTime(pipResult.reference_at)}</small>}</dd></div>
+            <div><dt>Duration</dt><dd><TradeDuration key={`${record.id}:${record.status}:${active}`} entryAt={entry.entry_at} exitAt={record.exit?.exit_at} active={active} /></dd></div>
           </dl>
+          <TradeEditHistory edits={record.edits} />
         </section>
-        <TradeTimeline key={`${record.id}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} onPriceResult={setLivePrice} onEntryAnalysis={analysis => setRecord(current => {
-          if (!current || current.id !== record.id || current.strategy_analyses.some(item => item.id===analysis.id)) return current
+        <TradeTimeline key={`${record.id}:${record.revision}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} onCoachBusyChange={setCoachBusy} onCoachDirtyChange={setCoachDirty} onPriceResult={setLivePrice} onEntryAnalysis={analysis => setRecord(current => {
+          if (!current || current.id !== record.id || current.revision !== record.revision || current.strategy_analyses.some(item => item.id===analysis.id)) return current
           return {...current,strategy_analyses:[...current.strategy_analyses,analysis]}
         })} />
         <details className="trade-card trade-entry-notes" key={`notes-${record.id}`}><summary>Entry reasoning & observations</summary>
@@ -257,7 +274,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
           <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>
           {entry.entry_observations && <><h4>Entry observations</h4><p className="trade-prose">{entry.entry_observations}</p></>}
         </details>
-        <TradeAlignment key={`${record.id}:${comparisonSource}`} record={record} source={comparisonSource} onSourceChange={setComparisonSource} onAnalyze={analyze} busy={Boolean(busy)} active={active} />
+        <TradeAlignment key={`${record.id}:${comparisonSource}`} record={record} source={comparisonSource} onSourceChange={setComparisonSource} onAnalyze={analyze} busy={waiting} active={active} />
         <section className="trade-card"><h3>Original entry context</h3>{evidence ? <>
           <p className="trade-help">{record.context.setup.snapshot.entry.title || 'Saved setup'} · cutoff {setupTime(evidence.cutoff_at)}</p>
           <p className="trade-notice">{record.context_timing === 'captured_before_entry' ? 'Setup captured before entry. Your manual entry notes were logged separately at the time shown above.' : 'Retrospective context: this setup was reconstructed historically or saved after entry. It does not establish what you knew at entry.'}</p>
@@ -268,7 +285,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
           <p className="trade-help">This entry copy stays with the trade if its original setup is deleted. It is never refreshed with later market data.</p>
         </> : <p className="trade-help">The original entry was logged manually without a market snapshot. Your reasoning and observations are self-reported. Any later reconstruction is stored separately above.</p>}</section>
         <section className="trade-card"><h3>{record.status === 'open' ? 'Record a full exit' : 'Recorded outcome'}</h3>
-          {record.status === 'open' ? <form className="trade-form" onSubmit={close}><p className="trade-help">One full exit per trade. Enter your actual exit fill; price touching a chart level does not close this record. Exit details are fixed after saving.</p><fieldset disabled={Boolean(busy)}><div className="trade-fields">
+          {record.status === 'open' ? <form className="trade-form" onSubmit={close}><p className="trade-help">One full exit per trade. Enter your actual exit fill; price touching a chart level does not close this record. You can correct a saved exit using Edit trade.</p><fieldset disabled={waiting}><div className="trade-fields">
             <label>Actual exit price<input required inputMode="decimal" value={exit.price} onChange={e => setExit({ ...exit, price: e.target.value })} /></label>
             <label>Exit time · {timezone}<input required type="datetime-local" value={exit.at} onChange={e => setExit({ ...exit, at: e.target.value })} /></label>
             <label className="trade-wide">Exit notes <span>(optional)</span><textarea maxLength={5000} rows={2} value={exit.notes} onChange={e => setExit({ ...exit, notes: e.target.value })} /></label>
@@ -278,13 +295,14 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
           </>}
         </section>
         <section className="trade-card"><h3>Trading discipline · your self-review</h3><p className="trade-help">You have not defined mandatory rules yet. This is your own assessment, separate from profit or loss; the app does not grade your discipline.</p>
-          <form className="trade-form" onSubmit={saveReview}><fieldset disabled={Boolean(busy)}><label>Did you follow your plan?<select value={review.discipline} onChange={e => setReview({ ...review, discipline: e.target.value })}>{Object.entries(disciplineLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <form className="trade-form" onSubmit={saveReview}><fieldset disabled={waiting}><label>Did you follow your plan?<select value={review.discipline} onChange={e => setReview({ ...review, discipline: e.target.value })}>{Object.entries(disciplineLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label>Review notes<textarea maxLength={5000} rows={3} value={review.notes} onChange={e => setReview({ ...review, notes: e.target.value })} placeholder="What matched your plan? What did you change, miss, or learn?" /></label>
             <div className="trade-actions"><button type="submit" className="trade-primary" disabled={!reviewDirty}>Save self-review</button></div></fieldset></form>
           {record.reviews.length > 0 && <details><summary>Saved self-review history ({record.reviews.length})</summary>{record.reviews.map(item => <div key={item.revision} className="trade-review-history"><strong>{disciplineLabels[item.discipline]}</strong><small>{setupTime(item.recorded_at)}</small><p className="trade-prose">{item.notes || 'No review notes.'}</p></div>)}</details>}
         </section>
       </article> : <div className="trade-card trade-empty"><h3>Keep the decision and the result together</h3><p>Open a trade to record its exit and review your execution. You can also start from a saved setup to retain its strategy and zone evidence.</p></div>}
     </div>
-    {deleteTarget && <DeleteTradeDialog trade={deleteTarget} pending={Boolean(busy)} error={deleteError} hasUnsavedEdits={record?.id === deleteTarget.id && (exitDirty || reviewDirty)} onCancel={cancelDelete} onConfirm={confirmDelete} />}
+    {editing && <TradeEditDialog record={editing} pending={Boolean(busy)} onDirty={setEditDirty} onSave={saveEdit} onClose={()=>{setEditDirty(false);setEditing(null)}} />}
+    {deleteTarget && <DeleteTradeDialog trade={deleteTarget} pending={waiting} error={deleteError} hasUnsavedEdits={record?.id === deleteTarget.id && (exitDirty || reviewDirty || coachDirty)} onCancel={cancelDelete} onConfirm={confirmDelete} />}
   </section>
 }

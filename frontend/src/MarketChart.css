@@ -16,7 +16,7 @@
 .mc-readout { min-height: 2rem; font-size: .65rem; line-height: 1.7; padding: .4rem 0; font-variant-numeric: tabular-nums; }
 .mc-readout b { color: var(--text-h); font-weight: 550; }
 .mc-plot-wrap { position: relative; isolation: isolate; }
-.mc-plot { height: 560px; width: 100%; }
+.mc-plot { height: 610px; width: 100%; }
 .mc-period-shade { position: absolute; top: 0; bottom: 28px; pointer-events: none; background: rgba(171,120,229,.07); border-left: 1px dashed rgba(171,120,229,.5); z-index: 1; }
 .mc-pane-label { position: absolute; left: 6px; padding: 2px 5px; border-radius: 3px; background: var(--bg); color: var(--text); font-size: 10px; font-weight: 600; letter-spacing: .5px; pointer-events: none; z-index: 2; }
 .mc-price-label { top: 5px; }

@@ -82,7 +82,7 @@ def build_scores(record, saved, now):
                    'net_score':None,'supporting_points':None,'conflicting_points':None,
                    'bullish_alignment_percent':None,'bearish_alignment_percent':None,'entry_alignment_percent':None,
                    'complete':False}
-    return {'schema_version':1,'version':VERSION,'trade_id':record['id'],'trade_direction':record['entry']['direction'],
+    return {'schema_version':1,'version':VERSION,'trade_id':record['id'],'trade_revision':record.get('revision',0),'trade_direction':record['entry']['direction'],
             'status':record['status'],'entry_evidence_hash':record['evidence_hash'],
             'entry_analysis_id':saved['id'],'entry_analysis_hash':saved['analysis_hash'],
             'entry_at':entered.isoformat(),'exit_at':exited.isoformat() if exited else None,
@@ -112,10 +112,10 @@ def calculate_scores(identifier):
             value = build_scores(record,saved,now)
         except md.MarketDataError as exc:
             latest = db.fetch_trade(identifier)
-            if latest['exit'] != record['exit']: continue
+            if latest['revision'] != record['revision'] or latest['exit'] != record['exit']: continue
             # Keep a valid, fixed entry score visible if the separate trade-period
             # data request fails. Never persist an incomplete final calculation.
-            return {'schema_version':1,'version':VERSION,'trade_id':record['id'],
+            return {'schema_version':1,'version':VERSION,'trade_id':record['id'],'trade_revision':record.get('revision',0),
                     'trade_direction':record['entry']['direction'],'status':record['status'],
                     'entry_at':record['entry']['entry_at'],'exit_at':record['exit']['exit_at'] if record['exit'] else None,
                     'as_of':now.isoformat(),'rule_set':saved['analysis']['rule_set'],

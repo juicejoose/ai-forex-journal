@@ -1,7 +1,7 @@
 import { chartTime } from './marketChartData.js'
 
-export function validTradeTimeline(view, id, exitAt) {
-  return view?.schema_version === 1 && view.analysis_kind === 'trade_timeline' && view.trade_id === id &&
+export function validTradeTimeline(view, id, exitAt, revision = 0) {
+  return view?.schema_version === 1 && view.analysis_kind === 'trade_timeline' && view.trade_id === id && (view.trade_revision ?? 0) === revision &&
     view.status === (exitAt ? 'closed' : 'open') && view.exit_at === (exitAt ?? null) &&
     chartTime(view.as_of) !== null && chartTime(view.entry_at) !== null &&
     Array.isArray(view.candles) && Array.isArray(view.chart_context?.candles) &&

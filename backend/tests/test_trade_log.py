@@ -241,5 +241,5 @@ class TradeLogTests(unittest.TestCase):
         self.assertEqual(sd.fetch_snapshot(source['id']),source)
         self.assertEqual(db.fetch_strategy_profile(profile['id']),profile)
         with db.get_connection() as con:
-            self.assertEqual([r[0] for r in con.execute('SELECT version FROM trade_schema_migrations ORDER BY version')],[1,2,3,4])
+            self.assertEqual([r[0] for r in con.execute('SELECT version FROM trade_schema_migrations ORDER BY version')],[1,2,3,4,5,6])
             self.assertEqual([r[0] for r in con.execute('SELECT version FROM setup_schema_migrations ORDER BY version')],[1,2,3])

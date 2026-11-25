@@ -3,20 +3,20 @@ import { scoreNumber,signedScore,scoreDirection } from './tradeScores.js'
 import { factorDescription } from './strategyDescriptions.js'
 import './TradeScores.css'
 
-export function TradeScoreCards({scores,record,evidenceIds,onShowEvidence}) {
+export function TradeScoreCards({scores,record,evidenceIds,onShowEvidence,coach}) {
   const {value,error,loading,refresh}=scores
   const entry=value?.entry_score.summary, full=value?.full_trade.summary
   return <div className="trade-score-panel" aria-label="Entry and full-trade scores">
     {error && <p className="trade-error" role="alert">{error} {value && (value.full_trade.error ? 'The saved entry score is retained.' : 'Showing previously calculated scores; the trade average may be outdated.')} <button type="button" disabled={loading} onClick={refresh}>Retry scores</button></p>}
     {!value && !error && <p className="trade-help" role="status">Calculating entry alignment and the trade average…</p>}
-    {value && <><div className="trade-score-cards">
+    <div className="trade-score-cards">{value && <>
       <div><div className="trade-score-heading"><h4>Entry score</h4><button type="button" className="trade-score-evidence-link" aria-label="View entry score evidence" aria-controls={evidenceIds.entry} onClick={()=>onShowEvidence('entry')}>Evidence <span aria-hidden="true">↓</span></button></div><strong>{scoreNumber(entry.supporting_points)}{entry.supporting_points !== null && ` / ${entry.max_points} aligned`}</strong>
         <p>{record.entry.direction === 'long' ? 'Long' : 'Short'} entry · {scoreNumber(entry.conflicting_points)} conflicting</p>
         <small>{scoreDirection(entry.direction)} · Net {signedScore(entry.net_score)} · Last completed H4</small></div>
       <div><div className="trade-score-heading"><h4>{record.status==='closed' ? 'Full trade score' : 'Trade-to-date score'}</h4><button type="button" className="trade-score-evidence-link" aria-label={record.status==='closed' ? 'View full trade score evidence' : 'View trade-to-date score evidence'} aria-controls={evidenceIds.full} onClick={()=>onShowEvidence('full')}>Evidence <span aria-hidden="true">↓</span></button></div><strong>{!full ? 'Unavailable' : full.candle_count ? `Avg. net ${signedScore(full.net_score)}` : 'No completed closes'}</strong>
         {full ? <><p>{scoreDirection(full.direction)} · {full.candle_count} completed {full.candle_count===1 ? 'candle' : 'candles'}</p>
         <small>Bull {scoreNumber(full.bullish_points)} · Bear {scoreNumber(full.bearish_points)} · / {full.max_points}</small></> : <p>Trade-period data unavailable · retry above</p>}</div>
-    </div><p className="trade-score-footnote">Four-factor v{value.rule_set.version}{value.rule_set.revision!=null && ` · revision ${value.rule_set.revision}`} · Rule alignment, not profit or win probability.{loading ? ' Updating…' : value.saved_at ? ' Full-trade score saved.' : value.full_trade.error ? ' Entry score remains saved.' : ' Average updates after completed H4 closes.'}</p></>}
+    </>}{coach}</div>{value && <p className="trade-score-footnote">Four-factor v{value.rule_set.version}{value.rule_set.revision!=null && ` · revision ${value.rule_set.revision}`} · Rule alignment, not profit or win probability.{loading ? ' Updating…' : value.saved_at ? ' Full-trade score saved.' : value.full_trade.error ? ' Entry score remains saved.' : ' Average updates after completed H4 closes.'}</p>}
   </div>
 }
 

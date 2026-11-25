@@ -1,3 +1,5 @@
+import { localInputTime } from './setupDrawing.js'
+
 export const disciplineLabels = { not_reviewed: 'Not reviewed', followed: 'Followed my plan', deviated: 'Deviated from my plan' }
 export const blankTrade = () => ({ title: '', direction: 'long', entryPrice: '', entryAt: '', stopLoss: '', takeProfit: '', reason: '', observations: '', setupId: null })
 export const blankExit = () => ({ price: '', at: '', notes: '' })
@@ -39,6 +41,31 @@ export function exitRequest(form, entryAt, now = Date.now()) {
   if (Date.parse(at) < Date.parse(entryAt)) throw new Error('Exit time cannot be before entry time.')
   return { exit_price: price(form.price, 'Exit price'), exit_at: at, exit_notes: form.notes.trim() }
 }
+export function tradeEditRequest(record, form, exitForm, now = Date.now()) {
+  // Keep seconds and the original offset when the displayed local minute is unchanged.
+  const originalEntry = record.entry.entry_at
+  const keepEntryTime = form.entryAt === localInputTime(originalEntry)
+  const entry = tradeRequest({...form, entryAt: keepEntryTime ? originalEntry : form.entryAt}, now)
+  delete entry.setup_id
+  if (keepEntryTime) entry.entry_at = originalEntry
+  let exit = null
+  if (record.exit) {
+    const originalExit = record.exit.exit_at
+    const keepExitTime = exitForm.at === localInputTime(originalExit)
+    exit = exitRequest({...exitForm, at: keepExitTime ? originalExit : exitForm.at}, entry.entry_at, now)
+    if (keepExitTime) exit.exit_at = originalExit
+  }
+  return {expected_revision: record.revision, entry, exit}
+}
 export function reviewChanged(draft, saved) {
   return draft.discipline !== saved.discipline || draft.notes.trim() !== saved.notes
+}
+
+
+export function tradeDuration(entryAt, exitAt, now = Date.now()) {
+  const start = Date.parse(entryAt), end = exitAt == null ? now : Date.parse(exitAt)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 'Unavailable'
+  const hours = Math.floor((end - start) / 3600000)
+  if (hours === 0 && end > start) return '<1 hour'
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`
 }

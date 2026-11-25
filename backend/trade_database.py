@@ -79,6 +79,11 @@ def init_trade_db():
                 BEGIN SELECT RAISE(ABORT,'Use explicit trade deletion'); END""")
             con.execute('INSERT INTO trade_schema_migrations VALUES (4,?)',(datetime.now(timezone.utc).isoformat(),))
 
+        from trade_coach_database import migrate
+        migrate(con)
+        from trade_edits import migrate as migrate_edits
+        migrate_edits(con)
+
 
 def delete_trade(identifier):
     """Explicit, atomic removal; retain only retry IDs to prevent resurrection."""
@@ -89,7 +94,9 @@ def delete_trade(identifier):
             if con.execute('SELECT 1 FROM trade_deletions WHERE trade_id=?',(identifier,)).fetchone(): return
             raise TradeNotFound('Trade not found.')
         con.execute('INSERT INTO trade_deletions VALUES (?,?,?)',(identifier,row['request_id'],datetime.now(timezone.utc).isoformat()))
-        for table in ('trade_score_snapshots','trade_strategy_analyses','trade_reviews','trade_exits'):
+        for table in ('edited_trade_scores','edited_trade_analyses'):
+            con.execute(f'DELETE FROM {table} WHERE trade_id IN (SELECT id FROM trade_edits WHERE trade_id=?)',(identifier,))
+        for table in ('trade_edits','trade_coach_reviews','trade_score_snapshots','trade_strategy_analyses','trade_reviews','trade_exits'):
             con.execute(f'DELETE FROM {table} WHERE trade_id=?',(identifier,))
         con.execute('DELETE FROM trades WHERE id=?',(identifier,))
 
@@ -114,7 +121,9 @@ def _record(con, identifier, *, detail=True):
         'result':json.loads(closed['result_json']) if closed else None,
         'review':history[0] if history else {'discipline':'not_reviewed','notes':'','revision':0},
         'context_timing':context['timing'], 'evidence_hash':row['evidence_hash']}
-    if detail: record.update(context=context, reviews=history, strategy_analyses=_analyses(con,row))
+    from trade_edits import apply_latest
+    apply_latest(con, record, context, detail)
+    if detail: record.update(context=context, reviews=history, strategy_analyses=_analyses(con,record))
     return record
 
 
@@ -152,7 +161,7 @@ def create_trade(entry):
 
 def close_trade(identifier, entry):
     now=datetime.now(timezone.utc)
-    values=entry.model_dump(mode='json',exclude={'request_id'}); values['exit_at']=utc(entry.exit_at)
+    values=entry.model_dump(mode='json',exclude={'request_id','expected_revision'}); values['exit_at']=utc(entry.exit_at)
     request=sd.canonical(values)
     with db.get_connection(write=True) as con:
         record=_record(con,identifier)
@@ -162,6 +171,8 @@ def close_trade(identifier, entry):
                 raise TradeConflict('This exit request belongs to different inputs.')
             return record
         if record['status']=='closed': raise TradeConflict('This trade already has a full exit. Reopen it to see the saved result.')
+        if entry.expected_revision is not None and entry.expected_revision != record['revision']:
+            raise TradeConflict('The entry changed. Reopen the trade before recording its exit.')
         past_time(entry.exit_at,'Exit time',now)
         if entry.exit_at < datetime.fromisoformat(record['entry']['entry_at']):
             raise TradeInputError('Exit time cannot be before entry time.')
@@ -198,12 +209,13 @@ def list_trades(status='all',limit=20,offset=0):
     source=' FROM trades t LEFT JOIN trade_exits e ON e.trade_id=t.id'+clause
     with db.get_connection() as con:
         total=con.execute('SELECT COUNT(*)'+source).fetchone()[0]
-        rows=con.execute('SELECT t.id'+source+' ORDER BY t.entry_at DESC,t.id DESC LIMIT ? OFFSET ?',(limit,offset)).fetchall()
+        rows=con.execute('SELECT t.id'+source+' ORDER BY COALESCE((SELECT entry_at FROM trade_edits WHERE trade_id=t.id ORDER BY revision DESC LIMIT 1),t.entry_at) DESC,t.id DESC LIMIT ? OFFSET ?',(limit,offset)).fetchall()
         return {'items':[_record(con,row['id'],detail=False) for row in rows], 'total':total,'limit':limit,'offset':offset}
 
 
 def _analyses(con, trade_row):
-    rows=con.execute('SELECT * FROM trade_strategy_analyses WHERE trade_id=? ORDER BY created_at,id',(trade_row['id'],)).fetchall()
+    table = 'edited_trade_analyses' if trade_row['edit_id'] else 'trade_strategy_analyses'
+    rows=con.execute(f'SELECT * FROM {table} WHERE trade_id=? ORDER BY created_at,id',(trade_row['edit_id'] or trade_row['id'],)).fetchall()
     results=[]
     for row in rows:
         payload=json.loads(row['analysis_json'])
@@ -215,19 +227,22 @@ def _analyses(con, trade_row):
     return results
 
 
-def _store_analysis(con, identifier, source, payload, request_id=None):
+def _store_analysis(con, identifier, source, payload, request_id=None, *, edit_id=None):
     encoded=sd.canonical(payload)
-    con.execute('INSERT INTO trade_strategy_analyses VALUES (?,?,?,?,?,?,?)',
-        (str(uuid4()),str(identifier),source,str(request_id) if request_id else None,encoded,
+    table = 'edited_trade_analyses' if edit_id else 'trade_strategy_analyses'
+    con.execute(f'INSERT INTO {table} VALUES (?,?,?,?,?,?,?)',
+        (str(uuid4()),edit_id or str(identifier),source,str(request_id) if request_id else None,encoded,
          hashlib.sha256(encoded.encode()).hexdigest(),datetime.now(timezone.utc).isoformat()))
 
 
-def _analysis_exists(con, identifier, entry):
-    found=con.execute('SELECT trade_id,source FROM trade_strategy_analyses WHERE request_id=?',(str(entry.request_id),)).fetchone()
-    if found and (found['trade_id']!=str(identifier) or found['source']!=entry.source):
-        raise TradeConflict('This comparison request belongs to a different trade or evidence source.')
-    return con.execute('SELECT id FROM trade_strategy_analyses WHERE trade_id=? AND source=?',
-                       (str(identifier),entry.source)).fetchone() is not None
+def _analysis_exists(con, record, entry):
+    key = record['edit_id'] or record['id']
+    found = con.execute("""SELECT trade_id,source FROM trade_strategy_analyses WHERE request_id=?
+                           UNION ALL SELECT trade_id,source FROM edited_trade_analyses WHERE request_id=?""",
+                        (str(entry.request_id),str(entry.request_id))).fetchone()
+    if found and (found['trade_id'] != key or found['source']!=entry.source):
+        raise TradeConflict('This comparison request belongs to another trade version or evidence source.')
+    return any(item['source']==entry.source for item in record['strategy_analyses'])
 
 
 def analyze_trade(identifier, entry):
@@ -235,24 +250,27 @@ def analyze_trade(identifier, entry):
     # Release the read transaction before a historical provider request.
     with db.get_connection() as con:
         record=_record(con,identifier)
-        if _analysis_exists(con,identifier,entry): return record
+        if _analysis_exists(con,record,entry): return record
     if entry.source=='saved_setup':
         source=record['context']['setup']
         if source is None: raise TradeInputError('This trade has no saved setup evidence. Reconstruct evidence at entry instead.')
         snapshot=source['snapshot']; timing=record['context']['timing']
     else:
         snapshot=reconstruct_entry(record['entry']); timing='retrospective'
+    revision = record['revision']
     analysis=build_analysis(record['entry'],snapshot,entry.source,record['evidence_hash'],timing)
     with db.get_connection(write=True) as con:
-        # Concurrent requests may fetch twice, but can never replace the first saved evidence.
         record=_record(con,identifier)
-        if _analysis_exists(con,identifier,entry): return record
-        _store_analysis(con,identifier,entry.source,analysis,entry.request_id)
+        if record['revision'] != revision:
+            raise TradeConflict('The trade was edited during analysis. Refresh the trade.')
+        if _analysis_exists(con,record,entry): return record
+        _store_analysis(con,identifier,entry.source,analysis,entry.request_id,edit_id=record['edit_id'])
         return _record(con,identifier)
 
 
 def _score_snapshot(con, identifier, record, saved):
-    row = con.execute('SELECT * FROM trade_score_snapshots WHERE trade_id=?',(str(identifier),)).fetchone()
+    table = 'edited_trade_scores' if record['edit_id'] else 'trade_score_snapshots'
+    row = con.execute(f'SELECT * FROM {table} WHERE trade_id=?',(record['edit_id'] or str(identifier),)).fetchone()
     if row is None: return None
     value = json.loads(row['score_json'])
     if (row['score_hash'] != hashlib.sha256(sd.canonical(value).encode()).hexdigest() or
@@ -266,19 +284,26 @@ def _score_snapshot(con, identifier, record, saved):
 def fetch_score_snapshot(identifier, record, saved):
     with db.get_connection() as con:
         latest = _record(con,identifier)
-        if latest['exit'] != record['exit']: return None
+        if latest['revision'] != record['revision'] or latest['exit'] != record['exit']: return None
         return _score_snapshot(con,identifier,latest,saved)
 
 
 def finish_scores(identifier, original, saved, value):
     with db.get_connection(write=True) as con:
         latest = _record(con,identifier)
-        if latest['exit'] != original['exit']: return None
+        if latest['revision'] != original['revision'] or latest['exit'] != original['exit']: return None
         cached = _score_snapshot(con,identifier,latest,saved)
         if cached is not None: return cached
         if latest['status']=='open': return {**value,'saved_at':None}
-        encoded = sd.canonical(value)
-        con.execute('INSERT INTO trade_score_snapshots VALUES (?,?,?,?,?,?)',
-                    (str(identifier),saved['id'],hashlib.sha256(sd.canonical(latest['exit']).encode()).hexdigest(),
-                     encoded,hashlib.sha256(encoded.encode()).hexdigest(),datetime.now(timezone.utc).isoformat()))
+        _store_final_score(con, latest, saved, value)
         return _score_snapshot(con,identifier,latest,saved)
+
+
+def _store_final_score(con, record, saved, value):
+    table = 'edited_trade_scores' if record['edit_id'] else 'trade_score_snapshots'
+    encoded = sd.canonical(value)
+    exit_hash = hashlib.sha256(sd.canonical(record['exit']).encode()).hexdigest()
+    score_hash = hashlib.sha256(encoded.encode()).hexdigest()
+    con.execute(f'INSERT INTO {table} VALUES (?,?,?,?,?,?)',
+                (record['edit_id'] or record['id'], saved['id'], exit_hash, encoded,
+                 score_hash, datetime.now(timezone.utc).isoformat()))
