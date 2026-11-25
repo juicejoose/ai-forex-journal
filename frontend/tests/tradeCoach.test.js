@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {coachZones,coachRequest,newerCoachEvidence,validCoachReview,runningReview} from '../src/tradeCoach.js'
+import {coachReadoutLabels,coachZones,coachRequest,newerCoachEvidence,validCoachReview,runningReview} from '../src/tradeCoach.js'
 const zone=()=>({label:'Support',kind:'support',lower:'1.10000',upper:'1.10100',timeframe:'H4',originAt:''})
 const form=()=>({inherit:false,zones:[zone()],observations:' Watch support '})
 
@@ -39,4 +39,22 @@ test('review validation separates pending from completed and rejects other trade
   assert.equal(validCoachReview({...value,result:{assessment:'guaranteed'}},'trade'),false)
   for(const status of ['capturing','pending','failed'])assert.equal(validCoachReview({...value,status,snapshot:null,result:null},'trade'),true)
   assert.equal(runningReview({status:'pending'}),true);assert.equal(runningReview({status:'completed'}),false)
+})
+
+test('new reviews show weighted alignment and independent zone evidence, including before the first close',()=>{
+  const readout={strategy_alignment:'supported',hold_closes:3,price_action:{status:'opposes',matches:[]},factor_history:[]}
+  const snapshot={schema_version:1,trade_id:'trade',version:'trade_coach_evidence_v2',trade:{direction:'long'},catalog:{facts:[],readout}}
+  const review={id:'id',trade_id:'trade',status:'completed',snapshot,result:{assessment:'supported'}}
+  assert.equal(validCoachReview(review,'trade'),true)
+  assert.equal(coachReadoutLabels(snapshot).alignment,'Favors your long')
+  assert.equal(coachReadoutLabels(snapshot).priceAction,'Conflicts with your direction')
+  assert.equal(validCoachReview({...review,result:{assessment:'contradicted'}},'trade'),false)
+  readout.hold_closes=0
+  readout.price_action.status='awaiting_close'
+  assert.equal(coachReadoutLabels(snapshot).headline,'No new H4 close since entry')
+  assert.equal(validCoachReview({...review,result:{assessment:'no_new_close'}},'trade'),true)
+  readout.strategy_alignment='balanced'
+  assert.equal(coachReadoutLabels(snapshot).alignment,'Balanced')
+  readout.price_action.status='unknown'
+  assert.equal(validCoachReview(review,'trade'),false)
 })

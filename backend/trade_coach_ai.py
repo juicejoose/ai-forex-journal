@@ -1,17 +1,16 @@
 """Bounded coach input and structured references to Python-owned trade evidence."""
 import json
 import re
-from typing import Literal
 from pydantic import Field, ValidationError
 from journal_grounding import StrictModel, InvalidJournalEvidence, _check_explanation
 from zone_history import history_summary, history_description
 from zone_patterns import pattern_summary, pattern_description
+from trade_coach_readout import build_readout, current_zone_events
 
-PROMPT_VERSION='trade_coach_v1'
+PROMPT_VERSION='trade_coach_v2'
 
 
 class CoachAssessment(StrictModel):
-    assessment: Literal['supported','mixed','contradicted','insufficient_evidence']
     summary: str = Field(min_length=1,max_length=900)
     main_concern: str = Field(min_length=1,max_length=400)
     supporting_facts: list[str] = Field(max_length=12)
@@ -33,9 +32,14 @@ confirmation. The recent list covers up to six completed candles during the trad
 candles may be inferred. Equal-weight averages may hide recent changes. A long is supported
 by bullish factors; a short by bearish ones. Include every required fact in its matching list.
 change_facts describe Python's entry-versus-latest comparisons, not a continuous trend.
-Use insufficient_evidence when assessment_available is false. Otherwise supported needs
-supporting facts, contradicted needs opposing facts, and mixed needs both. Always acknowledge
-known conflicts. Missing or neutral readings are not bearish, bullish or zero-filled evidence.
+The readout supplies Python's strategy alignment from the weighted latest H4 score, the
+independent price-action label from the supplied zones, and each factor's most recent change.
+Explain agreement and conflict without issuing another overall verdict. A zone event or P&L
+cannot change strategy alignment. Use factor_history for timing and persistence, including
+changes in point weight. When hold_closes is zero, describe entry context only and explicitly
+say that a new completed candle is pending. If current coverage is missing, acknowledge it.
+A missing trade-period average does not erase an available latest-candle score. A limited
+zone history cannot establish the absence of a pattern. Always acknowledge known conflicts.
 
 Unrealized pips are midpoint estimates, not broker liquidation values or proof a trade is good.
 Only initial stop/target levels are recorded. They are not confirmed current management levels;
@@ -69,6 +73,7 @@ Explain concerns constructively; neither profit nor loss establishes good or poo
 
 def build_catalog(snapshot):
     facts=[];conditions=[]
+    readout = build_readout(snapshot)
     desired='bullish' if snapshot['trade']['direction']=='long' else 'bearish'
     def role(outcome):
         return 'missing' if outcome in ('unavailable','insufficient_data') else 'supports' if outcome==desired else 'conflicts' if outcome in ('bullish','bearish') else 'context'
@@ -82,10 +87,20 @@ def build_catalog(snapshot):
     for factor in snapshot['latest']['factors']:
         add(f"Latest H4 · {factor['name']}: {factor['reason']}",role(factor['outcome']),True,scope='current_factor',result=factor)
     delta=snapshot['directional_net_change']
-    add(f"Net alignment to the recorded direction changed {show(delta)} points from entry to the latest close. Positive means more aligned, negative less aligned; this is not a multi-candle trend.",'change',True,directional_net_change=delta)
-    for change in snapshot['factor_changes']:
-        old,new=change['entry'],change['latest']
-        add(f"{change['name']}: entry {old['outcome']} ({old['bullish_points']} bull / {old['bearish_points']} bear), latest {new['outcome']} ({new['bullish_points']} bull / {new['bearish_points']} bear).",'change',False,result=change)
+    if readout['hold_closes']:
+        add(f"Change in net alignment from entry to the latest close: {show(delta)}. Positive means more aligned.",
+            'change',True,directional_net_change=delta)
+        for item in readout['factor_history']:
+            old,new=item['entry'],item['latest']
+            text = (f"{item['name']}: entry {old['outcome']} ({old['bullish_points']} bull / {old['bearish_points']} bear), "
+                    f"latest {new['outcome']} ({new['bullish_points']} bull / {new['bearish_points']} bear).")
+            if item['changed_at']:
+                text += f" Most recent change at {item['changed_at']}; current reading held for {item['consecutive_closes']} in-trade closes."
+            else:
+                text += f" Same outcome and points across all {item['consecutive_closes']} in-trade closes."
+            add(text,'change',False,result=item)
+    else:
+        add("No new H4 close since entry. The latest factor readings are the entry baseline.",'change',True)
     for row in snapshot['recent_candles']:
         add(f"Recent in-trade H4 close {row['close_time']}: {row['direction']}, net {show(row['net_score'] if row['direction']!='insufficient_data' else None)}.",scope='recent',result=row)
     ref=snapshot['reference_price'];price=snapshot['unrealized']
@@ -97,9 +112,12 @@ def build_catalog(snapshot):
         context.update(history=history_summary(zone['history']),patterns=pattern_summary(zone['patterns']))
         add(f"{zone['label']}: reference is {zone['price_position']} {zone['lower']}–{zone['upper']} ({zone['kind']}), {zone['distance_pips']:.1f} pips from the nearest edge. "+history_description(zone['history'])+' '+pattern_description(zone['patterns']),required=True,zone=context)
         events=zone['patterns']['events']
-        if events:
-            event=events[-1];current=event['close_time']==snapshot['data_through'] and event['kind'] in ('rejection','breakout','retest_held')
-            add(event['description']+(' Latest completed candle rule match.' if current else ' Earlier event; historical context only.'),role(event['direction']) if current else 'context',pattern_event=event,zone_id=zone['id'])
+        current = current_zone_events(zone, snapshot['data_through']) if readout['hold_closes'] and snapshot['covers_latest_close'] else []
+        for event in current:
+            add(event['description']+' Latest completed candle rule match.',role(event['direction']),
+                pattern_event=event,zone_id=zone['id'])
+        if events and events[-1] not in current:
+            add(events[-1]['description']+' Historical context.',pattern_event=events[-1],zone_id=zone['id'])
         for side,edge in (('above',zone['upper']),('below',zone['lower'])):
             conditions.append({'id':f'W{len(conditions)+1}','kind':'watch','text':f"Watch a later completed H4 close {side} {zone['label']} at {edge}.",'zone_id':zone['id']})
         if (desired=='bullish' and zone['kind']=='support') or (desired=='bearish' and zone['kind']=='resistance'):
@@ -113,9 +131,10 @@ def build_catalog(snapshot):
     if snapshot['quote']['status']!='available':limitations.append('Fresh quote unavailable: price context uses the last completed H4 close, not a live quote.')
     if not snapshot['covers_latest_close']:limitations.append('The latest scheduled H4 close is missing; the available evidence is older.')
     if not snapshot['recent_candles']:limitations.append('No H4 candle has closed during the hold; the latest context is the entry candle.')
-    available=(snapshot['covers_latest_close'] and latest['direction']!='insufficient_data' and (not full['candle_count'] or full['direction']!='insufficient_data'))
+    if full['candle_count'] and full['direction']=='insufficient_data':
+        limitations.append('The trade-period average is unavailable because some factor readings are missing.')
     conditions.append({'id':'W_FACTORS','kind':'watch','text':'Watch whether the next completed H4 factor results strengthen or weaken support for the recorded trade direction.'})
-    return {'facts':facts,'conditions':conditions,'limitations':limitations,'assessment_available':available}
+    return {'facts':facts,'conditions':conditions,'limitations':limitations,'readout':readout}
 
 
 def ai_input(snapshot):
@@ -153,9 +172,8 @@ def parse(raw,snapshot):
         for name,kind in (('watch_conditions','watch'),('invalidation_conditions','invalidation')):
             ids=getattr(result,name)
             if len(ids)!=len(set(ids)) or any(i not in conditions or conditions[i]['kind']!=kind for i in ids):raise ValueError('Invalid condition')
-        if result.assessment in ('supported','mixed') and not result.supporting_facts:raise ValueError('No support')
-        if result.assessment in ('contradicted','mixed') and not result.conflicting_facts:raise ValueError('No conflict')
-        if not catalog['assessment_available'] and result.assessment!='insufficient_evidence':raise ValueError('Insufficient evidence')
     except (ValueError,TypeError,ValidationError,RecursionError) as exc:
         raise InvalidJournalEvidence('The coach response did not pass its evidence checks.') from exc
-    return result.model_dump()
+    readout = catalog['readout']
+    headline = readout['strategy_alignment'] if readout['hold_closes'] else 'no_new_close'
+    return {**result.model_dump(), 'assessment': headline}

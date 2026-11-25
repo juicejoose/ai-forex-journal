@@ -1,7 +1,7 @@
 import { useEffect,useRef,useState } from 'react'
 import { API } from './api.js'
 import { setupTime } from './setupEvaluation.js'
-import { coachLabels,coachZones,coachRequest,newerCoachEvidence,runningReview,validCoachReview } from './tradeCoach.js'
+import { coachLabels,coachReadoutLabels,coachZones,coachRequest,newerCoachEvidence,runningReview,validCoachReview } from './tradeCoach.js'
 import './TradeCoach.css'
 
 async function api(path,options={}) {
@@ -17,6 +17,38 @@ function EvidenceList({title,ids,catalog,conditions=false}) {
     const item=entries.find(value=>value.id===id)
     return <li key={id}><p>{item?.text ?? 'Evidence unavailable'}</p>{item?.evidence && <details><summary>Saved evidence · {id}</summary><pre>{JSON.stringify(item.evidence,null,2)}</pre></details>}</li>
   })}</ul></section>
+}
+
+function FactorChanges({history}) {
+  function describe(state) {
+    if (state.outcome === 'neutral' || state.outcome === 'unavailable') return state.outcome
+    const points = state.bullish_points + state.bearish_points
+    return `${state.outcome} (${points} ${points === 1 ? 'point' : 'points'})`
+  }
+  return <section><h4>What changed since entry</h4><ul className="coach-evidence-list">
+    {history.map(factor=><li key={factor.factor_id}><b>{factor.name}</b>
+      <p>{factor.changed_at
+        ? `${describe(factor.previous)} → ${describe(factor.latest)} at ${setupTime(factor.changed_at)}`
+        : `${describe(factor.entry)} since entry`}
+        {' · '}{factor.consecutive_closes} consecutive in-trade {factor.consecutive_closes === 1 ? 'close' : 'closes'}</p>
+    </li>)}
+  </ul></section>
+}
+
+function CoachReadout({snapshot,labels,details=false}) {
+  const readout = snapshot.catalog.readout
+  const net = readout.market_net_score
+  return <>{labels.atEntry && <strong>{labels.headline}</strong>}
+    <p className="coach-signal"><b>{labels.atEntry ? 'Strategy at entry' : 'Four-factor alignment'}</b> · {labels.alignment}
+      {Number.isFinite(net) && <> · market net {net>0 ? '+' : ''}{net}</>}</p>
+    <p className="coach-signal"><b>Price action</b> · {labels.priceAction}</p>
+    {details && <>
+      {readout.price_action.matches.length>0 && <ul>{readout.price_action.matches.map(match=>
+        <li key={match.event_id}>{match.zone_label} · {match.kind.replaceAll('_',' ')} · {match.direction}</li>)}</ul>}
+      {readout.price_action.partial_coverage && !labels.atEntry && <p>Some zones have incomplete history.</p>}
+      {!labels.atEntry && <FactorChanges history={readout.factor_history} />}
+    </>}
+  </>
 }
 
 export default function TradeCoach({record,active,latestClose,onBusyChange,onDirtyChange}) {
@@ -87,11 +119,13 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
     finally{clearTimeout(timeout);if(alive.current)setGenerating(false)}
   }
   const stale=newerCoachEvidence(review,latestClose),snapshot=review?.snapshot,result=review?.result
+  const labels = coachReadoutLabels(snapshot)
   const previousVersion = snapshot && (snapshot.trade_revision ?? 0) !== (record.revision ?? 0)
   const afterExit=record.exit && snapshot && Date.parse(snapshot.cutoff_at)>Date.parse(record.exit.exit_at)
   return <div className="trade-coach-card">
     <div className="trade-score-heading"><h4>AI Coach</h4><button className="trade-score-evidence-link" type="button" onClick={e=>show(e)} aria-label="Open coach evidence and history">Evidence ↓</button></div>
-    <strong>{generating || running ? 'Review in progress' : previousVersion ? 'Trade edited since review' : result ? coachLabels[result.assessment] : review?.status==='failed' ? 'Review unavailable' : 'No review yet'}</strong>
+    {labels && result && !previousVersion && !running && !generating ? <CoachReadout snapshot={snapshot} labels={labels} /> :
+      <strong>{generating || running ? 'Review in progress' : previousVersion ? 'Trade edited since review' : result ? coachLabels[result.assessment] : review?.status==='failed' ? 'Review unavailable' : 'No review yet'}</strong>}
     {previousVersion ? <p>View the earlier review in Evidence.</p> : result ? <p className="coach-excerpt">{result.summary}</p> : <p>Review the factors, zones and changes since entry.</p>}
     {review?.cutoff_at && <small>As of {setupTime(review.cutoff_at)}</small>}
     {stale && <p className="coach-stale">{isOpen ? 'New completed candles · refresh the coach' : 'Newer completed candles outside this review'}</p>}
@@ -127,7 +161,8 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
         {stale && <p className="coach-stale">Newer completed candles are available. This saved review does not cover them.</p>}
         {dirty && <p className="coach-stale">Draft inputs differ from the saved review.</p>}
         {afterExit && <p className="coach-stale">This review was captured after the exit time later recorded for this trade. It is post-exit context, not an opinion available while holding.</p>}
-        {result && <><h4>{coachLabels[result.assessment]}</h4><p>{result.summary}</p><h4>Main concern</h4><p>{result.main_concern}</p>
+        {labels && <CoachReadout snapshot={snapshot} labels={labels} details />}
+        {result && <>{labels ? <h4>Coach interpretation</h4> : <h4>{coachLabels[result.assessment]} · earlier review method</h4>}<p>{result.summary}</p><h4>Main concern</h4><p>{result.main_concern}</p>
           <EvidenceList title="Supporting evidence" ids={result.supporting_facts} catalog={snapshot.catalog} />
           <EvidenceList title="Conflicting evidence" ids={result.conflicting_facts} catalog={snapshot.catalog} />
           <EvidenceList title="Changes since entry" ids={result.change_facts} catalog={snapshot.catalog} />

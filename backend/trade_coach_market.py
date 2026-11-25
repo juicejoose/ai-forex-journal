@@ -14,7 +14,7 @@ from trade_analysis import latest_scheduled_close
 from zone_history import analyze_zone_history, VERSION as HISTORY_VERSION
 from zone_patterns import analyze_zone_patterns, VERSION as PATTERN_VERSION
 
-VERSION='trade_coach_evidence_v1'
+VERSION='trade_coach_evidence_v2'
 
 
 def build_snapshot(identifier,request):

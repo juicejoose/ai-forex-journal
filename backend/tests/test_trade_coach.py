@@ -35,8 +35,7 @@ def assessment(catalog):
     facts=catalog['facts']
     support=[f['id'] for f in facts if f['role']=='supports'][:12]
     conflict=[f['id'] for f in facts if f['role']=='conflicts'][:12]
-    verdict=('insufficient_evidence' if not catalog['assessment_available'] else 'mixed' if support and conflict else 'supported' if support else 'contradicted' if conflict else 'insufficient_evidence')
-    return {'assessment':verdict,'summary':'The completed factor readings provide a technical view of support and conflict for the recorded trade direction. Further confirmation remains uncertain.',
+    return {'summary':'The completed factor readings provide a technical view of support and conflict for the recorded trade direction. Further confirmation remains uncertain.',
             'main_concern':'Initial management levels may differ from the current plan.',
             'supporting_facts':support,'conflicting_facts':conflict,
             'change_facts':[f['id'] for f in facts if f['role']=='change'],
@@ -267,6 +266,6 @@ class CoachTests(unittest.TestCase):
             with self.subTest(changes=changes),self.assertRaises(InvalidJournalEvidence):ai.parse(json.dumps({**good,**changes}),snap)
         directional=next(f for f in snap['catalog']['facts'] if f['role'] in ('supports','conflicts'))
         with self.assertRaises(InvalidJournalEvidence):ai.parse(json.dumps({**good,'context_facts':good['context_facts']+[directional['id']]}),snap)
-        snap['catalog']['assessment_available']=False
+        snap['catalog']['readout']['strategy_alignment']='insufficient_evidence'
         with self.assertRaises(InvalidJournalEvidence):ai.parse(json.dumps({**good,'assessment':'supported'}),snap)
-        self.assertEqual(ai.parse(json.dumps({**good,'assessment':'insufficient_evidence'}),snap)['assessment'],'insufficient_evidence')
+        self.assertEqual(ai.parse(json.dumps(good),snap)['assessment'],'insufficient_evidence')

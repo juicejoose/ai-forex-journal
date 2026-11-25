@@ -19,3 +19,5 @@
 @media(prefers-color-scheme:dark) { .trade-page .coach-stale { color: #f5c45e; } }
 @media(max-width:900px) { .trade-page .trade-score-cards { grid-template-columns: repeat(2,minmax(0,1fr)); } .trade-coach-card { grid-column: 1/-1; } }
 @media(max-width:600px) { .coach-dialog { padding: .85rem; } .coach-zone { grid-template-columns: minmax(0,1fr); } }
+
+.trade-coach-card .coach-signal { color: var(--text-h); margin: .25rem 0; }
