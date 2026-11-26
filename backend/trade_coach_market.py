@@ -13,8 +13,9 @@ from trade_calculations import trade_outcome
 from trade_analysis import latest_scheduled_close
 from zone_history import analyze_zone_history, VERSION as HISTORY_VERSION
 from zone_patterns import analyze_zone_patterns, VERSION as PATTERN_VERSION
+from trade_premise import premise_evidence
 
-VERSION='trade_coach_evidence_v2'
+VERSION='trade_coach_evidence_v3'
 
 
 def build_snapshot(identifier,request):
@@ -38,12 +39,13 @@ def build_snapshot(identifier,request):
     last=source[-1]
     reference=({'basis':'quote_midpoint','value':quote['midpoint'],'time':quote['time']} if quote['status']=='available' else
                {'basis':'last_completed_close','value':last['close'],'time':last['close_time']})
+    original = record['context'].get('setup')
+    linked = original['snapshot']['zones'] if original else []
+    manual = record['context'].get('entry_zones', [])
+    entry_zones = [SetupZone(**{k: z[k] for k in SetupZone.model_fields if k in z})
+                   for z in [*linked, *manual]]
     if request.zones is None:
-        original=record['context'].get('setup')
-        linked = original['snapshot']['zones'] if original else []
-        manual = record['context'].get('entry_zones', [])
-        zone_inputs = [SetupZone(**{k: z[k] for k in SetupZone.model_fields if k in z})
-                       for z in [*linked, *manual]]
+        zone_inputs = entry_zones
         zone_source = 'saved_entry_setup'
         if manual:
             zone_source = 'setup_and_trade_entry_zones' if linked else 'trade_entry_zones'
@@ -66,7 +68,7 @@ def build_snapshot(identifier,request):
     for name in ('initial_stop_loss','initial_take_profit'):
         value=entry.get(name)
         levels[name]={'price':value,'distance_from_reference_pips':float(abs(Decimal(value)-Decimal(str(reference['value'])))/Decimal('0.0001')) if value else None}
-    return {'schema_version':1,'version':VERSION,'trade_id':record['id'],'entry_evidence_hash':record['evidence_hash'],
+    snapshot = {'schema_version':1,'version':VERSION,'trade_id':record['id'],'entry_evidence_hash':record['evidence_hash'],
             'trade_revision':record['revision'],'trade_edited_at':record.get('edited_at'),'trade':deepcopy(entry),'entry_logged_at':record['created_at'],'cutoff_at':cutoff.isoformat(),
             'captured_at':datetime.now(md.UTC).isoformat(),'data_through':latest['close_time'],
             'latest_scheduled_close':latest_scheduled_close(cutoff).isoformat(),
@@ -80,3 +82,5 @@ def build_snapshot(identifier,request):
             'initial_levels':levels,'directional_net_change':delta,'factor_changes':changes,
             'zones':zones,'zone_source':zone_source,'zone_history_version':HISTORY_VERSION,'zone_pattern_version':PATTERN_VERSION,
             'review_observations':request.observations,'annotation_provenance':'user_input_at_review_not_entry'}
+    snapshot['premise_evidence'] = premise_evidence(snapshot, saved['analysis']['reconstructed_snapshot']['source_candles'], entry_zones)
+    return snapshot

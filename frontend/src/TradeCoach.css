@@ -21,3 +21,8 @@
 @media(max-width:600px) { .coach-dialog { padding: .85rem; } .coach-zone { grid-template-columns: minmax(0,1fr); } }
 
 .trade-coach-card .coach-signal { color: var(--text-h); margin: .25rem 0; }
+
+.coach-premise > ul { list-style: none; margin: 0; padding: 0; }
+.coach-premise > ul > li { padding: .55rem 0; border-top: 1px solid var(--border); }
+.coach-premise blockquote { margin: .25rem 0; padding-left: .65rem; border-left: 2px solid var(--accent); white-space: pre-wrap; overflow-wrap: anywhere; }
+.coach-premise p { margin: .25rem 0; }

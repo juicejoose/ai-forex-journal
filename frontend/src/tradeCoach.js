@@ -2,6 +2,16 @@ import { savedTradeZones, zoneInputs } from './tradeZones.js'
 import { localInputTime } from './setupDrawing.js'
 
 export const coachLabels={supported:'Supports your trade',mixed:'Mixed support',contradicted:'Opposes your trade',insufficient_evidence:'Insufficient evidence'}
+export const premiseStatus = {supported:'Supported', challenged:'Challenged', awaiting_confirmation:'Awaiting confirmation', unverifiable:'Cannot verify'}
+
+export function alignmentChange(snapshot) {
+  const change = snapshot?.directional_net_change
+  if (!snapshot?.covers_latest_close || !snapshot.entry_score?.covers_latest_scheduled_close || !snapshot.catalog?.readout?.hold_closes || !Number.isFinite(change)) return null
+  if (change === 0) return 'Net alignment is unchanged'
+  const points = Math.abs(change)
+  return (change > 0 ? 'Strengthened' : 'Weakened') + ' by ' + points + (points === 1 ? ' point' : ' points')
+}
+
 const alignmentLabels = {
   supported: direction => `Favors your ${direction}`, contradicted: direction => `Opposes your ${direction}`,
   balanced: () => 'Balanced', insufficient_evidence: () => 'Insufficient evidence',
@@ -42,7 +52,13 @@ export function validCoachReview(value,tradeId) {
   if (value.status !== 'completed') return ['capturing','pending','failed'].includes(value.status)
   const snapshot = value.snapshot
   if (snapshot?.schema_version !== 1 || snapshot.trade_id !== tradeId || !Array.isArray(snapshot.catalog?.facts)) return false
-  if (snapshot.version === 'trade_coach_evidence_v2') {
+  if (snapshot.version === 'trade_coach_evidence_v3') {
+    const checks = value.result?.premise_checks
+    if (!Array.isArray(snapshot.premise_evidence) || !Array.isArray(checks) || !checks.length ||
+        !checks.every(c => c && Object.hasOwn(premiseStatus,c.status) && typeof c.excerpt === 'string' &&
+          typeof c.explanation === 'string' && Array.isArray(c.evidence_ids))) return false
+  }
+  if (['trade_coach_evidence_v2','trade_coach_evidence_v3'].includes(snapshot.version)) {
     const labels = coachReadoutLabels(snapshot)
     return Boolean(labels && value.result?.assessment === (labels.atEntry ? 'no_new_close' : snapshot.catalog.readout.strategy_alignment))
   }

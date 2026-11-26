@@ -35,7 +35,10 @@ def assessment(catalog):
     facts=catalog['facts']
     support=[f['id'] for f in facts if f['role']=='supports'][:12]
     conflict=[f['id'] for f in facts if f['role']=='conflicts'][:12]
-    return {'summary':'The completed factor readings provide a technical view of support and conflict for the recorded trade direction. Further confirmation remains uncertain.',
+    premise = {'source':'entry_reason','excerpt':catalog['trade']['entry_reason'][:400],
+               'window':'at_entry','status':'unverifiable',
+               'explanation':'The entry note does not identify a measurable condition.', 'evidence_ids':[]}
+    return {'premise_checks':[premise],'summary':'The completed factor readings provide a technical view of support and conflict for the recorded trade direction. Further confirmation remains uncertain.',
             'main_concern':'Initial management levels may differ from the current plan.',
             'supporting_facts':support,'conflicting_facts':conflict,
             'change_facts':[f['id'] for f in facts if f['role']=='change'],
@@ -100,6 +103,90 @@ class CoachTests(unittest.TestCase):
         self.assertTrue(all(at(c['close_time'])<=NOW for c in snap['source_candles']))
         self.assertTrue(all(at(ENTERED)<at(c['close_time'])<=NOW for c in snap['full_trade']['candles']))
         self.assertTrue(any('external news' in text for text in snap['catalog']['limitations']))
+
+    def test_premise_is_anchored_to_entry_words_and_dated_market_facts(self):
+        record = self.create(entry_reason='I expected momentum to rise after entry.',
+                             entry_observations='I was watching a speech.')
+        review = self.review(record, {'request_id':str(uuid4()), 'observations':'New review-only note.'})
+        snap = review['snapshot']
+        self.assertEqual(review['prompt_version'], 'trade_coach_v3')
+        self.assertEqual(review['result']['premise_checks'][0]['excerpt'], record['entry']['entry_reason'])
+        facts = snap['premise_evidence']
+        for f in facts:
+            if f['window'] == 'at_entry':
+                self.assertLessEqual(at(f['through']), at(ENTERED))
+            else:
+                self.assertLess(at(ENTERED), at(f['through']))
+                self.assertLessEqual(at(f['through']), NOW)
+        later = next(f for f in facts if f['window']=='since_entry' and 'momentum' in f['text'].lower())
+        entry = next(f for f in facts if f['window']=='at_entry')
+        good = assessment(ai.ai_input(snap))
+        item = dict(good['premise_checks'][0], window='since_entry', status='supported',
+                    evidence_ids=[later['id']], explanation='The completed momentum reading supports the stated expectation.')
+        missing = dict(source='entry_observations', excerpt='watching a speech', window='since_entry',
+                       status='unverifiable', explanation='External news is outside the captured evidence.', evidence_ids=[])
+        valid = {**good,'premise_checks':[item,missing]}
+        self.assertEqual(ai.parse(json.dumps(valid), snap)['premise_checks'], [item,missing])
+        for patch in ({'excerpt':'New review-only note.'}, {'excerpt':'invented text'}, {'source':'entry_observations'},
+                      {'evidence_ids':[]}, {'evidence_ids':['FAKE']}, {'evidence_ids':[later['id'],later['id']]},
+                      {'evidence_ids':[entry['id']]}, {'window':'at_entry'}, {'explanation':'The profit was 999 pips.'},
+                      {'explanation':'Buy now.'}):
+            with self.subTest(patch=patch), self.assertRaises(InvalidJournalEvidence):
+                ai.parse(json.dumps({**good,'premise_checks':[{**item, **patch}]}), snap)
+        for checks in ([], [missing], [item,item]):
+            with self.assertRaises(InvalidJournalEvidence):
+                ai.parse(json.dumps({**good,'premise_checks':checks}), snap)
+
+    def test_saved_review_reopens_with_separate_findings_for_a_compound_premise(self):
+        record = self.create(entry_reason='I expected a close above Floor and momentum to turn bullish.',
+                             entry_zones=[{'label':'Floor','kind':'support','lower':'0.9','upper':'0.91'}],
+                             entry_observations='News may affect this trade.')
+        def review_premise(**kwargs):
+            payload = json.loads(kwargs['input'])
+            result = assessment(payload)
+            later = [f for f in payload['premise_evidence'] if f['window']=='since_entry']
+            floor = next(f for f in later if 'above Floor' in f['text'])
+            momentum = next(f for f in later if 'momentum' in f['text'].lower())
+            state = 'supported' if ': bullish.' in momentum['text'] else 'challenged' if ': bearish.' in momentum['text'] else 'awaiting_confirmation'
+            def check(excerpt,status,reason,ids,source='entry_reason'):
+                return dict(source=source, excerpt=excerpt, window='since_entry', status=status, explanation=reason, evidence_ids=ids)
+            result['premise_checks'] = [
+                check('a close above Floor','supported','Price closed above the recorded floor.',[floor['id']]),
+                check('momentum to turn bullish',state,'The latest momentum reading is shown in the cited evidence.',[momentum['id']]),
+                check('News may affect this trade.','unverifiable','News coverage is outside this review.',[],'entry_observations')]
+            return SimpleNamespace(status='completed',output_text=json.dumps(result),model='test',id='reply')
+        self.ai.side_effect = review_premise
+        review = self.review(record)
+        saved = self.client.get(self.url(record)+'/'+review['id']).json()
+        self.assertEqual(saved['result']['premise_checks'],review['result']['premise_checks'])
+        self.assertEqual(len(saved['result']['premise_checks']),3)
+        self.ai.assert_called_once()
+
+    def test_open_premise_uses_saved_entry_zones_even_when_review_zones_are_replaced(self):
+        zone = {'label':'My floor','kind':'support','lower':'1.105','upper':'1.106','origin_at':ENTERED}
+        record = self.create(entry_zones=[zone], entry_reason='I expected My floor to hold.')
+        original = self.review(record)['snapshot']
+        other = self.review(record, {'request_id':str(uuid4()),'zones':[
+            {**zone,'label':'Later ceiling','kind':'resistance'}]})['snapshot']
+        self.assertEqual(original['premise_evidence'], other['premise_evidence'])
+        self.assertEqual(other['zones'][0]['label'], 'Later ceiling')
+        texts = [f['text'] for f in other['premise_evidence'] if f['window']=='since_entry']
+        self.assertTrue(any('My floor' in line and 'in-trade H4 closes covered' in line for line in texts))
+        self.assertFalse(any('Later ceiling' in line for line in texts))
+        self.assertEqual(other['catalog']['readout']['strategy_alignment'],
+                         original['catalog']['readout']['strategy_alignment'])
+
+    def test_pending_premise_before_first_close_and_missing_zone_origin(self):
+        record = self.create(entry_at='2026-11-10T10:00:00-05:00',
+                             entry_zones=[{'label':'Floor','kind':'support','lower':'1.1','upper':'1.11'}])
+        snap = self.review(record)['snapshot']
+        self.assertEqual({f['window'] for f in snap['premise_evidence']}, {'at_entry'})
+        self.assertTrue(any('No zone origin' in f['text'] for f in snap['premise_evidence']))
+        good = assessment(ai.ai_input(snap))
+        good['premise_checks'][0].update(window='since_entry',status='awaiting_confirmation')
+        self.assertEqual(ai.parse(json.dumps(good),snap)['assessment'], 'no_new_close')
+        good['premise_checks'][0].update(status='supported',evidence_ids=[snap['premise_evidence'][0]['id']])
+        with self.assertRaises(InvalidJournalEvidence): ai.parse(json.dumps(good),snap)
 
     def test_same_uuid_replays_without_network_and_mismatched_inputs_conflict(self):
         record=self.create();body={'request_id':str(uuid4()),'observations':'Current note'}
@@ -219,7 +306,7 @@ class CoachTests(unittest.TestCase):
         self.assertEqual(self.client.post(self.url(record),json={'request_id':str(uuid4())}).status_code,409);self.ai.assert_not_called()
         Clock.value=NOW+timedelta(minutes=6)
         self.review(record)
-        late=cd.finish(reserved['id'],result=assessment(snap['catalog']))
+        late=cd.finish(reserved['id'],result=assessment(ai.ai_input(snap)))
         self.assertEqual(late['status'],'failed');self.assertIn('expired',late['error_message'])
 
     def test_closed_trade_retains_history_and_rejects_new_reviews(self):
@@ -274,7 +361,7 @@ class CoachTests(unittest.TestCase):
         self.assertEqual(self.client.get(self.url(record)+'/'+result['id']).status_code,409)
 
     def test_ai_rejects_invented_numbers_ids_roles_omissions_and_unavailable_verdict(self):
-        snap=self.review(self.create())['snapshot'];good=assessment(snap['catalog'])
+        snap=self.review(self.create())['snapshot'];good=assessment(ai.ai_input(snap))
         mutations=[{'summary':'The net score is 99.'},{'summary':'A confirmed breakout guarantees profit.'},{'supporting_facts':['FAKE']},{'context_facts':[]},{'watch_conditions':['BAD']},{'main_concern':'Buy now.'}]
         for changes in mutations:
             with self.subTest(changes=changes),self.assertRaises(InvalidJournalEvidence):ai.parse(json.dumps({**good,**changes}),snap)

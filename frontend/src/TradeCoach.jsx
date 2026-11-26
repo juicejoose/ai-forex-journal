@@ -2,7 +2,7 @@ import { useEffect,useRef,useState } from 'react'
 import { savedTradeZones } from './tradeZones.js'
 import { API } from './api.js'
 import { setupTime } from './setupEvaluation.js'
-import { coachLabels,coachReadoutLabels,coachZones,coachRequest,newerCoachEvidence,runningReview,validCoachReview } from './tradeCoach.js'
+import { alignmentChange,coachLabels,coachReadoutLabels,premiseStatus,coachZones,coachRequest,newerCoachEvidence,runningReview,validCoachReview } from './tradeCoach.js'
 import './TradeCoach.css'
 
 async function api(path,options={}) {
@@ -18,6 +18,22 @@ function EvidenceList({title,ids,catalog,conditions=false}) {
     const item=entries.find(value=>value.id===id)
     return <li key={id}><p>{item?.text ?? 'Evidence unavailable'}</p>{item?.evidence && <details><summary>Saved evidence · {id}</summary><pre>{JSON.stringify(item.evidence,null,2)}</pre></details>}</li>
   })}</ul></section>
+}
+
+function TradePremise({checks, evidence, sectionRef}) {
+  return <section className="coach-premise" ref={sectionRef} tabIndex={-1} aria-label="Your trade premise">
+    <h4>Your trade premise</h4>
+    <ul>{checks.map(check => <li key={JSON.stringify([check.source,check.excerpt,check.window])}>
+      <small>{check.source === 'entry_reason' ? 'Reason for entry' : 'Entry observations'} · {check.window === 'at_entry' ? 'At entry' : 'Since entry'}</small>
+      <blockquote>{check.excerpt}</blockquote>
+      <p><strong>{premiseStatus[check.status]}</strong> · {check.explanation}</p>
+      {check.evidence_ids.length > 0 && <details><summary>Market evidence ({check.evidence_ids.length})</summary>
+        <ul>{check.evidence_ids.map(id => {
+          const fact = evidence.find(item => item.id === id)
+          return <li key={id}>{fact ? <><time dateTime={fact.through}>{setupTime(fact.through)}</time> · {fact.text}</> : 'Evidence unavailable'}</li>
+        })}</ul></details>}
+    </li>)}</ul>
+  </section>
 }
 
 function FactorChanges({history}) {
@@ -57,6 +73,7 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
   const [form,setForm]=useState(()=>({inherit:true,zones:coachZones(record),observations:''}))
   const [dirty,setDirty]=useState(false),[generating,setGenerating]=useState(false),[loading,setLoading]=useState(false)
   const [error,setError]=useState(''),[notice,setNotice]=useState(''),[reload,setReload]=useState(0),[offset,setOffset]=useState(0)
+  const premiseSection = useRef(null)
   const dialog=useRef(null),returnFocus=useRef(null),controller=useRef(null),request=useRef(null),editor=useRef(null)
   const selectSequence=useRef(0),alive=useRef(true)
   const id=record.id,isOpen=record.status==='open',running=runningReview(review)
@@ -121,6 +138,7 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
   }
   const stale=newerCoachEvidence(review,latestClose),snapshot=review?.snapshot,result=review?.result
   const labels = coachReadoutLabels(snapshot)
+  const change = alignmentChange(snapshot)
   const previousVersion = snapshot && (snapshot.trade_revision ?? 0) !== (record.revision ?? 0)
   const afterExit=record.exit && snapshot && Date.parse(snapshot.cutoff_at)>Date.parse(record.exit.exit_at)
   return <div className="trade-coach-card">
@@ -128,6 +146,9 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
     {labels && result && !previousVersion && !running && !generating ? <CoachReadout snapshot={snapshot} labels={labels} /> :
       <strong>{generating || running ? 'Review in progress' : previousVersion ? 'Trade edited since review' : result ? coachLabels[result.assessment] : review?.status==='failed' ? 'Review unavailable' : 'No review yet'}</strong>}
     {previousVersion ? <p>View the earlier review in Evidence.</p> : result ? <p className="coach-excerpt">{result.summary}</p> : <p>Review the factors, zones and changes since entry.</p>}
+    {labels && result && !previousVersion && change && <p className="coach-signal"><b>Since entry</b> · {change}</p>}
+    {result?.premise_checks && !previousVersion && <button type="button" className="trade-score-evidence-link"
+      onClick={event=>{show(event); premiseSection.current?.focus()}}>Your trade premise ↓</button>}
     {review?.cutoff_at && <small>As of {setupTime(review.cutoff_at)}</small>}
     {stale && <p className="coach-stale">{isOpen ? 'New completed candles · refresh the coach' : 'Newer completed candles outside this review'}</p>}
     {!isOpen && <p>{review ? 'Historical open-trade review · trade now closed' : 'No open-trade review was saved.'}</p>}
@@ -162,6 +183,7 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
         {stale && <p className="coach-stale">Newer completed candles are available. This saved review does not cover them.</p>}
         {dirty && <p className="coach-stale">Draft inputs differ from the saved review.</p>}
         {afterExit && <p className="coach-stale">This review was captured after the exit time later recorded for this trade. It is post-exit context, not an opinion available while holding.</p>}
+        {result?.premise_checks && <TradePremise checks={result.premise_checks} evidence={snapshot.premise_evidence} sectionRef={premiseSection} />}
         {labels && <CoachReadout snapshot={snapshot} labels={labels} details />}
         {result && <>{labels ? <h4>Coach interpretation</h4> : <h4>{coachLabels[result.assessment]} · earlier review method</h4>}<p>{result.summary}</p><h4>Main concern</h4><p>{result.main_concern}</p>
           <EvidenceList title="Supporting evidence" ids={result.supporting_facts} catalog={snapshot.catalog} />

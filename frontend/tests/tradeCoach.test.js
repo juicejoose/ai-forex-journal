@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {coachReadoutLabels,coachZones,coachRequest,newerCoachEvidence,validCoachReview,runningReview} from '../src/tradeCoach.js'
+import {alignmentChange,coachReadoutLabels,coachZones,coachRequest,newerCoachEvidence,validCoachReview,runningReview} from '../src/tradeCoach.js'
 const zone=()=>({label:'Support',kind:'support',lower:'1.10000',upper:'1.10100',timeframe:'H4',originAt:''})
 const form=()=>({inherit:false,zones:[zone()],observations:' Watch support '})
 
@@ -57,4 +57,20 @@ test('new reviews show weighted alignment and independent zone evidence, includi
   assert.equal(coachReadoutLabels(snapshot).alignment,'Balanced')
   readout.price_action.status='unknown'
   assert.equal(validCoachReview(review,'trade'),false)
+})
+
+test('premise reviews require their saved evidence and checks while older reviews still open',()=>{
+  const readout={strategy_alignment:'supported',hold_closes:1,price_action:{status:'no_match',matches:[]},factor_history:[]}
+  const snapshot={schema_version:1,trade_id:'trade',trade:{direction:'long'},version:'trade_coach_evidence_v3',
+    covers_latest_close:true,entry_score:{covers_latest_scheduled_close:true},directional_net_change:-0.5,catalog:{facts:[],readout},premise_evidence:[]}
+  const check={window:'since_entry',source:'entry_reason',status:'unverifiable',excerpt:'My plan',explanation:'No measurable condition.',evidence_ids:[]}
+  const value={id:'r',trade_id:'trade',status:'completed',snapshot,result:{assessment:'supported',premise_checks:[check]}}
+  assert.equal(validCoachReview(value,'trade'),true)
+  assert.equal(validCoachReview({...value,result:{assessment:'supported'}},'trade'),false)
+  assert.equal(validCoachReview({...value,snapshot:{...snapshot,version:'trade_coach_evidence_v2'},result:{assessment:'supported'}},'trade'),true)
+  assert.equal(alignmentChange(snapshot),'Weakened by 0.5 points')
+  assert.equal(alignmentChange({...snapshot,directional_net_change:1}),'Strengthened by 1 point')
+  assert.equal(alignmentChange({...snapshot,directional_net_change:0}),'Net alignment is unchanged')
+  assert.equal(alignmentChange({...snapshot,covers_latest_close:false}),null)
+  assert.equal(alignmentChange({...snapshot,catalog:{readout:{hold_closes:0}}}),null)
 })
