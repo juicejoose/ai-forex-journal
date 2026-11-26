@@ -65,6 +65,33 @@ class TradeLogTests(unittest.TestCase):
         td.init_trade_db()
         self.assertEqual(self.client.get(self.url(record)).json(),record)
 
+    def test_entry_zones_persist_with_original_context_and_are_part_of_retry_identity(self):
+        zone = {'label':'Range floor', 'kind':'support', 'lower':'1.09000', 'upper':'1.09100',
+                'origin_at':NOW.isoformat()}
+        body = trade(entry_zones=[zone])
+        record = self.create(body)
+        saved = record['context']['entry_zones'][0]
+        self.assertEqual((saved['label'], saved['lower'], saved['origin_at']),
+                         (zone['label'], zone['lower'], zone['origin_at']))
+        self.assertNotIn('entry_zones', record['entry'])
+        self.assertEqual(self.client.get(self.url(record)).json(), record)
+        self.assertEqual(self.create(body), record)
+        self.assertEqual(self.client.post('/trades',json={**body, 'entry_zones':[]}).status_code,409)
+        old = trade()
+        self.assertEqual(self.create(old), self.create({**old, 'entry_zones':[]}))
+
+    def test_zone_validation_includes_linked_zones_and_trade_entry_cutoff(self):
+        linked = self.setup()
+        name = linked['snapshot']['zones'][0]['label']
+        zone = {'label':'New zone', 'kind':'support', 'lower':'1.09', 'upper':'1.10'}
+        later = (NOW+timedelta(hours=1)).isoformat()
+        for zones in ([{**zone,'lower':'1.11'}], [{**zone,'origin_at':later}], [{**zone,'observed_at':later}],
+                      [{**zone,'label':name.upper()}], [zone,zone],
+                      [{**zone,'label':f'Extra {i}'} for i in range(8)]):
+            response = self.client.post('/trades',json=trade(entry_zones=zones,setup_id=linked['id']))
+            self.assertEqual(response.status_code,422,response.text)
+        self.assertEqual(td.list_trades()['total'],0)
+
     def test_linked_copy_retains_strategy_plan_and_zones_after_source_deletion(self):
         source=self.setup(snapshot(trade_plan={'entry_price':'1.1','stop_loss':'1.098','take_profit':'1.104'}))
         body=trade(setup_id=source['id']); record=self.create(body)

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import market_data as md
 import trade_database as db
 from trade_calculations import trade_outcome
-from chart_context import CONTEXT_CANDLES, DISPLAY_WARMUP
+from chart_context import CONTEXT_CANDLES, DISPLAY_WARMUP, build_context
 
 MAX_CANDLES = 10000
 PAGE_SIZE = 5000
@@ -15,6 +15,16 @@ def bar_start(at):
     local = at.astimezone(md.NY)
     anchor = local.replace(hour=1, minute=0, second=0, microsecond=0)
     return (anchor + timedelta(hours=((local.hour - 1) // 4) * 4)).astimezone(md.UTC)
+
+
+def entry_chart(at=None):
+    """Display-only candles either side of the H4 bar containing the requested time."""
+    now = datetime.now(md.UTC)
+    center = at or now
+    if center > now or center.year < 2000:
+        raise md.MarketDataError('Choose a chart time from 2000 through the present.', 422)
+    boundary = bar_start(center)
+    return build_context(boundary, boundary, now)
 
 
 def trading_bar(at):

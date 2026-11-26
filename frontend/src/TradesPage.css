@@ -110,3 +110,22 @@
 .trade-edit-dialog::backdrop { background: rgb(0 0 0 / 60%); }
 .trade-edit-dialog h3 { margin-top: 1rem; }
 .trade-edit-history { margin-top: .4rem; }
+
+.trade-entry-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.trade-entry-chart, .trade-entry-layout > form { min-width: 0; }
+.trade-entry-chart > .trade-row h4 { margin: 0; }
+.trade-entry-chart .trade-window-controls, .trade-pick-tools { display: flex; flex-wrap: wrap; align-items: end; gap: .4rem; margin-block: .6rem; }
+.trade-window-controls label { display: grid; gap: .25rem; font-size: .7rem; }
+.trade-window-controls input { min-height: 44px; max-width: 100%; padding: .4rem; font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 7px; }
+.trade-pick-tools button[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); }
+.trade-entry-chart .mc-drawing .mc-plot { cursor: crosshair; }
+.trade-pick-feedback:empty { margin: 0; }
+@media (min-width: 1100px) {
+  .trade-entry-layout:has(.trade-entry-chart button[aria-expanded="true"]) { grid-template-columns: minmax(0, 1.65fr) minmax(19rem, 1fr); }
+}
+
+.trade-entry-zones { min-width: 0; margin: .75rem 0; padding: .6rem; border: 1px solid var(--border); border-radius: 7px; }
+.trade-entry-zones legend { font-size: .78rem; color: var(--text-h); }
+.trade-zone-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .5rem; align-items: end; margin-bottom: .65rem; }
+.trade-zone-fields label { display: grid; gap: .2rem; font-size: .7rem; }
+.trade-zone-fields input, .trade-zone-fields select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: .35rem; font: inherit; color: var(--text-h); background: var(--bg); border: 1px solid var(--border); border-radius: 7px; }

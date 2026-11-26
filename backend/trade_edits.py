@@ -6,7 +6,7 @@ from uuid import uuid4
 import database as db
 import trade_database as trades
 from setup_database import canonical
-from trade_calculations import TradeInputError, entry_context, past_time, trade_outcome, utc
+from trade_calculations import TradeInputError, entry_context, past_time, trade_outcome, utc, validate_entry_zone_times
 
 
 def migrate(con):
@@ -90,8 +90,10 @@ def save_edit(identifier, edit):
             raise TradeInputError('No trade details changed.')
         source = record['context']['setup']
         context = dict(record['context'])
-        if 'entry_at' in changes and source:
-            context['timing'] = entry_context(edit.entry,source,now)['timing']
+        if 'entry_at' in changes:
+            validate_entry_zone_times(context.get('entry_zones', []), edit.entry.entry_at)
+            if source:
+                context['timing'] = entry_context(edit.entry,source,now)['timing']
         evidence_hash = trades._hash(entry,context)
         edit_id = str(uuid4())
         con.execute('INSERT INTO trade_edits VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',

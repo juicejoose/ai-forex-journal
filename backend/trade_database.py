@@ -5,7 +5,7 @@ import json
 from uuid import uuid4
 import database as db
 import setup_database as sd
-from trade_calculations import entry_context, past_time, utc, trade_outcome, TradeInputError
+from trade_calculations import entry_context, past_time, utc, trade_outcome, TradeInputError, validate_entry_zone_times
 
 
 class TradeConflict(ValueError):
@@ -129,9 +129,16 @@ def _record(con, identifier, *, detail=True):
 
 def create_trade(entry):
     now=datetime.now(timezone.utc)
-    values=entry.model_dump(mode='json',exclude={'request_id'})
+    values=entry.model_dump(mode='json',exclude={'request_id','entry_zones'})
     values['entry_at']=utc(entry.entry_at)
-    request=sd.canonical(values)
+    zones = []
+    for zone in entry.entry_zones:
+        saved = zone.model_dump(mode='json')
+        for key in ('origin_at', 'observed_at'):
+            if getattr(zone, key):
+                saved[key] = utc(getattr(zone, key))
+        zones.append(saved)
+    request=sd.canonical({**values, 'entry_zones': zones} if zones else values)
     with db.get_connection(write=True) as con:
         if con.execute('SELECT 1 FROM trade_deletions WHERE request_id=?',(str(entry.request_id),)).fetchone():
             raise TradeConflict('This trade was deleted. Start a new entry with a new save request.')
@@ -148,6 +155,13 @@ def create_trade(entry):
             try: source=sd._snapshot(row)
             except sd.SetupConflict as exc: raise TradeConflict(str(exc)) from None
         context=entry_context(entry,source,now)
+        if zones:
+            inherited = source['snapshot']['zones'] if source else []
+            names = [z['label'].casefold() for z in [*inherited, *zones]]
+            if len(names) > 8 or len(set(names)) != len(names):
+                raise TradeInputError('Use at most eight distinctly named zones across the trade and linked setup.')
+            validate_entry_zone_times(zones, entry.entry_at)
+            context['entry_zones'] = zones
         identifier=str(uuid4())
         con.execute('INSERT INTO trades VALUES (?,?,?,?,?,?,?,?)',(identifier,str(entry.request_id),request,
             sd.canonical(values),sd.canonical(context),_hash(values,context),values['entry_at'],now.isoformat()))

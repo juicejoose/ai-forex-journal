@@ -48,7 +48,7 @@ export function buildChartData(snapshot, evaluation) {
   for (const candle of candles) {
     const time = chartTime(candle.open_time)
     const score = scores.get(time)
-    byTime.set(time, { time, candle, analyzed: !timeline || candle.timeline_phase !== 'after_exit',
+    byTime.set(time, { time, candle, analyzed: snapshot.analysis_kind !== 'trade_entry_chart' && (!timeline || candle.timeline_phase !== 'after_exit'),
       score: chartTime(score?.close_time) === chartTime(candle.close_time) ? score : null })
   }
   const lastClose = candles.length ? Math.max(...candles.map(candle => chartTime(candle.close_time))) : first

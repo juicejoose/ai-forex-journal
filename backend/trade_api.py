@@ -1,6 +1,6 @@
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 from trade_edits import save_edit
 from trade_scores import calculate_scores
 from fastapi import APIRouter, HTTPException, Query, Response
@@ -8,7 +8,7 @@ import trade_database as db
 from trade_models import TradeInput, TradeCloseInput, TradeReviewInput, TradeAnalysisInput, TradeEditInput
 from trade_calculations import TradeInputError
 from market_data import MarketDataError
-from trade_timeline import fetch_timeline
+from trade_timeline import entry_chart, fetch_timeline
 from journal_grounding import InvalidJournalEvidence
 
 router=APIRouter(tags=['Trade log'])
@@ -21,6 +21,11 @@ def execute(action,*args,**kwargs):
     except TradeInputError as exc: raise HTTPException(422,str(exc)) from None
     except MarketDataError as exc: raise HTTPException(exc.status_code,str(exc)) from None
     except InvalidJournalEvidence: raise HTTPException(502,'The entry-time market evidence could not be validated.') from None
+
+
+@router.get('/trade-entry-chart')
+def entry_chart_preview(at: AwareDatetime | None = None):
+    return execute(entry_chart, at)
 
 
 @router.post('/trades',status_code=201)

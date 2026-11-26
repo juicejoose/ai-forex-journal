@@ -171,3 +171,32 @@ class FormingContextTests(unittest.TestCase):
         for raw in (malformed,short):
             with patch.object(md,'_fetch_candles',return_value=raw):
                 with self.assertRaises(md.MarketDataError): cc.forming_candle(NOW,NOW)
+
+class TradeEntryChartTests(unittest.TestCase):
+    def test_historical_anchor_keeps_containing_bar_and_indicators(self):
+        from tests.test_trade_coach import Clock
+        import trade_timeline
+        Clock.value = LATER
+        when = at('2026-10-20T10:25:00-04:00')
+        with patch.object(trade_timeline,'datetime',Clock), patch.object(md,'_fetch_candles',side_effect=provider(LATER)):
+            chart = trade_timeline.entry_chart(when)
+        self.assertEqual(chart['before_at'], at('2026-10-20T09:00:00-04:00').isoformat())
+        self.assertEqual(chart['after_at'], chart['before_at'])
+        self.assertEqual(chart['following'][0]['open_time'],chart['before_at'])
+        self.assertEqual(chart['purpose'],'display_only')
+        self.assertEqual(len(chart['preceding']),160)
+        self.assertEqual(len(chart['following']),160)
+        self.assertIsNotNone(chart['following'][0]['indicators']['sma190'])
+
+    def test_current_chart_contains_forming_bar_and_future_request_is_rejected(self):
+        from tests.test_trade_coach import Clock
+        import trade_timeline
+        Clock.value = NOW
+        with patch.object(trade_timeline,'datetime',Clock), patch.object(md,'_fetch_candles',side_effect=provider(NOW)) as market:
+            chart=trade_timeline.entry_chart()
+            self.assertEqual(len(chart['following']),1)
+            self.assertFalse(chart['following'][0]['complete'])
+            market.reset_mock()
+            with self.assertRaises(md.MarketDataError):
+                trade_timeline.entry_chart(NOW+timedelta(minutes=1))
+            market.assert_not_called()

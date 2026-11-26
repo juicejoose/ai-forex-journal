@@ -61,6 +61,14 @@ class TradeEditTests(unittest.TestCase):
     def close(self, record):
         return self.post(record,'/close',full_exit(exit_at=NOW.isoformat()))
 
+    def test_trade_correction_preserves_drawn_zones_and_checks_original_zone_timing(self):
+        zone = {'label':'Ceiling','kind':'resistance','lower':'1.15','upper':'1.16','origin_at':ENTERED}
+        record = self.create(entry_zones=[zone])
+        updated = self.post(record,'/edits',self.body(record,{'title':'Corrected'}))
+        self.assertEqual(updated['context']['entry_zones'],record['context']['entry_zones'])
+        before_origin = (datetime.fromisoformat(ENTERED) - timedelta(hours=1)).isoformat()
+        self.post(updated,'/edits',self.body(updated,{'entry_at':before_origin}),422)
+
     def test_edit_open_replay_conflict_list_order_and_close(self):
         first = self.create()
         second = self.create(entry_at='2026-11-09T18:00:00Z')

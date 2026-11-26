@@ -159,6 +159,20 @@ class CoachTests(unittest.TestCase):
         right=[f for f in b['catalog']['facts'] if f['evidence'].get('scope')=='current_factor']
         for x,y in zip(left,right):self.assertEqual(y['role'],{'supports':'conflicts','conflicts':'supports'}.get(x['role'],x['role']))
 
+    def test_coach_inherits_drawn_trade_zones_with_or_without_a_linked_setup(self):
+        zone = {'label':'Logged floor','kind':'support','lower':'1.105','upper':'1.106'}
+        saved = sd.store_snapshot(uuid4(),{},snapshot())
+        for setup_id,source in ((None,'trade_entry_zones'),(saved['id'],'setup_and_trade_entry_zones')):
+            record = self.create(entry_zones=[zone],setup_id=setup_id)
+            inherited = self.review(record)['snapshot']
+            self.assertEqual(inherited['zone_source'],source)
+            expected = [z['label'] for z in saved['snapshot']['zones']] if setup_id else []
+            self.assertEqual([z['label'] for z in inherited['zones']], [*expected,zone['label']])
+            override = self.review(record,{'request_id':str(uuid4()),'zones':[]})['snapshot']
+            self.assertEqual(override['zones'],[])
+            self.assertEqual(override['entry_score'],inherited['entry_score'])
+            self.assertEqual(override['full_trade'],inherited['full_trade'])
+
     def test_manual_zones_are_review_only_and_inherited_zones_stay_fixed(self):
         saved=sd.store_snapshot(uuid4(),{},snapshot())
         record=self.create(setup_id=saved['id']);inherited=self.review(record)['snapshot']

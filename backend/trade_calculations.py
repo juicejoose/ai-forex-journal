@@ -23,6 +23,14 @@ def past_time(value, label, now):
         raise TradeInputError(f'{label} cannot be in the future.')
 
 
+def validate_entry_zone_times(zones, entry_at):
+    for zone in zones:
+        for key in ('origin_at', 'observed_at'):
+            stamp = zone.get(key)
+            if stamp and datetime.fromisoformat(stamp) > entry_at:
+                raise TradeInputError('Zone origin and observation times must be at or before trade entry.')
+
+
 def entry_context(entry, source, saved_at):
     if source is None:
         return {'schema_version': 1, 'kind': 'manual', 'timing': 'self_reported',

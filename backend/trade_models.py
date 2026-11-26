@@ -2,7 +2,7 @@
 from typing import Literal
 from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
-from setup_models import Price
+from setup_models import Price, SetupZone
 
 
 class EntryDetails(BaseModel):
@@ -34,6 +34,7 @@ class EntryDetails(BaseModel):
 class TradeInput(EntryDetails):
     request_id: UUID
     setup_id: UUID | None = None
+    entry_zones: list[SetupZone] = Field(default_factory=list, max_length=8)
 
 
 class ExitDetails(BaseModel):

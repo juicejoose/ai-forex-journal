@@ -45,8 +45,8 @@ Unrealized pips are midpoint estimates, not broker liquidation values or proof a
 Only initial stop/target levels are recorded. They are not confirmed current management levels;
 never invent a moved stop, an exit, stop execution, target fill, profit guarantee or discipline grade.
 The entry score may be reconstructed retrospectively. When trade_edited_at is present, trade details may have been corrected retrospectively. Entry notes and review notes are separate
-self-reports. Manual zones are hypotheses, not independently validated levels. Review annotations
-do not establish what was known at entry. A quote is provisional price context only; it does not
+self-reports. Manual zones are hypotheses, not independently validated levels. Zones drawn while logging a trade can be retrospective. Neither these nor review annotations
+establish what was known at entry. A quote is provisional price context only; it does not
 score or confirm H4 conditions. A completed-close fallback can be old, so state missing freshness.
 
 Zone events are matches to saved Python rules, not guaranteed or confirmed price patterns.

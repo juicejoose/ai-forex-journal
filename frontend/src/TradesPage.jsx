@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { API } from './api.js'
 import { setupTime, setupPageOffset } from './setupEvaluation.js'
 import TradeEditDialog, { TradeEditHistory } from './TradeEditDialog.jsx'
+import TradeEntryChart from './TradeEntryChart.jsx'
 import TradeEntryFields from './TradeEntryFields.jsx'
 import TradeAlignment from './TradeAlignment.jsx'
 import TradeTimeline from './TradeTimeline.jsx'
@@ -28,6 +29,7 @@ const neutralReview = () => ({ discipline: 'not_reviewed', notes: '' })
 export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }) {
   const [form, setForm] = useState(() => formFromSetup(seed?.record))
   const [linkedSetup, setLinkedSetup] = useState(seed?.record ?? null)
+  const [entrySession, setEntrySession] = useState(0)
   const [creating, setCreating] = useState(Boolean(seed))
   const [entryDirty, setEntryDirty] = useState(Boolean(seed))
   const [record, setRecord] = useState(null)
@@ -104,7 +106,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
     setError(''); setMessage('')
     try {
       if ((exitDirty || reviewDirty || coachDirty) && !window.confirm('Discard the unsaved exit, self-review or coach inputs when opening this new trade?')) return
-      const body = tradeRequest(form)
+      const body = tradeRequest(form, undefined, linkedSetup?.snapshot.zones)
       setBusy('Saving your trade and entry evidence…')
       const data = await save('entry', '/trades', body)
       present(data); setCreating(false); setEntryDirty(false); setForm(blankTrade()); setLinkedSetup(null); setOffset(0)
@@ -201,7 +203,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
 
   function startNew() {
     if (entryDirty && !window.confirm('Replace the unsaved entry form?')) return
-    setForm(blankTrade()); setLinkedSetup(null); setEntryDirty(false); setCreating(true); setError(''); setMessage('')
+    setEntrySession(value=>value+1); setForm(blankTrade()); setLinkedSetup(null); setEntryDirty(false); setCreating(true); setError(''); setMessage('')
     requestAnimationFrame(() => document.getElementById('trade-entry-title')?.focus())
   }
   function cancelEntry() {
@@ -220,18 +222,21 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       <button type="button" className="trade-primary" disabled={waiting} onClick={startNew}>Record trade</button></header>
     {error && <p ref={errorRef} className="trade-error" role="alert">{error}</p>}
     {(busy || message) && <p className="trade-notice" role="status">{busy || message}</p>}
-    {creating && <form className="trade-card trade-entry-form trade-form" onSubmit={create}>
+    {creating && <section className="trade-card trade-entry-form">
       <h3 id="trade-entry-title" tabIndex={-1}>Record an entry</h3>
       <p className="trade-help">Enter actual execution details. You can correct trade details later using Edit trade.</p>
       {linkedSetup ? <div className="trade-notice"><strong>Linked setup: {linkedSetup.snapshot.entry.title || 'Saved setup'}</strong><p>Evidence cutoff: {setupTime(linkedSetup.snapshot.cutoff_at)}. It must be at or before your entry time.</p>
         {linkedSetup.snapshot.trade_plan && <p>Planned prices were copied into this form. Verify the actual entry fill and the initial stop and target you used.</p>}
         <button type="button" disabled={waiting} onClick={() => { setLinkedSetup(null); edit({ setupId: null }) }}>Remove setup link</button></div>
         : <p className="trade-help">Manual entry: after saving, you can reconstruct market evidence at entry. To preserve an existing setup instead, open it and choose Record trade.</p>}
-      <fieldset disabled={waiting}><div className="trade-fields">
+      <div className="trade-entry-layout">
+      <TradeEntryChart key={entrySession} active={active} form={form} onEdit={edit} disabled={waiting} cutoff={linkedSetup?.snapshot.cutoff_at} linkedZones={linkedSetup?.snapshot.zones} />
+      <form className="trade-form" onSubmit={create}><fieldset disabled={waiting}><div className="trade-fields">
         <TradeEntryFields form={form} edit={edit} timezone={timezone} />
       </div><p className="trade-help">No stop recorded means R will be unavailable. These fields record your actions; they do not define mandatory trading rules.</p>
       <div className="trade-actions"><button type="button" onClick={cancelEntry}>Cancel entry</button><button className="trade-primary" type="submit">Save trade entry</button></div></fieldset>
-    </form>}
+      </form></div>
+    </section>}
     <div className="trade-workspace">
       <aside className="trade-card trade-history" aria-label="Trade history"><div className="trade-history-toolbar"><h3><button type="button" ref={historyToggleRef} className="trade-history-toggle" aria-expanded={historyOpen} aria-controls="trade-history-content" onClick={() => setHistoryOpen(value => !value)}>Trade history <span aria-hidden="true">{historyOpen ? '▾' : '▸'}</span><small>{history.total} {history.total === 1 ? 'trade' : 'trades'}</small></button></h3>
         {historyOpen && <><label>Show trades<select value={status} disabled={waiting} onChange={e => { setStatus(e.target.value); setOffset(0) }}><option value="all">All trades</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
@@ -271,6 +276,8 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
         })} />
         <details className="trade-card trade-entry-notes" key={`notes-${record.id}`}><summary>Entry reasoning & observations</summary>
           <p className="trade-help">Logged {setupTime(record.created_at)} · EUR/USD · H4</p>
+          {record.context?.entry_zones?.length > 0 && <><h4>Zones recorded with this trade</h4>
+            <ul className="trade-zones">{record.context.entry_zones.map(zone => <li key={zone.label}><strong>{zone.label}</strong> · {zone.kind} · {zone.lower}–{zone.upper}{zone.origin_at && <> · origin {setupTime(zone.origin_at)}</>}</li>)}</ul></>}
           <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>
           {entry.entry_observations && <><h4>Entry observations</h4><p className="trade-prose">{entry.entry_observations}</p></>}
         </details>

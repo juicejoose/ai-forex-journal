@@ -40,8 +40,13 @@ def build_snapshot(identifier,request):
                {'basis':'last_completed_close','value':last['close'],'time':last['close_time']})
     if request.zones is None:
         original=record['context'].get('setup')
-        zone_inputs=[SetupZone(**{k:z[k] for k in SetupZone.model_fields if k in z}) for z in original['snapshot']['zones']] if original else []
-        zone_source='saved_entry_setup'
+        linked = original['snapshot']['zones'] if original else []
+        manual = record['context'].get('entry_zones', [])
+        zone_inputs = [SetupZone(**{k: z[k] for k in SetupZone.model_fields if k in z})
+                       for z in [*linked, *manual]]
+        zone_source = 'saved_entry_setup'
+        if manual:
+            zone_source = 'setup_and_trade_entry_zones' if linked else 'trade_entry_zones'
     else: zone_inputs=request.zones;zone_source='review_annotations'
     if any((z.origin_at and z.origin_at>cutoff) or (z.observed_at and z.observed_at>cutoff) for z in zone_inputs):
         raise md.MarketDataError('Zone observation and origin times cannot be after the review cutoff.',422)

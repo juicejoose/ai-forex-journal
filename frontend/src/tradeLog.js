@@ -1,7 +1,8 @@
+import { zoneInputs } from './tradeZones.js'
 import { localInputTime } from './setupDrawing.js'
 
 export const disciplineLabels = { not_reviewed: 'Not reviewed', followed: 'Followed my plan', deviated: 'Deviated from my plan' }
-export const blankTrade = () => ({ title: '', direction: 'long', entryPrice: '', entryAt: '', stopLoss: '', takeProfit: '', reason: '', observations: '', setupId: null })
+export const blankTrade = () => ({ title: '', direction: 'long', entryPrice: '', entryAt: '', stopLoss: '', takeProfit: '', reason: '', observations: '', setupId: null, entryZones: [], zoneBoundary: null })
 export const blankExit = () => ({ price: '', at: '', notes: '' })
 
 export function formFromSetup(record) {
@@ -24,15 +25,18 @@ function instant(value, label, now) {
   if (!value || !Number.isFinite(date.getTime()) || date.getTime() > now) throw new Error(`Choose a valid ${label.toLowerCase()} that is not in the future.`)
   return date.toISOString()
 }
-export function tradeRequest(form, now = Date.now()) {
+export function tradeRequest(form, now = Date.now(), linkedZones = []) {
   const entry = price(form.entryPrice, 'Entry price')
   const stop = price(form.stopLoss, 'Stop loss', true), target = price(form.takeProfit, 'Take profit', true)
   if (!['long','short'].includes(form.direction)) throw new Error('Choose long or short.')
   if (stop !== null && (form.direction === 'long' ? Number(stop) >= Number(entry) : Number(stop) <= Number(entry))) throw new Error('Place the initial stop below a long entry or above a short entry, or leave it blank if none was used.')
   if (target !== null && (form.direction === 'long' ? Number(target) <= Number(entry) : Number(target) >= Number(entry))) throw new Error('Place the initial target above a long entry or below a short entry, or leave it blank if none was used.')
   if (!form.reason.trim()) throw new Error('Record your reason for entering the trade.')
-  return { title: form.title.trim(), direction: form.direction, instrument: 'EUR_USD', timeframe: 'H4',
-    entry_price: entry, entry_at: instant(form.entryAt, 'Entry time', now),
+  if (form.zoneBoundary != null) throw new Error('Finish drawing the zone or cancel it before saving.')
+  const entryAt = instant(form.entryAt, 'Entry time', now)
+  const zones = zoneInputs(form.entryZones ?? [], Date.parse(entryAt), 'entry time', linkedZones)
+  return { ...(zones.length ? {entry_zones:zones} : {}), title: form.title.trim(), direction: form.direction, instrument: 'EUR_USD', timeframe: 'H4',
+    entry_price: entry, entry_at: entryAt,
     initial_stop_loss: stop, initial_take_profit: target, entry_reason: form.reason.trim(),
     entry_observations: form.observations.trim(), setup_id: form.setupId }
 }

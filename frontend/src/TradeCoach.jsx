@@ -1,4 +1,5 @@
 import { useEffect,useRef,useState } from 'react'
+import { savedTradeZones } from './tradeZones.js'
 import { API } from './api.js'
 import { setupTime } from './setupEvaluation.js'
 import { coachLabels,coachReadoutLabels,coachZones,coachRequest,newerCoachEvidence,runningReview,validCoachReview } from './tradeCoach.js'
@@ -139,7 +140,7 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
       {isOpen && <details ref={editor}><summary>Review inputs {dirty ? '· unsaved changes' : ''}</summary>
         <form onSubmit={generate} className="trade-form"><fieldset disabled={generating || running}>
           <label><span>Current observations (optional)</span><textarea rows={3} maxLength={5000} value={form.observations} onChange={e=>edit({observations:e.target.value})} placeholder="What changed or concerns you? These notes are separate from entry reasoning." /></label>
-          <label className="coach-checkbox"><input type="checkbox" checked={form.inherit} onChange={e=>edit({inherit:e.target.checked})} />Use zones saved with entry ({record.context?.setup?.snapshot?.zones?.length ?? 0})</label>
+          <label className="coach-checkbox"><input type="checkbox" checked={form.inherit} onChange={e=>edit({inherit:e.target.checked})} />Use zones saved with entry ({savedTradeZones(record.context).length})</label>
           {!form.inherit && <><p className="trade-help">These zones apply to this review only. Original entry evidence stays fixed. Origin time enables historical rule checks; without it, only zone position is available.</p>
             {form.zones.map((zone,index)=><div className="coach-zone" key={zone.key}><label>Name<input maxLength={80} value={zone.label} onChange={e=>edit({zones:form.zones.map((z,i)=>i===index ? {...z,label:e.target.value}:z)})} /></label>
               <label>Type<select value={zone.kind} onChange={e=>edit({zones:form.zones.map((z,i)=>i===index ? {...z,kind:e.target.value}:z)})}><option value="support">Support</option><option value="resistance">Resistance</option></select></label>
@@ -170,7 +171,7 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
           <EvidenceList title="Conditions to monitor" ids={result.watch_conditions} catalog={snapshot.catalog} conditions />
           <EvidenceList title="Possible invalidation scenarios" ids={result.invalidation_conditions} catalog={snapshot.catalog} conditions /></>}
         <h4>Limitations</h4><ul>{snapshot.catalog.limitations.map(text=><li key={text}>{text}</li>)}</ul>
-        <details><summary>All captured facts and original review inputs</summary><p>Entry reasoning: {snapshot.trade.entry_reason}</p><p>Entry observations: {snapshot.trade.entry_observations || 'None'}</p><p>Review observations: {snapshot.review_observations || 'None'}</p><p>Zones: {snapshot.zone_source==='saved_entry_setup' ? 'Inherited from saved entry setup' : 'Supplied at this review'}</p><pre>{JSON.stringify(snapshot.catalog,null,2)}</pre></details>
+        <details><summary>All captured facts and original review inputs</summary><p>Entry reasoning: {snapshot.trade.entry_reason}</p><p>Entry observations: {snapshot.trade.entry_observations || 'None'}</p><p>Review observations: {snapshot.review_observations || 'None'}</p><p>Zones: {({saved_entry_setup:'Saved entry setup', trade_entry_zones:'Recorded with the trade', setup_and_trade_entry_zones:'Linked setup and trade entry', review_annotations:'Supplied at this review'})[snapshot.zone_source] ?? 'Unknown source'}</p><pre>{JSON.stringify(snapshot.catalog,null,2)}</pre></details>
       </>}
     </dialog>
   </div>

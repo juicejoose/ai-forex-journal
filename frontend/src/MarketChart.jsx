@@ -22,7 +22,7 @@ function zoomedRange(range, multiplier) {
   return { from: middle - half, to: middle + half }
 }
 
-function SelectedCandle({ row, hasEvaluation, tradeTimeline }) {
+function SelectedCandle({ row, hasEvaluation, tradeTimeline, entryChart }) {
   if (!row) return null
   const { candle, score } = row
   const indicators = candle.indicators ?? {}
@@ -30,7 +30,7 @@ function SelectedCandle({ row, hasEvaluation, tradeTimeline }) {
   const change = (candle.close - candle.open) / candle.open * 100
   return <div className="mc-selection">
     <div className="mc-selection-heading">
-      <div><p className="jv-eyebrow">{tradeTimeline || candle.complete === false || candle.timeline_phase === 'after_review' ? timelineCandleState(candle).toUpperCase() : row.analyzed ? 'SELECTED CANDLE' : 'EARLIER CONTEXT · OUTSIDE REVIEW'}</p>
+      <div><p className="jv-eyebrow">{entryChart || tradeTimeline || candle.complete === false || candle.timeline_phase === 'after_review' ? timelineCandleState(candle).toUpperCase() : row.analyzed ? 'SELECTED CANDLE' : 'EARLIER CONTEXT · OUTSIDE REVIEW'}</p>
         <h4>{score?.candle_id ? `${score.candle_id} · ` : ''}{candleLabel(candle)}</h4></div>
       <strong className={`jv-tone-${changeTone(change)}`}>{formatChange(change)}</strong>
     </div>
@@ -51,12 +51,12 @@ function SelectedCandle({ row, hasEvaluation, tradeTimeline }) {
         <span>{factor.name}</span><strong className={`ss-${factor.outcome}`}>{factor.outcome === 'bullish' ? `+${factor.bullish_points} Bull`
           : factor.outcome === 'bearish' ? `+${factor.bearish_points} Bear` : factor.outcome === 'neutral' ? 'Neither' : 'Unavailable'}</strong>
         <small>{factorDescription(factor)}</small></div>)}</div>
-    </> : <p className="mc-help">{candle.complete === false ? 'Forming candle: prices and indicators are provisional. It has no strategy score and is excluded from saved AI analysis.' : candle.timeline_phase === 'after_review' ? 'Later candles are chart context only. They do not contribute to the saved review or its strategy scores.' : tradeTimeline ? 'Timeline indicators are market context only. The entry assessment uses its own frozen evidence.' : !row.analyzed ? 'Earlier candles provide chart context and do not contribute to this review’s scores.'
+    </> : !entryChart && <p className="mc-help">{candle.complete === false ? 'Forming candle: prices and indicators are provisional. It has no strategy score and is excluded from saved AI analysis.' : candle.timeline_phase === 'after_review' ? 'Later candles are chart context only. They do not contribute to the saved review or its strategy scores.' : tradeTimeline ? 'Timeline indicators are market context only. The entry assessment uses its own frozen evidence.' : !row.analyzed ? 'Earlier candles provide chart context and do not contribute to this review’s scores.'
       : hasEvaluation ? 'Strategy results are unavailable for this candle.' : 'Written strategy review · this journal has no Python factor scores.'}</p>}
   </div>
 }
 
-export default function MarketChart({ snapshot, evaluation, selectedTime, onSelect, zoneOverlay, showZoneCloses = false, showZonePatterns = false, frozen = false, draftZones, drawing, onDrawingPoint, tradeTimeline = false }) {
+export default function MarketChart({ snapshot, evaluation, selectedTime, onSelect, zoneOverlay, showZoneCloses = false, showZonePatterns = false, frozen = false, draftZones, drawing, onDrawingPoint, tradeTimeline = false, priceLevels }) {
   const id = useId()
   const hostRef = useRef(null)
   const shadeRef = useRef(null)
@@ -73,6 +73,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
   const selected = model.rows.find(row => row.time === selectedTime) ?? model.rows.at(-1)
   const selectedIndex = model.rows.indexOf(selected)
   const inspected = (!drawing && model.rows.find(row => row.time === hovered)) || selected
+  const entryChart = snapshot?.analysis_kind === 'trade_entry_chart'
   const period = tradeTimeline ? 'Trade' : snapshot?.analysis_kind === 'custom_range' ? 'Range' : 'Session'
   const partial = snapshot?.analysis_kind === 'intraday' && !snapshot.session?.complete
   const identity = tradeTimeline ? `trade-${snapshot.trade_id}` : `${snapshot?.analysis_kind ?? 'daily'}-${snapshot?.session?.start_utc}-${snapshot?.session?.end_utc}`
@@ -125,7 +126,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     const markers = createSeriesMarkers(candles, [])
     const zoneBands = new ZoneBands()
     candles.attachPrimitive(zoneBands)
-    const state = { chart, candles, ema, sma, zoneLower, zoneUpper, rsiMa, rsi, momentum, markers, zoneBands, rows: [], guides: [], initialized: false }
+    const state = { chart, candles, ema, sma, zoneLower, zoneUpper, rsiMa, rsi, momentum, markers, zoneBands, rows: [], guides: [], levels: [], initialized: false }
     function shade() {
       const overlay = shadeRef.current
       const analyzed = state.rows.filter(row => row.analyzed)
@@ -216,6 +217,15 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
 
   useEffect(() => {
     const api = apiRef.current
+    if (!api || !entryChart) return
+    for (const line of api.levels) api.candles.removePriceLine(line)
+    api.levels = (priceLevels ?? []).map(level=>api.candles.createPriceLine({
+      ...level, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
+    }))
+  }, [entryChart, priceLevels, identity, hasRows])
+
+  useEffect(() => {
+    const api = apiRef.current
     if (!api || !selected) return
     const first = model.rows[model.startIndex]
     const markers = tradeTimeline ? tradeTimelineMarkers(snapshot, model.rows) : first ? [{ time: first.time, position: 'belowBar', shape: 'circle', color: colors.ma, text: `${period} start` }] : []
@@ -266,7 +276,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     <header className="mc-header"><div><h3 id={`${id}-heading`}>{tradeTimeline ? 'Trade market chart' : 'Market chart'}</h3>
       <p>EUR/USD · H4 · New York time</p></div>
       <div className="mc-toolbar" role="group" aria-label="Chart view">
-        <button type="button" onClick={focusPeriod} disabled={model.startIndex >= model.rows.length}>{tradeTimeline ? 'Focus trade' : `${period} only`}</button>
+        {!entryChart && <button type="button" onClick={focusPeriod} disabled={model.startIndex >= model.rows.length}>{tradeTimeline ? 'Focus trade' : `${period} only`}</button>}
         {zoneOverlay?.history?.coverage_start && <button type="button" onClick={focusZone}>Zone window</button>}
         <button type="button" onClick={() => apiRef.current?.chart.timeScale().fitContent()}>All history</button>
         <span className="mc-zoom">
@@ -278,7 +288,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     <div className="mc-legend"><span style={{ '--series-color': colors.ema }}>EMA20</span><span style={{ '--series-color': colors.sma }}>SMA190</span>
       {model.hasRsiMa && <span style={{ '--series-color': colors.ma }}>RSI MA · SMA14</span>}
       {showRaw && <span style={{ '--series-color': colors.raw }}>RSI14</span>}
-      <span className="mc-period-key">{tradeTimeline ? 'candles during trade' : `${period.toLowerCase()} under review`}</span>
+      {!entryChart && <span className="mc-period-key">{tradeTimeline ? 'candles during trade' : `${period.toLowerCase()} under review`}</span>}
       {zoneOverlay?.history?.coverage_start && <span style={{ '--series-color': '#d8a64b' }}>User zone · {zoneOverlay.label}</span>}</div>
     <p className="mc-readout">{inspected && <>{candleLabel(inspected.candle)}{(tradeTimeline || inspected.candle.complete === false || inspected.candle.timeline_phase === 'after_review') && ` · ${timelineCandleState(inspected.candle)}`} · {inspected.candle.complete === false ? 'Latest' : 'Close'} <b>{chartNumber(inspected.candle.close)}</b> · {model.hasRsiMa ? 'RSI MA' : 'RSI14'} <b>{chartNumber(inspected.candle.indicators?.[model.hasRsiMa ? 'rsi14_sma14' : 'rsi14'], 2)}</b> · Momentum <b>{chartNumber(inspected.candle.indicators?.squeeze?.momentum)}</b></>}</p>
     {formingRow && <p className="mc-forming-note"><strong>◐ Forming H4</strong> · provisional prices and indicators · no strategy points{formingAsOf && ` · updated ${chartStamp(Date.parse(formingAsOf)/1000)}`}{frozen && ' · live context outside the captured assessment'}</p>}
@@ -293,21 +303,21 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
       <label><input type="checkbox" checked={showRaw} disabled={!model.hasRsiMa || model.rsiSource === 'RSI14'} onChange={event => setRawRsi(event.target.checked)} /> Show raw RSI14</label>
       <span>{model.guides.length ? `${model.rsiSource} guides · ${model.guides.map(guide => guide.value).sort((a,b) => a-b).join(' / ')}` : 'RSI shown as market context'}</span>
     </div>
-    <p className="mc-help">Click or tap a candle to select it. Drag sideways to explore; pinch or use + / − to zoom. The purple band marks {tradeTimeline ? 'candles overlapping the trade' : 'the reviewed candles'}.</p>
+    {!entryChart && <><p className="mc-help">Click or tap a candle to select it. Drag sideways to explore; pinch or use + / − to zoom. The purple band marks {tradeTimeline ? 'candles overlapping the trade' : 'the reviewed candles'}.</p>
     <p className="mc-help">{model.historyCount} earlier candles for context · {model.reviewedCount} {tradeTimeline ? 'trade candles' : 'reviewed candles'}.{model.followingCount > 0 && ` ${model.followingCount} candles after ${tradeTimeline ? 'exit' : 'review'}.`}
       {partial && (frozen ? ` ${6 - model.reviewedCount} pending at capture; this saved snapshot stays fixed.`
         : ` ${6 - model.reviewedCount} pending; the chart updates after completed-candle refreshes.`)}
-      {!snapshot.chart_context && ' This older snapshot has limited saved history.'}</p>
+      {!snapshot.chart_context && ' This older snapshot has limited saved history.'}</p></>}
     {snapshot.chart_context?.extended_zone_history && <p className="mc-help">Extended history uses saved OHLC candles. Saved indicator lines cover the available saved context candles and reviewed session; older readings remain unavailable. Zone markers describe observations, not trade signals.</p>}
     <div className="mc-picker"><label htmlFor={`${id}-candle`}>Selected candle</label>
       <div><button type="button" aria-label="Previous candle" disabled={selectedIndex <= 0} onClick={() => onSelect(model.rows[selectedIndex - 1].time)}>←</button>
         <select id={`${id}-candle`} value={selected?.time ?? ''} onChange={event => onSelect(Number(event.target.value))}>
-          {model.rows.map(row => <option key={row.time} value={row.time}>{(row.candle.complete === false || ['after_exit','after_review'].includes(row.candle.timeline_phase)) ? timelineCandleState(row.candle) : row.analyzed ? row.score?.candle_id ?? (tradeTimeline ? timelineCandleState(row.candle) : 'Review') : 'Context'} · {candleLabel(row.candle)}</option>)}
+          {model.rows.map(row => <option key={row.time} value={row.time}>{(entryChart || row.candle.complete === false || ['after_exit','after_review'].includes(row.candle.timeline_phase)) ? timelineCandleState(row.candle) : row.analyzed ? row.score?.candle_id ?? (tradeTimeline ? timelineCandleState(row.candle) : 'Review') : 'Context'} · {candleLabel(row.candle)}</option>)}
         </select>
         <button type="button" aria-label="Next candle" disabled={selectedIndex >= model.rows.length - 1} onClick={() => onSelect(model.rows[selectedIndex + 1].time)}>→</button>
       </div>
     </div>
-    <SelectedCandle row={selected} hasEvaluation={Boolean(evaluation)} tradeTimeline={tradeTimeline} />
+    <SelectedCandle row={selected} hasEvaluation={Boolean(evaluation)} tradeTimeline={tradeTimeline} entryChart={entryChart} />
     <p className="mc-attribution">TradingView Lightweight Charts™ · Copyright (с) 2025 <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView, Inc.</a></p>
   </section>
 }
