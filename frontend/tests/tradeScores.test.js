@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validTradeScores,scoreNumber,signedScore,scoreDirection } from '../src/tradeScores.js'
+import { validTradeScores,sessionScoreReadout,scoreNumber,signedScore,scoreDirection } from '../src/tradeScores.js'
 
 const entryAt='2026-11-09T15:00:00Z', exitAt='2026-11-09T20:00:00Z'
 const record=()=>({id:'trade',status:'closed',entry:{entry_at:entryAt,direction:'long'},exit:{exit_at:exitAt}})
@@ -72,4 +72,19 @@ test('no completed closes is valid; missing scores display differently from zero
   assert.equal(scoreNumber(0),'0.00');assert.equal(signedScore(0),'0.00')
   assert.equal(signedScore(0.5),'+0.50');assert.equal(signedScore(-1.25),'-1.25')
   assert.equal(scoreDirection('bearish'),'Bearish');assert.equal(scoreDirection('insufficient_data'),'Unavailable')
+})
+
+test('the session card shows the Python market average across all session closes',()=>{
+  const live = {session:{candle_count:3},rule_evaluation:{summary:{direction:'bearish',net_score:-0.5,
+    bullish_points:1.5,bearish_points:2,max_points:5},candles:[{net_score:1},{net_score:0},{net_score:-2.5}]}}
+  assert.deepEqual(sessionScoreReadout(live),{headline:'Avg. net -0.50',coverage:'Bearish · 3 / 6 candles closed',
+    detail:'Bull 1.50 · Bear 2.00 · / 5'})
+})
+test('pending, unavailable, and a genuine zero session score stay distinct',()=>{
+  assert.equal(sessionScoreReadout({session:{candle_count:0},rule_evaluation:null}).headline,'Awaiting first H4 close')
+  const view = {session:{candle_count:6},rule_evaluation:{summary:{net_score:null}}}
+  assert.equal(sessionScoreReadout(view).headline,'Score unavailable')
+  view.rule_evaluation.summary = {direction:'mixed',net_score:0,bullish_points:1,bearish_points:1,max_points:5}
+  assert.equal(sessionScoreReadout(view).headline,'Avg. net 0.00')
+  assert.equal(sessionScoreReadout(view).coverage,'Mixed · 6 / 6 candles closed')
 })

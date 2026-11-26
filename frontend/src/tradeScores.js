@@ -26,3 +26,16 @@ export function validTradeScores(data,record) {
 export const scoreNumber = value => Number.isFinite(value) ? value.toFixed(2) : 'Unavailable'
 export const signedScore = value => Number.isFinite(value) ? `${value>0 ? '+' : ''}${value.toFixed(2)}` : 'Unavailable'
 export const scoreDirection = value => ({bullish:'Bullish',bearish:'Bearish',mixed:'Mixed',neutral:'Neutral',insufficient_data:'Unavailable'}[value] ?? 'Unavailable')
+
+export function sessionScoreReadout(view) {
+  const count = view.session.candle_count
+  const summary = view.rule_evaluation?.summary
+  if (count === 0) return {headline:'Awaiting first H4 close', coverage:'0 / 6 candles closed'}
+  const coverage = count + ' / 6 candles closed'
+  if (!Number.isFinite(summary?.net_score)) return {headline:'Score unavailable', coverage, detail:'Indicator data incomplete'}
+  return {
+    headline:'Avg. net ' + signedScore(summary.net_score),
+    coverage:scoreDirection(summary.direction) + ' · ' + coverage,
+    detail:'Bull ' + scoreNumber(summary.bullish_points) + ' · Bear ' + scoreNumber(summary.bearish_points) + ' · / ' + summary.max_points,
+  }
+}

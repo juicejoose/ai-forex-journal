@@ -4,7 +4,8 @@ import MarketReview from './MarketReview.jsx'
 import JournalView from './JournalView.jsx'
 import { journalEditsSaved } from './journalNames.js'
 import { formatDay } from './journalCalendar.js'
-import { validTodayView, validTodayEvidence, summaryIsBehind, freshTodayView } from './todaySession.js'
+import { validTodayEvidence, summaryIsBehind } from './todaySession.js'
+import useTodayView from './useTodayView.js'
 import './TodayPage.css'
 
 const stamp = value => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value))
@@ -16,11 +17,7 @@ async function responseData(response, fallback) {
 }
 
 export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, onSaved }) {
-  const [view, setView] = useState(null)
-  const [reload, setReload] = useState(0)
-  const [fetching, setFetching] = useState(false)
-  const [dataError, setDataError] = useState('')
-  const [now, setNow] = useState(0)
+  const {view, fetching, dataError, fresh, refresh} = useTodayView(active)
   const [notes, setNotes] = useState('')
   const [preview, setPreview] = useState(null)
   const [saved, setSaved] = useState(null)
@@ -33,37 +30,6 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
   const dirty = preview !== null && !isSaved
   useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
 
-  useEffect(() => {
-    if (!active) return
-    let disposed = false, inFlight = false, controller
-    async function refresh() {
-      if (disposed || inFlight || document.visibilityState === 'hidden') return
-      inFlight = true
-      controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 45000)
-      setFetching(true)
-      try {
-        const response = await fetch(`${API}/today`, { signal: controller.signal, cache: 'no-store' })
-        const data = await responseData(response, 'Could not refresh today’s session.')
-        if (!validTodayView(data)) throw new Error('The server returned an unsupported Today snapshot. Check that the updated backend is running.')
-        if (!disposed) { setView(data); setDataError(''); setNow(Date.now()) }
-      } catch (err) {
-        if (!disposed) setDataError(err.name === 'AbortError' ? 'The refresh timed out. Retry to get current data.' : err.message)
-      } finally {
-        clearTimeout(timeout)
-        inFlight = false
-        if (!disposed) setFetching(false)
-      }
-    }
-    function visibility() { if (document.visibilityState === 'visible') refresh() }
-    refresh()
-    const poll = setInterval(refresh, 60000)
-    const age = setInterval(() => setNow(Date.now()), 10000)
-    document.addEventListener('visibilitychange', visibility)
-    return () => { disposed = true; controller?.abort(); clearInterval(poll); clearInterval(age); document.removeEventListener('visibilitychange', visibility) }
-  }, [active, reload])
-
-  const fresh = freshTodayView(view, now)
   const staleSummary = summaryIsBehind(preview, view)
   function pending(value) { setAction(value); onBusyChange(Boolean(value)) }
   async function generate() {
@@ -98,7 +64,7 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
     {active && <>
       <header className="today-heading"><div><h2>Today</h2>
         <p>EUR/USD · H4 · Four-factor v7</p></div>
-        <button className="jv-button" type="button" onClick={() => setReload(value => value + 1)} disabled={fetching || busy}>{fetching ? 'Refreshing…' : 'Refresh data'}</button>
+        <button className="jv-button" type="button" onClick={refresh} disabled={fetching || busy}>{fetching ? 'Refreshing…' : 'Refresh data'}</button>
       </header>
       {dataError && <p role="alert" className="jv-error">{dataError} {view && 'Showing the last successful snapshot; it may be outdated.'}</p>}
       {!view && !dataError && <p role="status">Loading today’s session…</p>}

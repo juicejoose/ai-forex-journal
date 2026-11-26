@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from 'rea
 import { chartZones, savedTradeZones } from './tradeZones.js'
 import { API } from './api.js'
 import { chartStamp, chartTime } from './marketChartData.js'
+import TradeSessionScore from './TradeSessionScore.jsx'
 import TradeCoach from './TradeCoach.jsx'
 import useTradeScores from './useTradeScores.js'
 import { TradeScoreCards,TradeScoreDetails } from './TradeScores.jsx'
@@ -70,7 +71,9 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
     </div>
     {error && <p className="trade-error" role="alert">{error} {view && 'Showing the last successful chart; it may be outdated.'}</p>}
     {!view && !error && <p role="status">Loading the trade’s candles and indicators…</p>}
-    <TradeScoreCards scores={scores} record={record} evidenceIds={evidenceIds} onShowEvidence={showEvidence} coach={<TradeCoach record={record} active={active} latestClose={scores.error ? null : scores.value?.full_trade?.data_through ?? scores.value?.entry_score?.data_through} onBusyChange={onCoachBusyChange} onDirtyChange={onCoachDirtyChange} />} />
+    <TradeScoreCards scores={scores} record={record} evidenceIds={evidenceIds} onShowEvidence={showEvidence}
+      sessionCard={record.status === 'open' && <TradeSessionScore active={active} refreshKey={reload} />}
+      coach={<TradeCoach record={record} active={active} latestClose={scores.error ? null : scores.value?.full_trade?.data_through ?? scores.value?.entry_score?.data_through} onBusyChange={onCoachBusyChange} onDirtyChange={onCoachDirtyChange} />} />
     {view && <>
       <div className="trade-chart-status">
         {exitAt && <span>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 160} candles after exit</span>}

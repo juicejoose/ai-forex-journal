@@ -21,3 +21,8 @@
 .trade-page .trade-score-evidence-link { padding: .15rem .35rem; min-height: 32px; font-size: .6rem; white-space: nowrap; }
 .trade-score-evidence-heading { scroll-margin-top: 4.5rem; }
 .trade-score-evidence-heading:focus { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
+
+.trade-session-evidence { margin-top: .3rem; font-size: .65rem; }
+.trade-session-evidence summary { cursor: pointer; color: var(--text-h); }
+.trade-session-evidence ol { padding-inline-start: 1.2rem; }
+.trade-session-score > small { display: block; }
