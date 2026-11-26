@@ -1,6 +1,26 @@
-.trade-score-panel { margin: .6rem 0; }
-.trade-score-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .6rem; }
-.trade-score-cards > div { border: 1px solid var(--border); border-radius: 8px; padding: .6rem .8rem; background: var(--social-bg); min-width: 0; }
+.trade-score-panel { margin: .6rem 0; container: trade-scores / inline-size; }
+.trade-score-cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
+.trade-score-cards > div { flex: 1 1 0; border: 1px solid var(--border); border-radius: 8px; padding: .45rem .6rem; background: var(--social-bg); min-width: 0; }
+.trade-score-cards > .trade-coach-card { flex-grow: 3; padding: .65rem .85rem; }
+@container trade-scores (max-width: 52rem) {
+  .trade-score-cards > .trade-coach-card { flex-basis: 100%; }
+}
+@container trade-scores (max-width: 24rem) {
+  .trade-score-cards > div:not(.trade-coach-card) {
+    flex-basis: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    column-gap: .6rem;
+  }
+  .trade-score-cards > div:not(.trade-coach-card) > .trade-score-heading {
+    grid-row: 1 / span 3;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    margin: 0;
+  }
+  .trade-score-cards > div:not(.trade-coach-card) > :not(.trade-score-heading) { grid-column: 2; margin-block: 0; }
+}
 .trade-score-cards h4 { margin: 0 0 .2rem; font-size: .68rem; font-weight: 500; }
 .trade-score-cards strong { display: block; font-size: .95rem; font-variant-numeric: tabular-nums; }
 .trade-score-cards p { margin: .2rem 0; font-size: .65rem; }
@@ -22,7 +42,5 @@
 .trade-score-evidence-heading { scroll-margin-top: 4.5rem; }
 .trade-score-evidence-heading:focus { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
 
-.trade-session-evidence { margin-top: .3rem; font-size: .65rem; }
-.trade-session-evidence summary { cursor: pointer; color: var(--text-h); }
-.trade-session-evidence ol { padding-inline-start: 1.2rem; }
+.trade-session-evidence ol { padding-inline-start: 1.2rem; font-variant-numeric: tabular-nums; }
 .trade-session-score > small { display: block; }

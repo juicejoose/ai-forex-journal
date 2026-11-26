@@ -20,10 +20,10 @@ export function TradeScoreCards({scores,record,evidenceIds,onShowEvidence,sessio
   </div>
 }
 
-export function TradeScoreDetails({value,evidenceRef,entryRef,fullRef,evidenceIds}) {
+export function TradeScoreDetails({value,entryRef,fullRef,evidenceIds}) {
   if(!value) return null
   const full=value.full_trade, entry=value.entry_score
-  return <details className="trade-score-details" ref={evidenceRef}><summary>Entry & full-trade score evidence</summary>
+  return <details className="trade-score-details"><summary>Entry & full-trade score evidence</summary>
     <h4 className="trade-score-evidence-heading" id={evidenceIds.entry} ref={entryRef} tabIndex={-1}>Entry score evidence</h4>
     <p className="trade-help">Entry score uses only the H4 candle completed at {setupTime(entry.data_through)}, before or exactly at your entry ({setupTime(value.entry_at)}). It is a saved retrospective reconstruction, not proof of what you knew then.</p>
     {!entry.covers_latest_scheduled_close && <p className="trade-error">Entry evidence is older than the latest scheduled H4 close ({setupTime(entry.latest_scheduled_close)}).</p>}

@@ -1,6 +1,4 @@
-.trade-page .trade-score-cards { grid-template-columns: repeat(3,minmax(0,1fr)); }
-.trade-page .trade-score-cards:has(.trade-session-score) { grid-template-columns: repeat(4,minmax(0,1fr)); }
-.trade-coach-card .coach-excerpt { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.trade-coach-card .coach-excerpt { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font-size: .76rem; line-height: 1.5; }
 .trade-coach-card > button { margin-top: .4rem; }
 .trade-page .coach-stale { color: #996000; font-size: .65rem; }
 .coach-dialog { box-sizing: border-box; width: min(58rem,calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; padding: 1.2rem; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; text-align: left; }
@@ -18,12 +16,6 @@
 .coach-history { border-block: 1px solid var(--border); padding: .5rem 0; margin: .7rem 0; }
 .coach-history select { max-width: 100%; display: block; margin-top: .4rem; min-height: 44px; background: var(--bg); color: var(--text-h); border: 1px solid var(--border); border-radius: 7px; }
 @media(prefers-color-scheme:dark) { .trade-page .coach-stale { color: #f5c45e; } }
-@media(max-width:900px) { .trade-page .trade-score-cards { grid-template-columns: repeat(2,minmax(0,1fr)); } .trade-coach-card { grid-column: 1/-1; } }
-@media(max-width:1050px) {
-  .trade-page .trade-score-cards:has(.trade-session-score) { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .trade-score-cards:has(.trade-session-score) .trade-coach-card { grid-column: auto; }
-}
-@media(max-width:350px) { .trade-page .trade-score-cards:has(.trade-session-score) { grid-template-columns: minmax(0,1fr); } }
 @media(max-width:600px) { .coach-dialog { padding: .85rem; } .coach-zone { grid-template-columns: minmax(0,1fr); } }
 
 .trade-coach-card .coach-signal { color: var(--text-h); margin: .25rem 0; }

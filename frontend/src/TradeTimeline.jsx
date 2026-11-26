@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from 'rea
 import { chartZones, savedTradeZones } from './tradeZones.js'
 import { API } from './api.js'
 import { chartStamp, chartTime } from './marketChartData.js'
-import TradeSessionScore from './TradeSessionScore.jsx'
+import TradeSessionScore, { TradeSessionEvidence } from './TradeSessionScore.jsx'
+import useTodayView from './useTodayView.js'
 import TradeCoach from './TradeCoach.jsx'
 import useTradeScores from './useTradeScores.js'
 import { TradeScoreCards,TradeScoreDetails } from './TradeScores.jsx'
@@ -17,12 +18,13 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
   const priceCallback=useRef(onPriceResult)
   useEffect(()=>{priceCallback.current=onPriceResult},[onPriceResult])
   const evidenceId=useId()
-  const evidenceRef=useRef(null), entryEvidenceRef=useRef(null), fullEvidenceRef=useRef(null)
-  const evidenceIds={entry:`${evidenceId}-entry`,full:`${evidenceId}-full`}
+  const entryEvidenceRef=useRef(null), fullEvidenceRef=useRef(null), sessionEvidenceRef=useRef(null)
+  const evidenceIds={entry:`${evidenceId}-entry`,full:`${evidenceId}-full`,session:`${evidenceId}-session`}
   function showEvidence(kind) {
-    const target=kind==='entry' ? entryEvidenceRef.current : fullEvidenceRef.current
-    if (!evidenceRef.current || !target) return
-    evidenceRef.current.open=true
+    const target={entry:entryEvidenceRef,full:fullEvidenceRef,session:sessionEvidenceRef}[kind].current
+    const details=target?.closest('details')
+    if (!details) return
+    details.open=true
     target.focus({preventScroll:true})
     target.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'})
   }
@@ -31,6 +33,8 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
   const [error, setError] = useState('')
   const [fetching, setFetching] = useState(false)
   const [reload, setReload] = useState(0)
+  const isOpen = record.status === 'open'
+  const session = useTodayView(active && isOpen, reload)
   const id = record.id, revision = record.revision ?? 0, exitAt = record.exit?.exit_at ?? null
 
   useEffect(() => {
@@ -72,7 +76,7 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
     {error && <p className="trade-error" role="alert">{error} {view && 'Showing the last successful chart; it may be outdated.'}</p>}
     {!view && !error && <p role="status">Loading the trade’s candles and indicators…</p>}
     <TradeScoreCards scores={scores} record={record} evidenceIds={evidenceIds} onShowEvidence={showEvidence}
-      sessionCard={record.status === 'open' && <TradeSessionScore active={active} refreshKey={reload} />}
+      sessionCard={isOpen && <TradeSessionScore session={session} evidenceId={evidenceIds.session} onShowEvidence={()=>showEvidence('session')} />}
       coach={<TradeCoach record={record} active={active} latestClose={scores.error ? null : scores.value?.full_trade?.data_through ?? scores.value?.entry_score?.data_through} onBusyChange={onCoachBusyChange} onDirtyChange={onCoachDirtyChange} />} />
     {view && <>
       <div className="trade-chart-status">
@@ -95,6 +99,8 @@ export default function TradeTimeline({ record, active, onEntryAnalysis, onPrice
         {view.events.some(event => !event.candle_open_time) && <p className="trade-help">An entry or exit occurred outside available candles; no marker is placed on an unrelated candle.</p>}
       </details>
     </>}
-    <TradeScoreDetails value={scores.value} evidenceRef={evidenceRef} entryRef={entryEvidenceRef} fullRef={fullEvidenceRef} evidenceIds={evidenceIds} />
+    <TradeScoreDetails value={scores.value} entryRef={entryEvidenceRef} fullRef={fullEvidenceRef} evidenceIds={evidenceIds} />
+    {isOpen && session.view && !session.dataError &&
+      <TradeSessionEvidence view={session.view} evidenceId={evidenceIds.session} headingRef={sessionEvidenceRef} />}
   </section>
 }
