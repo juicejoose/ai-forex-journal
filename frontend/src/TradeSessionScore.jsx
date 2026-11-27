@@ -32,14 +32,13 @@ export default function TradeSessionScore({session, evidenceId, onShowEvidence})
 }
 
 export function TradeSessionEvidence({view, evidenceId, headingRef}) {
+  const ruleSet = view.rule_evaluation?.rule_set
   return <details className="trade-score-details trade-session-evidence">
     <summary className="trade-score-evidence-heading" id={evidenceId} ref={headingRef}>Today’s session score evidence</summary>
-    <p>{formatDay(view.journal_date)} · New York{view.rule_evaluation && ` · Four-factor v${view.rule_evaluation.rule_set.version}`}</p>
-    <p>{sessionTime(view.session.start)} – {sessionTime(view.session.end)}</p>
-    <p>Equal weight per completed H4 candle, including closes before trade entry.</p>
+    <p className="trade-help">The session score for {formatDay(view.journal_date)} gives equal weight to each completed H4 candle, including candles that closed before trade entry.</p>
+    <p className="trade-help">The New York session runs from {sessionTime(view.session.start)} to {sessionTime(view.session.end)}. {ruleSet && `Four-factor v${ruleSet.version}. `}Last checked {sessionTime(view.as_of)}.</p>
     {view.rule_evaluation?.candles.length > 0 ? <TradeCandleScoreTable label="Today's session candle scores"
       caption={`${view.session.candle_count} of 6 H4 candles closed`} candles={view.rule_evaluation.candles}
-      average={view.rule_evaluation.summary} /> : <p>{view.session.candle_count === 0 ? 'Awaiting the first completed H4 candle.' : 'Candle scores are unavailable.'}</p>}
-    <small>Checked · {sessionTime(view.as_of)}</small>
+      average={view.rule_evaluation.summary} /> : <p className="trade-help">{view.session.candle_count === 0 ? 'Awaiting the first completed H4 candle.' : 'Candle scores are unavailable.'}</p>}
   </details>
 }

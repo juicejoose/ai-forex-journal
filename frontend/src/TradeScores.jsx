@@ -1,4 +1,4 @@
-import TradeCandleScoreTable from './TradeCandleScoreTable.jsx'
+import TradeCandleScoreTable, { BullBearCells } from './TradeCandleScoreTable.jsx'
 import { setupTime } from './setupEvaluation.js'
 import { scoreNumber,signedScore,scoreDirection } from './tradeScores.js'
 import { factorDescription } from './strategyDescriptions.js'
@@ -44,7 +44,12 @@ export function TradeScoreDetails({value,entryRef,fullRef,evidenceIds}) {
     <p className="trade-help">Entry score uses only the H4 candle completed at {setupTime(entry.data_through)}, before or exactly at your entry ({setupTime(value.entry_at)}). It is a saved retrospective reconstruction, not proof of what you knew then.</p>
     {!entry.covers_latest_scheduled_close && <p className="trade-error">Entry evidence is older than the latest scheduled H4 close ({setupTime(entry.latest_scheduled_close)}).</p>}
     <div className="trade-score-table" tabIndex={0} role="region" aria-label="Entry factor scores"><table><caption>Entry alignment · latest completed H4 candle</caption>
-      <thead><tr><th>Factor</th><th>Bull</th><th>Bear</th><th>Condition</th></tr></thead><tbody>{entry.candle.factors.map(f=><tr key={f.factor_id}><th>{f.name}</th><td>{f.outcome==='unavailable' ? 'Unavailable' : scoreNumber(f.bullish_points)}</td><td>{f.outcome==='unavailable' ? 'Unavailable' : scoreNumber(f.bearish_points)}</td><td>{factorDescription(f)}</td></tr>)}</tbody></table></div>
+      <thead><tr><th scope="col">Factor</th><th scope="col" className="trade-positive">Bull</th><th scope="col" className="trade-negative">Bear</th><th scope="col">Condition</th></tr></thead>
+      <tbody>{entry.candle.factors.map(factor => <tr key={factor.factor_id}>
+        <th scope="row">{factor.name}</th>
+        <BullBearCells score={factor} available={factor.outcome !== 'unavailable'} />
+        <td>{factorDescription(factor)}</td>
+      </tr>)}</tbody></table></div>
     <h4 className="trade-score-evidence-heading" id={evidenceIds.full} ref={fullRef} tabIndex={-1}>{value.exit_at ? 'Full trade score evidence' : 'Trade-to-date score evidence'}</h4>
     {full.error ? <p className="trade-error">{full.error} No final score was saved; the entry score is retained.</p> : <>
     <p className="trade-help">The trade average gives equal weight to every H4 candle with a close strictly after entry and at or before {value.exit_at ? 'exit' : 'the latest refresh'} ({setupTime(full.cutoff_at)}). It is separate from the pre-entry session average. Bullish and bearish points are averaged separately; net is bullish minus bearish. Positive means bullish and negative means bearish, regardless of the trade direction.</p>
