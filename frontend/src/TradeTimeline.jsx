@@ -12,7 +12,7 @@ import { validTradeTimeline,timelinePriceResult } from './tradeTimeline.js'
 const MarketChart = lazy(() => import('./MarketChart.jsx'))
 const stamp = value => chartStamp(chartTime(value))
 
-export default function TradeTimeline({ record, active, onPriceResult, onCoachBusyChange, onCoachDirtyChange }) {
+export default function TradeTimeline({ record, active, onPriceResult, onCoachBusyChange, onCoachDirtyChange, onOpenTodayBreakdown, children }) {
   const zones = useMemo(() => chartZones(savedTradeZones(record.context)), [record.context])
   const scores=useTradeScores(record,active)
   const priceCallback=useRef(onPriceResult)
@@ -77,7 +77,9 @@ export default function TradeTimeline({ record, active, onPriceResult, onCoachBu
     {!view && !error && <p role="status">Loading the trade’s candles and indicators…</p>}
     <TradeScoreCards scores={scores} record={record} evidenceIds={evidenceIds} onShowEvidence={showEvidence}
       sessionCard={isOpen && <TradeSessionScore session={session} evidenceId={evidenceIds.session} onShowEvidence={()=>showEvidence('session')} />}
-      coach={<TradeCoach record={record} active={active} latestClose={scores.error ? null : scores.value?.full_trade?.data_through ?? scores.value?.entry_score?.data_through} onBusyChange={onCoachBusyChange} onDirtyChange={onCoachDirtyChange} />} />
+      coach={<TradeCoach record={record} active={active} latestClose={scores.error ? null : scores.value?.full_trade?.data_through ?? scores.value?.entry_score?.data_through} onBusyChange={onCoachBusyChange} onDirtyChange={onCoachDirtyChange} />}>
+      {children}
+    </TradeScoreCards>
     {view && <>
       <div className="trade-chart-status">
         {exitAt && <span>{view.coverage.after_exit_count ?? 0} / {view.coverage.after_exit_target ?? 160} candles after exit</span>}
@@ -101,6 +103,6 @@ export default function TradeTimeline({ record, active, onPriceResult, onCoachBu
     </>}
     <TradeScoreDetails value={scores.value} entryRef={entryEvidenceRef} fullRef={fullEvidenceRef} evidenceIds={evidenceIds} />
     {isOpen && session.view && !session.dataError &&
-      <TradeSessionEvidence view={session.view} evidenceId={evidenceIds.session} headingRef={sessionEvidenceRef} />}
+      <TradeSessionEvidence view={session.view} evidenceId={evidenceIds.session} headingRef={sessionEvidenceRef} onOpenTodayBreakdown={onOpenTodayBreakdown} />}
   </section>
 }

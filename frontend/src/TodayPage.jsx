@@ -16,7 +16,7 @@ async function responseData(response, fallback) {
   return data
 }
 
-export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, onSaved }) {
+export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, onSaved, breakdownRef }) {
   const {view, fetching, dataError, fresh, refresh} = useTodayView(active)
   const [notes, setNotes] = useState('')
   const [preview, setPreview] = useState(null)
@@ -66,7 +66,7 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
         <p>EUR/USD · H4 · Four-factor v7</p></div>
         <button className="jv-button" type="button" onClick={refresh} disabled={fetching || busy}>{fetching ? 'Refreshing…' : 'Refresh data'}</button>
       </header>
-      {dataError && <p role="alert" className="jv-error">{dataError} {view && 'Showing the last successful snapshot; it may be outdated.'}</p>}
+      {dataError && <p role="alert" className="jv-error" ref={!view ? breakdownRef : undefined} tabIndex={-1}>{dataError} {view && 'Showing the last successful snapshot; it may be outdated.'}</p>}
       {!view && !dataError && <p role="status">Loading today’s session…</p>}
       {view && <>
         <div className="today-window">
@@ -91,9 +91,9 @@ export default function TodayPage({ active, busy, onBusyChange, onDirtyChange, o
             <p>Refreshes completed candles and the forming chart candle every minute while this page is visible. The backend must be running. AI summaries refresh only when you request them.</p>
           </div>
         </details>
-        {!view.market_data && <div className="today-empty"><h3>Waiting for the first completed candle</h3><p>The first H4 candle closes at {clock(view.slots[0].close_time)}. Scores and an AI review become available after that close. Previous-session candles provide indicator history only.</p></div>}
+        {!view.market_data && <div className="today-empty"><h3 ref={breakdownRef} tabIndex={-1}>Waiting for the first completed candle</h3><p>The first H4 candle closes at {clock(view.slots[0].close_time)}. Scores and an AI review become available after that close. Previous-session candles provide indicator history only.</p></div>}
         <MarketReview snapshot={view.market_data ?? {analysis_kind:'intraday', session:{...view.session,start_utc:view.session.start,end_utc:view.session.end}, candles:[]}}
-          evaluation={view.rule_evaluation} formingAt={view.slots.some(slot => slot.status === 'forming') ? view.as_of : null} />
+          evaluation={view.rule_evaluation} breakdownRef={breakdownRef} formingAt={view.slots.some(slot => slot.status === 'forming') ? view.as_of : null} />
       </>}
       <section className="today-ai" aria-labelledby="today-ai-heading"><div><p className="jv-eyebrow">YOUR SESSION REVIEW</p><h3 id="today-ai-heading">Generate when you’re ready</h3>
         <p>The AI receives the completed candles, Python scores, and current coverage. Saving keeps this exact review in Saved journals, labeled with its cutoff.</p></div>

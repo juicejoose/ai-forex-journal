@@ -1,8 +1,32 @@
 import { savedTradeZones, zoneInputs } from './tradeZones.js'
 import { localInputTime } from './setupDrawing.js'
+import { signedScore } from './tradeScores.js'
 
 export const coachLabels={supported:'Supports your trade',mixed:'Mixed support',contradicted:'Opposes your trade',insufficient_evidence:'Insufficient evidence'}
 export const premiseStatus = {supported:'Supported', challenged:'Challenged', awaiting_confirmation:'Awaiting confirmation', unverifiable:'Cannot verify'}
+
+const marketNet = new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero', maximumFractionDigits: 2 })
+
+export function holdAlignmentText(history, direction, coversLatest) {
+  if (!history?.total) return null
+  const { total, counts, latest_run: latest, previous_run: previous, recent_nets: nets } = history
+  function describeRun(run, prefix) {
+    const one = run.count === 1
+    const subject = one ? `${prefix} H4 close` : `${prefix} ${run.count} H4 closes`
+    const finding = { supportive: `supported your ${direction}`, opposing: `opposed your ${direction}`,
+      balanced: one ? 'was balanced' : 'were balanced', unavailable: one ? 'had no score' : 'had no scores' }
+    return `${subject} ${finding[run.status]}`
+  }
+  const first = previous && previous.count + latest.count === total
+  const headline = coversLatest ? describeRun(latest, latest.count === 1 ? 'Latest' : 'Last') : 'Latest scheduled H4 close unavailable'
+  const context = []
+  if (coversLatest && previous) context.push(describeRun(previous, first ? 'First' : 'Preceding') + '.')
+  const scores = nets.map(net => Number.isFinite(net) ? marketNet.format(net) : 'Unavailable')
+  context.push(`Last recorded market ${nets.length === 1 ? 'net' : 'nets'}: ${scores.join(' → ')}`)
+  const totals = Object.entries(counts).filter(([, count]) => count > 0).map(([name, count]) => `${count} ${name}`)
+  return { headline, context: context.join(' '),
+    coverage: [`Across ${total} ${total === 1 ? 'close' : 'closes'}`, ...totals, `Average net ${signedScore(history.average_net)}`].join(' · ') }
+}
 
 export function alignmentChange(snapshot) {
   const change = snapshot?.directional_net_change

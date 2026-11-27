@@ -87,8 +87,8 @@
 .trade-chart-status { display: flex; flex-wrap: wrap; gap: .2rem .8rem; margin: .35rem 0; font-size: .62rem; color: var(--text); }
 .trade-chart-status span + span::before { content: '·'; margin-right: .8rem; }
 .trade-timeline .market-chart { margin-top: .4rem; }
-.trade-entry-notes { padding: .25rem 1rem; }
-.trade-entry-notes summary, .trade-chart-details summary { font-size: .72rem; color: var(--text-h); }
+.trade-record-panels > .trade-card { padding: .25rem 1rem; }
+.trade-record-panels > .trade-card > summary, .trade-chart-details summary { font-size: .72rem; color: var(--text-h); }
 @media (max-width: 600px) {
   .trade-overview-title { flex-basis: 100%; }
   .trade-overview-heading .trade-delete-link { margin-left: auto; }

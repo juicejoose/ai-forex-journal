@@ -1,5 +1,5 @@
 import { API } from './api.js'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AppNavigation from './AppNavigation.jsx'
 import JournalHistory from './JournalHistory.jsx'
 import GenerateJournalForm from './GenerateJournalForm.jsx'
@@ -35,6 +35,13 @@ function App() {
   const [rangeBusy, setRangeBusy] = useState(false)
   const [rangeDirtyTab, setRangeDirtyTab] = useState(null)
   const [activeTab, setActiveTab] = useState('generate')
+  const todayBreakdownRequested = useRef(false)
+  const focusTodayBreakdown = useCallback(node => {
+    if (!node || !todayBreakdownRequested.current) return
+    todayBreakdownRequested.current = false
+    node.focus({ preventScroll: true })
+    node.scrollIntoView({ block: 'start', behavior: 'instant' })
+  }, [])
   const [editorTab, setEditorTab] = useState('generate')
   const pair = 'EURUSD'
   const [notes, setNotes] = useState('')
@@ -425,6 +432,7 @@ function App() {
         ).map(tab => tab.id)}
         onSelect={(page) => {
           if (busy) return
+          todayBreakdownRequested.current = false
           setActiveTab(page)
           requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }))
         }}
@@ -522,8 +530,12 @@ function App() {
             setTradeSeed({ record, id: crypto.randomUUID() }); setTradeDirty(false); setActiveTab('trades')
             requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: 'instant' }); document.getElementById('trades-panel')?.focus({ preventScroll: true }) })
           }} />
-        <TradesPage currentRuleSet={ruleDefinitions.find(item => item.id === CURRENT_RULE_SET_ID)} key={tradeSeed?.id ?? 'manual'} active={activeTab === 'trades'} seed={tradeSeed} onBusyChange={setTradeBusy} onDirtyChange={setTradeDirty} />
-        <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
+        <TradesPage currentRuleSet={ruleDefinitions.find(item => item.id === CURRENT_RULE_SET_ID)} key={tradeSeed?.id ?? 'manual'} active={activeTab === 'trades'} seed={tradeSeed} onBusyChange={setTradeBusy} onDirtyChange={setTradeDirty}
+          onOpenTodayBreakdown={busy ? undefined : () => {
+            todayBreakdownRequested.current = true
+            setActiveTab('today')
+          }} />
+        <TodayPage active={activeTab === 'today'} busy={busy} breakdownRef={focusTodayBreakdown} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
           onSaved={() => setHistoryVersion(value => value + 1)} />
         <CustomRangeJournals activeTab={activeTab}
           onBusyChange={setRangeBusy} onDirtyTabChange={setRangeDirtyTab} busy={busy} />

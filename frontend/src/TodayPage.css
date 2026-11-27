@@ -1,4 +1,5 @@
 .today-page { padding: .9rem 1rem; text-align: left; line-height: 1.4; }
+.today-page :is(.ss-table-scroll, .today-empty h3, .jv-error) { scroll-margin-block-start: 4.5rem; }
 .today-heading, .today-window, .today-ai-actions { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .today-heading h2 { margin: 0 0 .2rem; font-size: 1.5rem; letter-spacing: -.04em; }
 .today-heading p { font-size: .72rem; }

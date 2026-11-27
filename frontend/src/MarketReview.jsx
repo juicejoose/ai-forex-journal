@@ -8,7 +8,7 @@ import ChartContextStatus from './ChartContextStatus.jsx'
 
 const MarketChart = lazy(() => import('./MarketChart.jsx'))
 
-export default function MarketReview({ snapshot, evaluation, setupZones, includeAfter = false, formingAt = null }) {
+export default function MarketReview({ snapshot, evaluation, setupZones, includeAfter = false, formingAt = null, breakdownRef }) {
   const [chosenTime, setChosenTime] = useState(null)
   const [zoneId, setZoneId] = useState(null)
   const [showCloses, setShowCloses] = useState(false)
@@ -37,6 +37,6 @@ export default function MarketReview({ snapshot, evaluation, setupZones, include
         zoneOverlay={selectedZone} showZoneCloses={showCloses} showZonePatterns={showPatterns} frozen={setupZones !== undefined} />
     </Suspense>
     </div>
-    <StrategyScores evaluation={evaluation} snapshot={snapshot} selectedTime={selectedTime} onSelectCandle={setChosenTime} />
+    <StrategyScores evaluation={evaluation} snapshot={snapshot} selectedTime={selectedTime} onSelectCandle={setChosenTime} breakdownRef={breakdownRef} />
   </>
 }

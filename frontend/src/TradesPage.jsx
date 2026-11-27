@@ -23,7 +23,7 @@ async function request(path, body, signal) {
 const shownPrice = value => value ?? 'Not recorded'
 const neutralReview = () => ({ discipline: 'not_reviewed', notes: '' })
 
-export default function TradesPage({ active, currentRuleSet, seed, onBusyChange, onDirtyChange }) {
+export default function TradesPage({ active, currentRuleSet, seed, onBusyChange, onDirtyChange, onOpenTodayBreakdown }) {
   const [form, setForm] = useState(() => formFromSetup(seed?.record))
   const [linkedSetup, setLinkedSetup] = useState(seed?.record ?? null)
   const [entrySession, setEntrySession] = useState(0)
@@ -252,23 +252,24 @@ export default function TradesPage({ active, currentRuleSet, seed, onBusyChange,
           </dl>
           <TradeEditHistory edits={record.edits} />
         </section>
-        <TradeTimeline key={`${record.id}:${record.revision}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} onCoachBusyChange={setCoachBusy} onCoachDirtyChange={setCoachDirty} onPriceResult={setLivePrice} />
-        <section className="trade-card"><h3>{record.status === 'open' ? 'Record a full exit' : 'Recorded outcome'}</h3>
-          {record.status === 'open' ? <form className="trade-form" onSubmit={close}><p className="trade-help">One full exit per trade. Enter your actual exit fill; price touching a chart level does not close this record. You can correct a saved exit using Edit trade.</p><fieldset disabled={waiting}><div className="trade-fields">
-            <label>Actual exit price<input required inputMode="decimal" value={exit.price} onChange={e => setExit({ ...exit, price: e.target.value })} /></label>
-            <label>Exit time · {timezone}<input required type="datetime-local" value={exit.at} onChange={e => setExit({ ...exit, at: e.target.value })} /></label>
-            <label className="trade-wide">Exit notes <span>(optional)</span><textarea maxLength={5000} rows={2} value={exit.notes} onChange={e => setExit({ ...exit, notes: e.target.value })} /></label>
-          </div><div className="trade-actions"><button className="trade-primary" type="submit">Save full exit</button></div></fieldset></form> : <>
-            <dl className="trade-metrics"><div><dt>Actual exit</dt><dd>{record.exit.exit_price}</dd></div><div><dt>Exit time</dt><dd>{setupTime(record.exit.exit_at)}</dd></div><div><dt>Price result</dt><dd className={`trade-${record.result.outcome}`}>{record.result.pips} pips</dd></div><div><dt>Result in R</dt><dd>{record.result.r_display !== null ? `${record.result.r_display} R` : 'Unavailable'}<small>{record.result.initial_risk_pips !== null ? `Initial risk: ${record.result.initial_risk_pips} pips` : 'No initial stop recorded'}</small></dd></div></dl>
-            <p className="trade-help">{record.result.assumptions}</p>{record.exit.exit_notes && <p className="trade-prose">{record.exit.exit_notes}</p>}
-          </>}
-        </section>
-        <section className="trade-card"><h3>Trading discipline · your self-review</h3><p className="trade-help">You have not defined mandatory rules yet. This is your own assessment, separate from profit or loss; the app does not grade your discipline.</p>
-          <form className="trade-form" onSubmit={saveReview}><fieldset disabled={waiting}><label>Did you follow your plan?<select value={review.discipline} onChange={e => setReview({ ...review, discipline: e.target.value })}>{Object.entries(disciplineLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <label>Review notes<textarea maxLength={5000} rows={3} value={review.notes} onChange={e => setReview({ ...review, notes: e.target.value })} placeholder="What matched your plan? What did you change, miss, or learn?" /></label>
-            <div className="trade-actions"><button type="submit" className="trade-primary" disabled={!reviewDirty}>Save self-review</button></div></fieldset></form>
-          {record.reviews.length > 0 && <details><summary>Saved self-review history ({record.reviews.length})</summary>{record.reviews.map(item => <div key={item.revision} className="trade-review-history"><strong>{disciplineLabels[item.discipline]}</strong><small>{setupTime(item.recorded_at)}</small><p className="trade-prose">{item.notes || 'No review notes.'}</p></div>)}</details>}
-        </section>
+        <TradeTimeline key={`${record.id}:${record.revision}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} onCoachBusyChange={setCoachBusy} onCoachDirtyChange={setCoachDirty} onPriceResult={setLivePrice} onOpenTodayBreakdown={onOpenTodayBreakdown}>
+          <details className="trade-card"><summary>{record.status === 'open' ? 'Record a full exit' : 'Recorded outcome'}</summary>
+            {record.status === 'open' ? <form className="trade-form" onSubmit={close}><p className="trade-help">One full exit per trade. Enter your actual exit fill; price touching a chart level does not close this record. You can correct a saved exit using Edit trade.</p><fieldset disabled={waiting}><div className="trade-fields">
+              <label>Actual exit price<input required inputMode="decimal" value={exit.price} onChange={e => setExit({ ...exit, price: e.target.value })} /></label>
+              <label>Exit time · {timezone}<input required type="datetime-local" value={exit.at} onChange={e => setExit({ ...exit, at: e.target.value })} /></label>
+              <label className="trade-wide">Exit notes <span>(optional)</span><textarea maxLength={5000} rows={2} value={exit.notes} onChange={e => setExit({ ...exit, notes: e.target.value })} /></label>
+            </div><div className="trade-actions"><button className="trade-primary" type="submit">Save full exit</button></div></fieldset></form> : <>
+              <dl className="trade-metrics"><div><dt>Actual exit</dt><dd>{record.exit.exit_price}</dd></div><div><dt>Exit time</dt><dd>{setupTime(record.exit.exit_at)}</dd></div><div><dt>Price result</dt><dd className={`trade-${record.result.outcome}`}>{record.result.pips} pips</dd></div><div><dt>Result in R</dt><dd>{record.result.r_display !== null ? `${record.result.r_display} R` : 'Unavailable'}<small>{record.result.initial_risk_pips !== null ? `Initial risk: ${record.result.initial_risk_pips} pips` : 'No initial stop recorded'}</small></dd></div></dl>
+              <p className="trade-help">{record.result.assumptions}</p>{record.exit.exit_notes && <p className="trade-prose">{record.exit.exit_notes}</p>}
+            </>}
+          </details>
+          <details className="trade-card"><summary>Trading discipline · your self-review</summary><p className="trade-help">You have not defined mandatory rules yet. This is your own assessment, separate from profit or loss; the app does not grade your discipline.</p>
+            <form className="trade-form" onSubmit={saveReview}><fieldset disabled={waiting}><label>Did you follow your plan?<select value={review.discipline} onChange={e => setReview({ ...review, discipline: e.target.value })}>{Object.entries(disciplineLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>Review notes<textarea maxLength={5000} rows={3} value={review.notes} onChange={e => setReview({ ...review, notes: e.target.value })} placeholder="What matched your plan? What did you change, miss, or learn?" /></label>
+              <div className="trade-actions"><button type="submit" className="trade-primary" disabled={!reviewDirty}>Save self-review</button></div></fieldset></form>
+            {record.reviews.length > 0 && <details><summary>Saved self-review history ({record.reviews.length})</summary>{record.reviews.map(item => <div key={item.revision} className="trade-review-history"><strong>{disciplineLabels[item.discipline]}</strong><small>{setupTime(item.recorded_at)}</small><p className="trade-prose">{item.notes || 'No review notes.'}</p></div>)}</details>}
+          </details>
+        </TradeTimeline>
       </article> : <div className="trade-card trade-empty"><h3>Keep the decision and the result together</h3><p>Open a trade to record its exit and review your execution. You can also start from a saved setup to retain its strategy and zone evidence.</p></div>}
     </div>
     {editing && <TradeEditDialog record={editing} pending={Boolean(busy)} onDirty={setEditDirty} onSave={saveEdit} onClose={()=>{setEditDirty(false);setEditing(null)}} />}

@@ -6,7 +6,16 @@
 .trade-score-cards .coach-dialog p,.trade-score-cards .coach-dialog li { font-size: .8rem; line-height: 1.55; }
 .trade-score-cards .coach-dialog h4 { font-size: .85rem; margin: .8rem 0 .3rem; }
 .coach-dialog h3 { margin: 0; }
-.coach-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .65rem; max-height: 24rem; overflow: auto; padding: .6rem; border: 1px solid var(--border); }
+.coach-hold-context { padding-left: .65rem; border-left: 2px solid var(--border); font-variant-numeric: tabular-nums; }
+.coach-fields { display: grid; gap: 0; margin: .35rem 0 .65rem; padding: 0 .65rem; background: var(--social-bg); border: 1px solid var(--border); border-radius: 6px; }
+.coach-fields > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .6rem; padding: .32rem 0; font-size: .76rem; }
+.coach-fields > div + div { border-top: 1px solid var(--border); }
+.coach-fields dt { color: var(--text); overflow-wrap: anywhere; }
+.coach-fields dd { margin: 0; color: var(--text-h); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; white-space: pre-wrap; }
+.coach-disclosure { margin-block: .35rem; }
+.coach-disclosure summary { cursor: pointer; overflow-wrap: anywhere; padding-block: .3rem; }
+.coach-disclosure .coach-disclosure { padding-left: .6rem; border-left: 1px solid var(--border); }
+.coach-field-list { list-style: none; margin: .35rem 0; padding: 0; }
 .trade-page .coach-dialog .coach-checkbox { flex-direction: row; align-items: center; min-height: 44px; gap: .6rem; }
 .trade-page .coach-dialog .coach-checkbox input { width: 18px; height: 18px; min-height: 18px; padding: 0; flex-shrink: 0; }
 .coach-zone { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .5rem; padding: .7rem; border: 1px solid var(--border); border-radius: 8px; margin: .5rem 0; }

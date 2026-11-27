@@ -2,7 +2,8 @@ import { useEffect,useRef,useState } from 'react'
 import { savedTradeZones } from './tradeZones.js'
 import { API } from './api.js'
 import { setupTime } from './setupEvaluation.js'
-import { alignmentChange,coachLabels,coachReadoutLabels,premiseStatus,coachZones,coachRequest,newerCoachEvidence,runningReview,validCoachReview } from './tradeCoach.js'
+import { alignmentChange,coachLabels,coachReadoutLabels,holdAlignmentText,premiseStatus,coachZones,coachRequest,newerCoachEvidence,runningReview,validCoachReview } from './tradeCoach.js'
+import { CapturedEvidence, EvidenceList } from './CoachEvidence.jsx'
 import './TradeCoach.css'
 
 async function api(path,options={}) {
@@ -10,14 +11,6 @@ async function api(path,options={}) {
   const value=await response.json().catch(()=>null)
   if(!response.ok) throw new Error(typeof value?.detail==='string' ? value.detail : 'The coach request could not be completed.')
   return value
-}
-
-function EvidenceList({title,ids,catalog,conditions=false}) {
-  const entries=conditions ? catalog.conditions : catalog.facts
-  return ids?.length>0 && <section><h4>{title}</h4><ul className="coach-evidence-list">{ids.map(id=>{
-    const item=entries.find(value=>value.id===id)
-    return <li key={id}><p>{item?.text ?? 'Evidence unavailable'}</p>{item?.evidence && <details><summary>Saved evidence · {id}</summary><pre>{JSON.stringify(item.evidence,null,2)}</pre></details>}</li>
-  })}</ul></section>
 }
 
 function TradePremise({checks, evidence, sectionRef}) {
@@ -52,12 +45,19 @@ function FactorChanges({history}) {
   </ul></section>
 }
 
-function CoachReadout({snapshot,labels,details=false}) {
+function HoldAlignment({alignment}) {
+  return <><p className="coach-signal"><b>Four-factor alignment</b> · {alignment.headline}</p>
+    <div className="coach-hold-context"><p>{alignment.context}</p><p>{alignment.coverage}</p></div></>
+}
+
+function CoachReadout({snapshot,labels,alignment,details=false}) {
+  if (!labels) return alignment ? <HoldAlignment alignment={alignment} /> : null
   const readout = snapshot.catalog.readout
   const net = readout.market_net_score
   return <>{labels.atEntry && <strong>{labels.headline}</strong>}
-    <p className="coach-signal"><b>{labels.atEntry ? 'Strategy at entry' : 'Four-factor alignment'}</b> · {labels.alignment}
-      {Number.isFinite(net) && <> · market net {net>0 ? '+' : ''}{net}</>}</p>
+    {alignment ? <HoldAlignment alignment={alignment} /> :
+      <p className="coach-signal"><b>{labels.atEntry ? 'Strategy at entry' : 'Four-factor alignment'}</b> · {labels.alignment}
+        {Number.isFinite(net) && <> · market net {net>0 ? '+' : ''}{net}</>}</p>}
     <p className="coach-signal"><b>Price action</b> · {labels.priceAction}</p>
     {details && <>
       {readout.price_action.matches.length>0 && <ul>{readout.price_action.matches.map(match=>
@@ -138,12 +138,13 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
   }
   const stale=newerCoachEvidence(review,latestClose),snapshot=review?.snapshot,result=review?.result
   const labels = coachReadoutLabels(snapshot)
+  const alignment = snapshot && holdAlignmentText(review.hold_alignment, snapshot.trade.direction, snapshot.covers_latest_close)
   const change = alignmentChange(snapshot)
   const previousVersion = snapshot && (snapshot.trade_revision ?? 0) !== (record.revision ?? 0)
   const afterExit=record.exit && snapshot && Date.parse(snapshot.cutoff_at)>Date.parse(record.exit.exit_at)
   return <div className="trade-coach-card">
     <div className="trade-score-heading"><h4>AI Coach</h4><button className="trade-score-evidence-link" type="button" onClick={e=>show(e)} aria-label="Open coach evidence and history">Evidence ↓</button></div>
-    {labels && result && !previousVersion && !running && !generating ? <CoachReadout snapshot={snapshot} labels={labels} /> :
+    {(labels || alignment) && result && !previousVersion && !running && !generating ? <CoachReadout snapshot={snapshot} labels={labels} alignment={alignment} /> :
       <strong>{generating || running ? 'Review in progress' : previousVersion ? 'Trade edited since review' : result ? coachLabels[result.assessment] : review?.status==='failed' ? 'Review unavailable' : 'No review yet'}</strong>}
     {previousVersion ? <p>View the earlier review in Evidence.</p> : result ? <p className="coach-excerpt">{result.summary}</p> : <p>Review the factors, zones and changes since entry.</p>}
     {labels && result && !previousVersion && change && <p className="coach-signal"><b>Since entry</b> · {change}</p>}
@@ -184,7 +185,7 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
         {dirty && <p className="coach-stale">Draft inputs differ from the saved review.</p>}
         {afterExit && <p className="coach-stale">This review was captured after the exit time later recorded for this trade. It is post-exit context, not an opinion available while holding.</p>}
         {result?.premise_checks && <TradePremise checks={result.premise_checks} evidence={snapshot.premise_evidence} sectionRef={premiseSection} />}
-        {labels && <CoachReadout snapshot={snapshot} labels={labels} details />}
+        <CoachReadout snapshot={snapshot} labels={labels} alignment={alignment} details />
         {result && <>{labels ? <h4>Coach interpretation</h4> : <h4>{coachLabels[result.assessment]} · earlier review method</h4>}<p>{result.summary}</p><h4>Main concern</h4><p>{result.main_concern}</p>
           <EvidenceList title="Supporting evidence" ids={result.supporting_facts} catalog={snapshot.catalog} />
           <EvidenceList title="Conflicting evidence" ids={result.conflicting_facts} catalog={snapshot.catalog} />
@@ -193,7 +194,7 @@ export default function TradeCoach({record,active,latestClose,onBusyChange,onDir
           <EvidenceList title="Conditions to monitor" ids={result.watch_conditions} catalog={snapshot.catalog} conditions />
           <EvidenceList title="Possible invalidation scenarios" ids={result.invalidation_conditions} catalog={snapshot.catalog} conditions /></>}
         <h4>Limitations</h4><ul>{snapshot.catalog.limitations.map(text=><li key={text}>{text}</li>)}</ul>
-        <details><summary>All captured facts and original review inputs</summary><p>Entry reasoning: {snapshot.trade.entry_reason}</p><p>Entry observations: {snapshot.trade.entry_observations || 'None'}</p><p>Review observations: {snapshot.review_observations || 'None'}</p><p>Zones: {({saved_entry_setup:'Saved entry setup', trade_entry_zones:'Recorded with the trade', setup_and_trade_entry_zones:'Linked setup and trade entry', review_annotations:'Supplied at this review'})[snapshot.zone_source] ?? 'Unknown source'}</p><pre>{JSON.stringify(snapshot.catalog,null,2)}</pre></details>
+        <CapturedEvidence snapshot={snapshot} />
       </>}
     </dialog>
   </div>

@@ -23,6 +23,7 @@ import market_data as md
 import setup_market as sm
 import setup_database as sd
 from trade_coach_models import CoachRequest
+from trade_coach_readout import hold_alignment
 from journal_grounding import InvalidJournalEvidence
 
 class Clock(datetime):
@@ -45,6 +46,36 @@ def assessment(catalog):
             'context_facts':[f['id'] for f in facts if f['role'] in ('context','missing') and f['required']],
             'watch_conditions':[c['id'] for c in catalog['conditions'] if c['kind']=='watch'][:2],
             'invalidation_conditions':[c['id'] for c in catalog['conditions'] if c['kind']=='invalidation'][:2]}
+
+
+class HoldAlignmentTests(unittest.TestCase):
+    def test_all_closes_count_and_short_reverses_only_trade_alignment(self):
+        nets = [0.5, 1, 1, 0.5, 0.5, -1, -0.5, -3, -4]
+        rows = [{'net_score': n, 'direction': 'bullish' if n > 0 else 'bearish'} for n in nets]
+        hold = {'candles': rows, 'summary': {'net_score': sum(nets) / len(rows)}}
+        for side, latest, previous in [('long', 'opposing', 'supportive'), ('short', 'supportive', 'opposing')]:
+            history = hold_alignment({'trade': {'direction': side}, 'full_trade': hold})
+            self.assertEqual(history['latest_run'], {'status': latest, 'count': 4})
+            self.assertEqual(history['previous_run'], {'status': previous, 'count': 5})
+            self.assertEqual(history['total'], 9)
+            self.assertEqual(history['counts'][latest], 4)
+            self.assertEqual(history['recent_nets'], [-3, -4])
+            self.assertAlmostEqual(history['average_net'], -5 / 9)
+
+    def test_ties_and_incomplete_scores_break_directional_runs(self):
+        rows = [{'direction': key, 'net_score': n} for key, n in
+                [('bullish', 1), ('mixed', 0), ('neutral', 0), ('bullish', 2)]]
+        snapshot = {'trade': {'direction': 'long'}, 'full_trade': {'candles': rows, 'summary': {'net_score': .75}}}
+        history = hold_alignment(snapshot)
+        self.assertEqual(history['latest_run'], {'status': 'supportive', 'count': 1})
+        self.assertEqual(history['previous_run'], {'status': 'balanced', 'count': 2})
+        rows.append({'direction': 'insufficient_data', 'net_score': 2})
+        history = hold_alignment(snapshot)
+        self.assertEqual(history['counts'], {'supportive': 2, 'opposing': 0, 'balanced': 2, 'unavailable': 1})
+        self.assertEqual(history['latest_run'], {'status': 'unavailable', 'count': 1})
+        self.assertEqual(history['recent_nets'], [2, None])
+        self.assertIsNone(history['average_net'])
+        self.assertIsNone(hold_alignment({}))
 
 
 class CoachTests(unittest.TestCase):
@@ -204,6 +235,9 @@ class CoachTests(unittest.TestCase):
         listing=self.client.get(self.url(record)+'?limit=1').json()
         self.assertEqual(listing['total'],2);self.assertEqual(listing['items'][0]['id'],b['id'])
         self.assertNotIn('snapshot',listing['items'][0])
+        self.assertNotIn('hold_alignment',listing['items'][0])
+        self.assertEqual(a['hold_alignment']['total'], len(a['snapshot']['full_trade']['candles']))
+        self.assertNotIn('hold_alignment', a['snapshot'])
         self.assertEqual(self.client.get(self.url(record)+'?limit=1&offset=1').json()['items'][0]['id'],a['id'])
         self.assertEqual(self.client.get(self.url(record)+'/'+a['id']).json(),a)
         self.market.assert_not_called();self.ai.assert_not_called();self.quote.assert_not_called()
@@ -236,6 +270,7 @@ class CoachTests(unittest.TestCase):
         record=self.create(entry_at='2026-11-10T10:00:00-05:00');result=self.review(record)
         snap=result['snapshot'];self.assertEqual(snap['full_trade']['summary']['candle_count'],0)
         self.assertIsNone(snap['full_trade']['summary']['net_score']);self.assertEqual(snap['recent_candles'],[])
+        self.assertIsNone(result['hold_alignment'])
         self.assertTrue(any('No H4 candle' in text for text in snap['catalog']['limitations']))
 
     def test_long_short_roles_reverse_without_changing_strategy(self):

@@ -31,7 +31,7 @@ export default function TradeSessionScore({session, evidenceId, onShowEvidence})
   </div>
 }
 
-export function TradeSessionEvidence({view, evidenceId, headingRef}) {
+export function TradeSessionEvidence({view, evidenceId, headingRef, onOpenTodayBreakdown}) {
   const ruleSet = view.rule_evaluation?.rule_set
   return <details className="trade-score-details trade-session-evidence">
     <summary className="trade-score-evidence-heading" id={evidenceId} ref={headingRef}>Today’s session score evidence</summary>
@@ -40,5 +40,8 @@ export function TradeSessionEvidence({view, evidenceId, headingRef}) {
     {view.rule_evaluation?.candles.length > 0 ? <TradeCandleScoreTable label="Today's session candle scores"
       caption={`${view.session.candle_count} of 6 H4 candles closed`} candles={view.rule_evaluation.candles}
       average={view.rule_evaluation.summary} /> : <p className="trade-help">{view.session.candle_count === 0 ? 'Awaiting the first completed H4 candle.' : 'Candle scores are unavailable.'}</p>}
+    <button type="button" disabled={!onOpenTodayBreakdown} onClick={onOpenTodayBreakdown}>
+      View point breakdown on Today <span aria-hidden="true">→</span>
+    </button>
   </details>
 }

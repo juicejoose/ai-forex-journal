@@ -23,14 +23,14 @@ function priceChange(candle) {
   return Number.isFinite(value) ? value : null
 }
 
-export default function StrategyScores({ evaluation, snapshot, selectedTime, onSelectCandle }) {
+export default function StrategyScores({ evaluation, snapshot, selectedTime, onSelectCandle, breakdownRef }) {
   const [activeHelp, setActiveHelp] = useState(null)
   const customRange = evaluation?.analysis_kind === 'custom_range'
   const intraday = evaluation?.analysis_kind === 'intraday'
   const partial = intraday && evaluation?.summary?.method === 'session_to_date'
   if (!evaluation) return null
   if (evaluation.schema_version !== 1 || (!Array.isArray(evaluation.candles) || (intraday ? evaluation.candles.length < 1 || evaluation.candles.length > 6 : customRange ? evaluation.candles.length < 6 || evaluation.candles.length % 6 !== 0 : evaluation.candles.length !== 6)) || !evaluation.summary || !evaluation.rule_set?.factors) {
-    return <p className="jv-error">This strategy score format is unavailable in this version of the app.</p>
+    return <p className="jv-error" ref={breakdownRef} tabIndex={-1}>This strategy score format is unavailable in this version of the app.</p>
   }
   const { summary, candles, rule_set: ruleSet } = evaluation
   const averaged = ['session_average', 'range_average', 'session_to_date'].includes(summary.method)
@@ -67,7 +67,7 @@ export default function StrategyScores({ evaluation, snapshot, selectedTime, onS
     {averaged && !summary.complete && <p className="ss-help ss-incomplete">{periodLabel} averages are unavailable until all {summary.expected_factors} factor checks can be evaluated. Missing values are not counted as zero, and unavailable completed candles are not dropped from the average.</p>}
     <p className="ss-help">{averaged ? `Across ${countLabel} candles: ` : ''}{summary.neutral_factors} neutral · {summary.unavailable_factors} unavailable{summary.reduced_factors > 0 ? ` · ${summary.reduced_factors} with reduced points` : ''}. Alignment measures your rules, not the probability of a future move.</p>
     <p className="ss-help ss-scroll-hint">Scroll across the table to see every factor.</p>
-    <div className="ss-table-scroll" role="region" aria-label={`Scores for all ${countLabel} candles`} tabIndex={0}>
+    <div className="ss-table-scroll" role="region" aria-label={`Scores for all ${countLabel} candles`} tabIndex={0} ref={breakdownRef}>
       <table>
         <caption>{partial ? `${candles.length} completed + ${pending.length} pending candles` : `All ${countLabel} candles`} · {ruleSet.max_points} possible points per candle · New York time · Price change compares each candle’s open and close.</caption>
         <thead><tr><th scope="col">Candle</th>{ruleSet.factors.map((factor) => <th scope="col" key={factor.id}>

@@ -6,7 +6,7 @@ import './TradeScores.css'
 
 function TradeEntryNotes({ record }) {
   const { entry } = record
-  return <details className="trade-card trade-entry-notes"><summary>Entry reasoning & observations</summary>
+  return <details className="trade-card"><summary>Entry reasoning & observations</summary>
     <p className="trade-help">Logged {setupTime(record.created_at)} · EUR/USD · H4</p>
     {record.context?.entry_zones?.length > 0 && <><h4>Zones recorded with this trade</h4>
       <ul className="trade-zones">{record.context.entry_zones.map(zone => <li key={zone.label}><strong>{zone.label}</strong> · {zone.kind} · {zone.lower}–{zone.upper}{zone.origin_at && <> · origin {setupTime(zone.origin_at)}</>}</li>)}</ul></>}
@@ -15,7 +15,7 @@ function TradeEntryNotes({ record }) {
   </details>
 }
 
-export function TradeScoreCards({scores,record,evidenceIds,onShowEvidence,sessionCard,coach}) {
+export function TradeScoreCards({scores,record,evidenceIds,onShowEvidence,sessionCard,coach,children}) {
   const {value,error,loading,refresh}=scores
   const entry=value?.entry_score.summary, full=value?.full_trade.summary
   return <div className="trade-score-panel" aria-label="Trade scores and coach">
@@ -30,7 +30,10 @@ export function TradeScoreCards({scores,record,evidenceIds,onShowEvidence,sessio
         {full ? <><p>{scoreDirection(full.direction)} · {full.candle_count} completed {full.candle_count===1 ? 'candle' : 'candles'}</p>
         <small>Bull {scoreNumber(full.bullish_points)} · Bear {scoreNumber(full.bearish_points)} · / {full.max_points}</small></> : <p>Trade-period data unavailable · retry above</p>}</div>
     </>}{sessionCard}</div>
-      <TradeEntryNotes record={record} />
+      <section className="trade-record-panels" aria-label="Trade notes, exit and discipline">
+        <TradeEntryNotes record={record} />
+        {children}
+      </section>
       {coach}
     </div>{value && <p className="trade-score-footnote">Four-factor v{value.rule_set.version}{value.rule_set.revision!=null && ` · revision ${value.rule_set.revision}`} · Rule alignment, not profit or win probability.{loading ? ' Updating…' : value.saved_at ? ' Full-trade score saved.' : value.full_trade.error ? ' Entry score remains saved.' : ' Average updates after completed H4 closes.'}</p>}
   </div>

@@ -10,11 +10,11 @@
 .trade-score-cards:has(.trade-session-score) { --score-width: 3fr; --score-columns: 3; }
 .trade-score-strip { display: grid; grid-template-columns: repeat(var(--score-columns), minmax(0, 1fr)); grid-auto-rows: 1fr; gap: .5rem; }
 .trade-score-strip > div, .trade-score-cards > .trade-coach-card { border: 1px solid var(--border); border-radius: 8px; padding: .45rem .6rem; background: var(--social-bg); min-width: 0; }
-.trade-score-cards > .trade-entry-notes { grid-column: 1 / -2; grid-row: 2; }
+.trade-record-panels { grid-column: 1 / -2; grid-row: 2; display: grid; gap: .5rem; min-width: 0; }
 .trade-score-cards > .trade-coach-card { grid-column: -2 / -1; grid-row: 1 / 3; padding: .65rem .85rem; }
 @container trade-scores (max-width: 52rem) {
   .trade-score-cards { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
-  .trade-score-cards > :is(.trade-entry-notes, .trade-coach-card) { grid-column: 1 / -1; grid-row: auto; }
+  .trade-score-cards > :is(.trade-record-panels, .trade-coach-card) { grid-column: 1 / -1; grid-row: auto; }
 }
 @container trade-scores (max-width: 24rem) {
   .trade-score-strip { grid-template-columns: minmax(0, 1fr); }

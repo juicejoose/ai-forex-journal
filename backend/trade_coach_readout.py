@@ -1,6 +1,39 @@
 """Summarize already-scored, completed H4 candles for an open-trade review."""
 
+from collections import deque
+from math import isfinite
+
 DIRECTIONAL_EVENTS = {'rejection', 'breakout', 'retest_held'}
+
+
+def hold_alignment(snapshot):
+    """Describe the hold using only the scores frozen in this review."""
+    hold = snapshot.get('full_trade') or {}
+    rows = hold.get('candles')
+    direction = snapshot.get('trade', {}).get('direction')
+    if not rows or direction not in ('long', 'short'):
+        return None
+
+    counts = dict(supportive=0, opposing=0, balanced=0, unavailable=0)
+    latest_run = previous_run = None
+    recent_nets = deque(maxlen=2)
+    for row in rows:
+        net = row.get('net_score')
+        if row.get('direction') == 'insufficient_data' or type(net) not in (int, float) or not isfinite(net):
+            net = None
+            status = 'unavailable'
+        elif net == 0:
+            status = 'balanced'
+        else:
+            status = 'supportive' if (net > 0) == (direction == 'long') else 'opposing'
+        if latest_run is None or latest_run['status'] != status:
+            previous_run, latest_run = latest_run, {'status': status, 'count': 0}
+        latest_run['count'] += 1
+        counts[status] += 1
+        recent_nets.append(net)
+    return {'total': len(rows), 'counts': counts, 'latest_run': latest_run, 'previous_run': previous_run,
+            'recent_nets': list(recent_nets),
+            'average_net': None if counts['unavailable'] else (hold.get('summary') or {}).get('net_score')}
 
 
 def current_zone_events(zone, through):

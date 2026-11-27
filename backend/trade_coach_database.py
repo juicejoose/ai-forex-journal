@@ -6,6 +6,7 @@ from uuid import uuid4
 import database as db
 import trade_database as trades
 from setup_database import canonical
+from trade_coach_readout import hold_alignment
 
 
 def digest(value):
@@ -54,7 +55,9 @@ def _read(row, record, detail=True):
     value.update(result=result, cutoff_at=snap['cutoff_at'] if snap else None,
                  data_through=snap['data_through'] if snap else None,
                  direction=snap['trade']['direction'] if snap else record['entry']['direction'], trade_revision=saved_revision)
-    if detail: value.update(snapshot=snap,inputs=json.loads(row['request_json']))
+    if detail:
+        value.update(snapshot=snap, inputs=json.loads(row['request_json']),
+                     hold_alignment=hold_alignment(snap) if snap else None)
     return value
 
 

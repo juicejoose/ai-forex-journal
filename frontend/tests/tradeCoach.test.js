@@ -1,8 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {alignmentChange,coachReadoutLabels,coachZones,coachRequest,newerCoachEvidence,validCoachReview,runningReview} from '../src/tradeCoach.js'
+import {alignmentChange,coachReadoutLabels,coachZones,coachRequest,holdAlignmentText,newerCoachEvidence,validCoachReview,runningReview} from '../src/tradeCoach.js'
 const zone=()=>({label:'Support',kind:'support',lower:'1.10000',upper:'1.10100',timeframe:'H4',originAt:''})
 const form=()=>({inherit:false,zones:[zone()],observations:' Watch support '})
+
+test('coach explains the reversal across the whole review and labels market nets',()=>{
+  const history = {total:9, counts:{supportive:5,opposing:4,balanced:0,unavailable:0}, average_net:-5/9,
+    latest_run:{status:'opposing',count:4}, previous_run:{status:'supportive',count:5}, recent_nets:[-3,-4]}
+  assert.deepEqual(holdAlignmentText(history,'long',true),{
+    headline:'Last 4 H4 closes opposed your long',context:'First 5 H4 closes supported your long. Last recorded market nets: -3 → -4',
+    coverage:'Across 9 closes · 5 supportive · 4 opposing · Average net -0.56'})
+  assert.equal(holdAlignmentText(history,'long',false).headline,'Latest scheduled H4 close unavailable')
+})
+
+test('a single close, balanced streaks, and missing readings stay distinct',()=>{
+  assert.equal(holdAlignmentText(null,'short',true),null)
+  const history={total:1,counts:{supportive:1},latest_run:{status:'supportive',count:1},previous_run:null,recent_nets:[-2],average_net:-2}
+  assert.match(holdAlignmentText(history,'short',true).headline,/Latest H4 close supported your short/)
+  const gap={...history,total:4,latest_run:{status:'unavailable',count:1},previous_run:{status:'balanced',count:2},
+    recent_nets:[0,null],counts:{opposing:1,balanced:2,unavailable:1},average_net:null}
+  const text=holdAlignmentText(gap,'short',true)
+  assert.match(text.context,/Preceding 2 H4 closes were balanced.*0 → Unavailable/)
+  assert.match(text.coverage,/1 unavailable · Average net Unavailable/)
+})
 
 test('inherit and explicitly empty zones remain different; review notes are trimmed',()=>{
   assert.deepEqual(coachRequest({...form(),inherit:true}),{zones:null,observations:'Watch support'})
