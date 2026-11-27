@@ -9,7 +9,7 @@ const MarketChart = lazy(() => import('./MarketChart.jsx'))
 const noZones = []
 const levelColors = { stopLoss:'#d65e70', takeProfit:'#249c79'}
 
-export default function TradeEntryChart({active, form, onEdit, cutoff, linkedZones = noZones, disabled}) {
+export default function TradeEntryChart({active, guideRuleSet, form, onEdit, cutoff, linkedZones = noZones, disabled}) {
   const [visible,setVisible] = useState(true)
   const [around,setAround] = useState(() => cutoff ? localInputTime(cutoff) : '')
   const [request,setRequest] = useState(() => ({at:cutoff || null}))
@@ -118,7 +118,7 @@ export default function TradeEntryChart({active, form, onEdit, cutoff, linkedZon
       </>}
       <p className="trade-pick-feedback" role="status">{feedback}</p>
       {chart && active && <Suspense fallback={<p role="status">Opening chart…</p>}>
-        <MarketChart snapshot={chart} selectedTime={selected} onSelect={setSelected} priceLevels={levels} draftZones={allZones}
+        <MarketChart snapshot={chart} guideRuleSet={guideRuleSet} selectedTime={selected} onSelect={setSelected} priceLevels={levels} draftZones={allZones}
           drawing={tool && !disabled ? {kind:tool,first:zoneBoundary} : null} onDrawingPoint={applyPoint} />
         {tool && candle && <div className="trade-pick-tools" role="group" aria-label="Use selected candle">
           {['open','high','low','close'].map(key=><button type="button" key={key} disabled={disabled}

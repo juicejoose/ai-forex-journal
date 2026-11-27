@@ -522,7 +522,7 @@ function App() {
             setTradeSeed({ record, id: crypto.randomUUID() }); setTradeDirty(false); setActiveTab('trades')
             requestAnimationFrame(() => { window.scrollTo({ top: 0, behavior: 'instant' }); document.getElementById('trades-panel')?.focus({ preventScroll: true }) })
           }} />
-        <TradesPage key={tradeSeed?.id ?? 'manual'} active={activeTab === 'trades'} seed={tradeSeed} onBusyChange={setTradeBusy} onDirtyChange={setTradeDirty} />
+        <TradesPage currentRuleSet={ruleDefinitions.find(item => item.id === CURRENT_RULE_SET_ID)} key={tradeSeed?.id ?? 'manual'} active={activeTab === 'trades'} seed={tradeSeed} onBusyChange={setTradeBusy} onDirtyChange={setTradeDirty} />
         <TodayPage active={activeTab === 'today'} busy={busy} onBusyChange={setTodayBusy} onDirtyChange={setTodayDirty}
           onSaved={() => setHistoryVersion(value => value + 1)} />
         <CustomRangeJournals activeTab={activeTab}

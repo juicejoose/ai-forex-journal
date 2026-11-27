@@ -55,6 +55,14 @@ test('RSI guide levels follow saved rule versions and proximity settings', () =>
   assert.equal(result.rsiSource, 'RSI MA')
   assert.deepEqual(result.guides.map(guide => guide.value), [40, 60, 44, 56])
   assert.deepEqual(buildChartData(snapshot, null).guides, [])
+  for (const analysis_kind of ['trade_timeline', 'trade_entry_chart']) {
+    const trade = buildChartData({ ...snapshot, analysis_kind }, undefined, version7.rule_set)
+    assert.deepEqual(trade.guides, result.guides)
+    assert.equal(trade.rsiSource, 'RSI MA')
+    assert.ok(trade.rows.every(row => !row.score))
+    assert.deepEqual(buildChartData({ ...snapshot, analysis_kind }, undefined, version1.rule_set)
+      .guides.map(guide => guide.value), [30, 70])
+  }
 })
 
 test('chart labels use New York opening times across DST, preserving real UTC ordering', () => {

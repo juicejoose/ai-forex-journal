@@ -49,7 +49,6 @@
 .trade-review-history { padding: .75rem 0; border-top: 1px solid var(--border); }
 .trade-review-history small { display: block; }
 .trade-page summary { cursor: pointer; min-height: 44px; padding: .65rem 0; }
-.trade-original-plan .se-plan-result { background: var(--social-bg); }
 @media (prefers-color-scheme: dark) { .trade-page .trade-positive { color: #7ed6a9; } .trade-page .trade-negative, .trade-error { color: #f09aa5; } }
 @media (max-width: 600px) { .trade-page { padding: 1.2rem .85rem; } .trade-page h2 { font-size: 1.5rem; } .trade-card { padding: 1rem; } .trade-fields, .trade-history ul { grid-template-columns: minmax(0,1fr); } .trade-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } .trade-history-toolbar h3 { flex-basis: 100%; } .trade-history-toolbar label { flex: 1; justify-content: space-between; } .trade-detail { scroll-margin-top: 4.5rem; } }
 

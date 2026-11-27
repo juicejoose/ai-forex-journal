@@ -29,7 +29,7 @@ export function validCandle(candle) {
     candle.low <= Math.min(candle.open, candle.close) && candle.high >= Math.max(candle.open, candle.close)
 }
 
-export function buildChartData(snapshot, evaluation) {
+export function buildChartData(snapshot, evaluation, guideRuleSet) {
   const candles = Array.isArray(snapshot?.candles) ? snapshot.candles.filter(validCandle) : []
   const timeline = snapshot?.analysis_kind === 'trade_timeline'
   if (!snapshot || (!candles.length && !timeline && snapshot.analysis_kind !== 'intraday')) return { rows: [], startIndex: 0, hasRsiMa: false, guides: [] }
@@ -64,10 +64,11 @@ export function buildChartData(snapshot, evaluation) {
     byTime.set(time,{time,candle:{...forming,timeline_phase:'forming'},analyzed:false,score:null})
   }
   const rows = [...byTime.values()].sort((a, b) => a.time - b.time)
-  const factor = !timeline && evaluation?.rule_set?.factors?.find(item => item.id === 'rsi_extreme')
+  const rules = guideRuleSet ?? (timeline ? null : evaluation?.rule_set)
+  const factor = rules?.factors?.find(item => item.id === 'rsi_extreme')
   const guides = factor ? [
-    { value: factor.trend?.lower_threshold ?? (evaluation.rule_set.version === 1 ? 30 : 40), label: 'Oversold' },
-    { value: factor.trend?.upper_threshold ?? (evaluation.rule_set.version === 1 ? 70 : 60), label: 'Overbought' },
+    { value: factor.trend?.lower_threshold ?? (rules.version === 1 ? 30 : 40), label: 'Oversold' },
+    { value: factor.trend?.upper_threshold ?? (rules.version === 1 ? 70 : 60), label: 'Overbought' },
   ] : []
   if (factor?.trend_reduction) {
     guides.push({ value: factor.trend_reduction.bearish_max, label: 'Near oversold', proximity: true },

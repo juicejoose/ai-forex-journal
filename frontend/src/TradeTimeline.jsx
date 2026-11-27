@@ -87,7 +87,7 @@ export default function TradeTimeline({ record, active, onPriceResult, onCoachBu
       </div>
       {view.coverage.missing_candle_count > 0 && <p className="trade-error" role="status">{view.coverage.missing_candle_count} scheduled H4 candle(s) unavailable. See chart details below.</p>}
       {!view.candles.length && <p className="trade-help">No candle is available from entry onward yet. Showing earlier context.</p>}
-      <Suspense fallback={<p role="status">Loading chart…</p>}><MarketChart snapshot={view} selectedTime={selected} onSelect={setSelected} draftZones={zones} tradeTimeline /></Suspense>
+      <Suspense fallback={<p role="status">Loading chart…</p>}><MarketChart snapshot={view} guideRuleSet={scores.value?.rule_set} selectedTime={selected} onSelect={setSelected} draftZones={zones} tradeTimeline /></Suspense>
       <details className="trade-chart-details"><summary>Chart details & timing</summary>
         <dl className="trade-metrics">{view.events.map(event => <div key={event.kind}><dt>{event.kind === 'entry' ? 'Entry' : 'Exit'} · actual fill</dt><dd>{event.price}<small>{stamp(event.at)}</small></dd></div>)}</dl>
         <p className="trade-help">Arrows mark the H4 candles containing each fill. Exact fill times are shown here and in the trade overview. Midpoint prices may differ from your broker fills. A full entry candle may include prices from before entry.</p>

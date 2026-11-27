@@ -56,7 +56,7 @@ function SelectedCandle({ row, hasEvaluation, tradeTimeline, entryChart }) {
   </div>
 }
 
-export default function MarketChart({ snapshot, evaluation, selectedTime, onSelect, zoneOverlay, showZoneCloses = false, showZonePatterns = false, frozen = false, draftZones, drawing, onDrawingPoint, tradeTimeline = false, priceLevels }) {
+export default function MarketChart({ snapshot, evaluation, guideRuleSet, selectedTime, onSelect, zoneOverlay, showZoneCloses = false, showZonePatterns = false, frozen = false, draftZones, drawing, onDrawingPoint, tradeTimeline = false, priceLevels }) {
   const id = useId()
   const hostRef = useRef(null)
   const shadeRef = useRef(null)
@@ -65,7 +65,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
   const drawingRef = useRef(null)
   const [rawRsi, setRawRsi] = useState(true)
   const [hovered, setHovered] = useState(null)
-  const model = useMemo(() => buildChartData(snapshot, evaluation), [snapshot, evaluation])
+  const model = useMemo(() => buildChartData(snapshot, evaluation, guideRuleSet), [snapshot, evaluation, guideRuleSet])
   const hasRows = model.rows.length > 0
   const formingRow = model.rows.find(row => row.candle.complete === false)
   const formingAsOf = formingRow?.candle.as_of ?? snapshot?.as_of ?? snapshot?.chart_followup?.as_of
@@ -192,8 +192,21 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     })))
     for (const guide of api.guides) guide.series.removePriceLine(guide.line)
     const guideSeries = model.rsiSource === 'RSI MA' ? api.rsiMa : api.rsi
+    // Fit both the visible readings and their strategy thresholds in the RSI pane.
+    const levels = model.guides.map(guide => guide.value)
+    const fitThresholds = original => {
+      const info = original()
+      if (!info?.priceRange) return info
+      return { ...info, priceRange: {
+        minValue: Math.min(info.priceRange.minValue, ...levels),
+        maxValue: Math.max(info.priceRange.maxValue, ...levels),
+      } }
+    }
+    for (const series of [api.rsiMa, api.rsi]) {
+      series.applyOptions({ autoscaleInfoProvider: series === guideSeries && levels.length ? fitThresholds : null })
+    }
     api.guides = model.guides.map(guide => ({ series: guideSeries, line: guideSeries.createPriceLine({
-      price: guide.value, color: guide.proximity ? '#b9a58a' : '#8a829a', lineWidth: 1,
+      price: guide.value, color: guide.proximity ? '#94808b' : '#78659b', lineWidth: 1,
       lineStyle: guide.proximity ? LineStyle.Dotted : LineStyle.Dashed, axisLabelVisible: true,
     }) }))
     if (!api.initialized || (expandedContext && !api.contextExpanded)) {
@@ -301,7 +314,7 @@ export default function MarketChart({ snapshot, evaluation, selectedTime, onSele
     </div>
     <div className="mc-chart-footer">
       <label><input type="checkbox" checked={showRaw} disabled={!model.hasRsiMa || model.rsiSource === 'RSI14'} onChange={event => setRawRsi(event.target.checked)} /> Show raw RSI14</label>
-      <span>{model.guides.length ? `${model.rsiSource} guides · ${model.guides.map(guide => guide.value).sort((a,b) => a-b).join(' / ')}` : 'RSI shown as market context'}</span>
+      <span>{model.guides.length ? `${model.rsiSource} levels · ${[...model.guides].sort((a,b) => a.value-b.value).map(guide => `${guide.value} ${guide.label.toLowerCase()}`).join(' · ')}` : 'RSI shown as market context'}</span>
     </div>
     {!entryChart && <><p className="mc-help">Click or tap a candle to select it. Drag sideways to explore; pinch or use + / − to zoom. The purple band marks {tradeTimeline ? 'candles overlapping the trade' : 'the reviewed candles'}.</p>
     <p className="mc-help">{model.historyCount} earlier candles for context · {model.reviewedCount} {tradeTimeline ? 'trade candles' : 'reviewed candles'}.{model.followingCount > 0 && ` ${model.followingCount} candles after ${tradeTimeline ? 'exit' : 'review'}.`}

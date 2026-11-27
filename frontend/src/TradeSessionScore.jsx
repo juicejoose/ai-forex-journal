@@ -1,6 +1,7 @@
+import TradeCandleScoreTable from './TradeCandleScoreTable.jsx'
 import { useId } from 'react'
 import { formatDay } from './journalCalendar.js'
-import { signedScore, sessionScoreReadout } from './tradeScores.js'
+import { sessionScoreReadout } from './tradeScores.js'
 
 const newYorkTime = new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', month:'short', day:'numeric',
   hour:'numeric', minute:'2-digit', timeZoneName:'short'})
@@ -36,9 +37,9 @@ export function TradeSessionEvidence({view, evidenceId, headingRef}) {
     <p>{formatDay(view.journal_date)} · New York{view.rule_evaluation && ` · Four-factor v${view.rule_evaluation.rule_set.version}`}</p>
     <p>{sessionTime(view.session.start)} – {sessionTime(view.session.end)}</p>
     <p>Equal weight per completed H4 candle, including closes before trade entry.</p>
-    {view.rule_evaluation?.candles.length > 0 ? <ol>{view.rule_evaluation.candles.map(row=><li key={row.candle_id}>
-      {sessionTime(row.close_time)} · Net {row.direction === 'insufficient_data' ? 'unavailable' : signedScore(row.net_score)}
-    </li>)}</ol> : <p>{view.session.candle_count === 0 ? 'Awaiting the first completed H4 candle.' : 'Candle scores are unavailable.'}</p>}
+    {view.rule_evaluation?.candles.length > 0 ? <TradeCandleScoreTable label="Today's session candle scores"
+      caption={`${view.session.candle_count} of 6 H4 candles closed`} candles={view.rule_evaluation.candles}
+      average={view.rule_evaluation.summary} /> : <p>{view.session.candle_count === 0 ? 'Awaiting the first completed H4 candle.' : 'Candle scores are unavailable.'}</p>}
     <small>Checked · {sessionTime(view.as_of)}</small>
   </details>
 }
