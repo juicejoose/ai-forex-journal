@@ -1,11 +1,9 @@
-import { useEffect,useRef,useState } from 'react'
+import { useEffect,useState } from 'react'
 import { API } from './api.js'
 import { validTradeScores } from './tradeScores.js'
 
-export default function useTradeScores(record,active,onEntryAnalysis) {
+export default function useTradeScores(record,active) {
   const [value,setValue]=useState(null), [error,setError]=useState(''), [loading,setLoading]=useState(false), [reload,setReload]=useState(0)
-  const callback=useRef(onEntryAnalysis)
-  useEffect(()=>{callback.current=onEntryAnalysis},[onEntryAnalysis])
   const id=record.id, revision=record.revision ?? 0, exitAt=record.exit?.exit_at ?? null, entryAt=record.entry.entry_at, direction=record.entry.direction, status=record.status
   useEffect(()=>{
     if (!active) return
@@ -20,7 +18,7 @@ export default function useTradeScores(record,active,onEntryAnalysis) {
         const data=await response.json().catch(()=>null)
         if(!response.ok) throw new Error(typeof data?.detail==='string' ? data.detail : 'Could not calculate trade scores.')
         if(!validTradeScores(data,{id,revision,status,entry:{entry_at:entryAt,direction},exit:exitAt ? {exit_at:exitAt} : null})) throw new Error('The trade changed or its score response is unsupported. Reopen the trade to refresh it.')
-        if(!disposed) {setValue(data);setError(data.full_trade.error ?? '');callback.current?.(data.entry_analysis)}
+        if(!disposed) {setValue(data);setError(data.full_trade.error ?? '')}
       } catch(err) {if(!disposed) setError(err.name==='AbortError' ? 'Trade scoring timed out. Please retry.' : err.message)}
       finally {clearTimeout(timeout);inFlight=false;if(!disposed)setLoading(false)}
     }

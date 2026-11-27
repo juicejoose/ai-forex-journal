@@ -1,13 +1,23 @@
 .trade-score-panel { margin: .6rem 0; container: trade-scores / inline-size; }
-.trade-score-cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
-.trade-score-cards > div { flex: 1 1 0; border: 1px solid var(--border); border-radius: 8px; padding: .45rem .6rem; background: var(--social-bg); min-width: 0; }
-.trade-score-cards > .trade-coach-card { flex-grow: 3; padding: .65rem .85rem; }
+.trade-score-cards {
+  --score-columns: 2;
+  display: grid;
+  grid-template-columns: repeat(var(--score-columns), minmax(0, 1fr)) minmax(0, 3fr);
+  grid-template-rows: max-content 1fr;
+  align-items: start;
+  gap: .5rem;
+}
+.trade-score-cards:has(> .trade-session-score) { --score-columns: 3; }
+.trade-score-cards > div { border: 1px solid var(--border); border-radius: 8px; padding: .45rem .6rem; background: var(--social-bg); min-width: 0; }
+.trade-score-cards > .trade-entry-notes { grid-column: 1 / -2; grid-row: 2; }
+.trade-score-cards > .trade-coach-card { grid-column: -2 / -1; grid-row: 1 / 3; padding: .65rem .85rem; }
 @container trade-scores (max-width: 52rem) {
-  .trade-score-cards > .trade-coach-card { flex-basis: 100%; }
+  .trade-score-cards { grid-template-columns: repeat(var(--score-columns), minmax(0, 1fr)); grid-template-rows: none; }
+  .trade-score-cards > :is(.trade-entry-notes, .trade-coach-card) { grid-column: 1 / -1; grid-row: auto; }
 }
 @container trade-scores (max-width: 24rem) {
+  .trade-score-cards { grid-template-columns: minmax(0, 1fr); }
   .trade-score-cards > div:not(.trade-coach-card) {
-    flex-basis: 100%;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
     column-gap: .6rem;
@@ -21,10 +31,10 @@
   }
   .trade-score-cards > div:not(.trade-coach-card) > :not(.trade-score-heading) { grid-column: 2; margin-block: 0; }
 }
-.trade-score-cards h4 { margin: 0 0 .2rem; font-size: .68rem; font-weight: 500; }
-.trade-score-cards strong { display: block; font-size: .95rem; font-variant-numeric: tabular-nums; }
-.trade-score-cards p { margin: .2rem 0; font-size: .65rem; }
-.trade-score-cards small { font-size: .6rem; color: var(--text); }
+.trade-score-cards > div h4 { margin: 0 0 .2rem; font-size: .68rem; font-weight: 500; }
+.trade-score-cards > div strong { display: block; font-size: .95rem; font-variant-numeric: tabular-nums; }
+.trade-score-cards > div p { margin: .2rem 0; font-size: .65rem; }
+.trade-score-cards > div small { font-size: .6rem; color: var(--text); }
 .trade-page .trade-score-footnote { margin: .35rem 0 0; font-size: .59rem; }
 .trade-score-details { border-top: 1px solid var(--border); margin-top: .5rem; }
 .trade-score-details summary { color: var(--text-h); font-size: .72rem; }
@@ -34,7 +44,7 @@
 .trade-score-table caption { text-align: left; padding: .6rem; font-size: .65rem; }
 .trade-score-table th,.trade-score-table td { padding: .6rem; border-top: 1px solid var(--border); }
 .trade-score-table tbody th { font-weight: 500; }
-@media(max-width:600px) { .trade-score-cards > div { padding: .5rem; } .trade-score-cards strong { font-size: .8rem; } }
+@media(max-width:600px) { .trade-score-cards > div { padding: .5rem; } .trade-score-cards > div strong { font-size: .8rem; } }
 
 .trade-score-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem; margin-bottom: .2rem; }
 .trade-page .trade-score-heading h4 { margin: 0; }

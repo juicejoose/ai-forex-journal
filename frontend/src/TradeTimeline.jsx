@@ -12,9 +12,9 @@ import { validTradeTimeline,timelinePriceResult } from './tradeTimeline.js'
 const MarketChart = lazy(() => import('./MarketChart.jsx'))
 const stamp = value => chartStamp(chartTime(value))
 
-export default function TradeTimeline({ record, active, onEntryAnalysis, onPriceResult, onCoachBusyChange, onCoachDirtyChange }) {
+export default function TradeTimeline({ record, active, onPriceResult, onCoachBusyChange, onCoachDirtyChange }) {
   const zones = useMemo(() => chartZones(savedTradeZones(record.context)), [record.context])
-  const scores=useTradeScores(record,active,onEntryAnalysis)
+  const scores=useTradeScores(record,active)
   const priceCallback=useRef(onPriceResult)
   useEffect(()=>{priceCallback.current=onPriceResult},[onPriceResult])
   const evidenceId=useId()

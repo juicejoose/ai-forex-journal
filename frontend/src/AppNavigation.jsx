@@ -17,23 +17,27 @@ const groups = [
   { label: 'Date ranges', ids: ['custom', 'custom-saved'] },
   { label: 'Strategies', ids: ['profiles'] },
 ]
+const sidebarPreference = 'forex-journal.sidebar-collapsed'
 
 function Icon({ children }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 }
 
-function PageLinks({ pages, activePage, unsavedPages, busy, onSelect }) {
-  return <nav className="app-navigation" aria-label="Journal pages">
+function PageLinks({ pages, activePage, unsavedPages, busy, onSelect, compact = false, navId }) {
+  return <nav id={navId} className="app-navigation" aria-label="Journal pages">
     {groups.map(group => <div className="app-nav-group" key={group.label}>
       <p className="app-nav-group-label">{group.label}</p>
       {group.ids.map(id => {
         const page = pages.find(item => item.id === id)
+        const unsaved = unsavedPages.includes(id)
+        const label = compact ? page.label + (unsaved ? ' · Unsaved changes' : '') : undefined
         return <button key={id} type="button" className="app-nav-link"
+          title={label} aria-label={label}
           aria-current={activePage === id ? 'page' : undefined}
           aria-controls={`${id}-panel`} disabled={busy} onClick={() => onSelect(id)}>
           <Icon>{icons[id]}</Icon>
           <span className="app-nav-label">{page.label}
-            {unsavedPages.includes(id) && <small className="app-nav-unsaved">Unsaved changes</small>}
+            {unsaved && <small className="app-nav-unsaved">Unsaved changes</small>}
           </span>
         </button>
       })}
@@ -45,6 +49,10 @@ function PageLinks({ pages, activePage, unsavedPages, busy, onSelect }) {
 export default function AppNavigation({ pages, activePage, unsavedPages, busy, onSelect }) {
   const dialogRef = useRef(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(sidebarPreference) === 'true' } catch { return false }
+  })
+  const toggleLabel = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
   const selected = pages.find(page => page.id === activePage)
 
   useEffect(() => {
@@ -64,6 +72,12 @@ export default function AppNavigation({ pages, activePage, unsavedPages, busy, o
 
   const navigationProps = { pages, activePage, unsavedPages, busy, onSelect }
 
+  function toggleSidebar() {
+    const next = !collapsed
+    setCollapsed(next)
+    try { localStorage.setItem(sidebarPreference, String(next)) } catch { /* Keep the choice for this visit. */ }
+  }
+
   function openMenu() {
     dialogRef.current.showModal()
     setMenuOpen(true)
@@ -77,9 +91,16 @@ export default function AppNavigation({ pages, activePage, unsavedPages, busy, o
   }
 
   return <>
-    <aside className="app-sidebar">
-      <div className="app-sidebar-heading">Workspace</div>
-      <PageLinks {...navigationProps} />
+    <aside className={collapsed ? 'app-sidebar is-collapsed' : 'app-sidebar'}>
+      <div className="app-sidebar-heading">
+        <span>Workspace</span>
+        <button type="button" className="app-sidebar-toggle" onClick={toggleSidebar}
+          title={toggleLabel} aria-label={toggleLabel} aria-controls="desktop-page-links" aria-expanded={!collapsed}>
+          <Icon><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" />
+            <path d={collapsed ? 'm13 9 3 3-3 3' : 'm16 9-3 3 3 3'} /></Icon>
+        </button>
+      </div>
+      <PageLinks {...navigationProps} navId="desktop-page-links" compact={collapsed} />
     </aside>
     <header className="app-mobile-bar">
       <button type="button" className="app-menu-toggle" aria-label="Open navigation menu"

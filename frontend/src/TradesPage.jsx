@@ -4,11 +4,9 @@ import { setupTime, setupPageOffset } from './setupEvaluation.js'
 import TradeEditDialog, { TradeEditHistory } from './TradeEditDialog.jsx'
 import TradeEntryChart from './TradeEntryChart.jsx'
 import TradeEntryFields from './TradeEntryFields.jsx'
-import TradeAlignment from './TradeAlignment.jsx'
 import TradeTimeline from './TradeTimeline.jsx'
 import TradeDuration from './TradeDuration.jsx'
 import DeleteTradeDialog from './DeleteTradeDialog.jsx'
-import { preferredAnalysis } from './tradeAlignment.js'
 import SavedTradePlan from './SetupTradePlan.jsx'
 import { blankTrade, blankExit, formFromSetup, tradeRequest, exitRequest, reviewChanged, disciplineLabels } from './tradeLog.js'
 import './TradesPage.css'
@@ -37,7 +35,6 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
   const [exit, setExit] = useState(blankExit)
   const [review, setReview] = useState(neutralReview)
   const [reviewBase, setReviewBase] = useState(() => ({ ...neutralReview(), revision: 0 }))
-  const [comparisonSource, setComparisonSource] = useState('entry_time')
   const [busy, setBusy] = useState('')
   const [editing, setEditing] = useState(null)
   const [editDirty, setEditDirty] = useState(false)
@@ -89,7 +86,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
 
   function edit(values) { setForm(current => ({ ...current, ...values })); setEntryDirty(true); setError(''); setMessage('') }
   function present(value) {
-    setHistoryOpen(false); setRecord(value); setLivePrice(null); setExit(blankExit()); setReview({ discipline: value.review.discipline, notes: value.review.notes }); setReviewBase(value.review); setComparisonSource(preferredAnalysis(value))
+    setHistoryOpen(false); setRecord(value); setLivePrice(null); setExit(blankExit()); setReview({ discipline: value.review.discipline, notes: value.review.notes }); setReviewBase(value.review)
     requestAnimationFrame(() => { detailRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); detailRef.current?.focus({ preventScroll: true }) })
   }
   async function save(kind, path, body) {
@@ -141,7 +138,6 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       const updated = await save('edit', `/trades/${editing.id}/edits`, body)
       setRecord(updated)
       setLivePrice(null)
-      setComparisonSource(preferredAnalysis(updated))
       setEditDirty(false)
       setEditing(null)
       setMessage('Trade updated. Earlier details are in Edit history.')
@@ -154,18 +150,6 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
     try {
       const data = await save('review', `/trades/${record.id}/reviews`, { discipline: review.discipline, notes: review.notes.trim(), expected_revision: reviewBase.revision })
       setRecord(data); setReview({ discipline: data.review.discipline, notes: data.review.notes }); setReviewBase(data.review); setMessage('Self-review saved. Earlier reviews are retained.')
-    } catch (err) { setError(err.message) } finally { setBusy('') }
-  }
-  async function analyze(source) {
-    if (waiting) return
-    setBusy(source === 'entry_time' ? 'Reconstructing completed candles at entry…' : 'Comparing saved four-factor evidence…')
-    setError(''); setMessage('')
-    try {
-      const data = await save('analysis', `/trades/${record.id}/strategy-analysis`, { source })
-      // Keep unsaved exit/review drafts and their original review revision intact.
-      setRecord(current => ({ ...current, strategy_analyses: data.strategy_analyses }))
-      setComparisonSource(source)
-      setMessage('Four-factor comparison saved. The original entry evidence remains unchanged.')
     } catch (err) { setError(err.message) } finally { setBusy('') }
   }
   function askDelete(target, opener) {
@@ -194,7 +178,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
       setOffset(current => setupPageOffset(current,Math.max(0,history.total-removed),20))
       if (record?.id === target.id) {
         setRecord(null); setExit(blankExit()); setReview(neutralReview()); setReviewBase({...neutralReview(),revision:0})
-        for (const key of ['exit','review','analysis']) delete requests.current[key]
+        for (const key of ['exit','review']) delete requests.current[key]
       }
       setDeleteTarget(null); setError(''); setMessage('Trade and its related records deleted.'); setRefresh(value => value+1)
       requestAnimationFrame(() => historyToggleRef.current?.focus())
@@ -270,18 +254,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
           </dl>
           <TradeEditHistory edits={record.edits} />
         </section>
-        <TradeTimeline key={`${record.id}:${record.revision}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} onCoachBusyChange={setCoachBusy} onCoachDirtyChange={setCoachDirty} onPriceResult={setLivePrice} onEntryAnalysis={analysis => setRecord(current => {
-          if (!current || current.id !== record.id || current.revision !== record.revision || current.strategy_analyses.some(item => item.id===analysis.id)) return current
-          return {...current,strategy_analyses:[...current.strategy_analyses,analysis]}
-        })} />
-        <details className="trade-card trade-entry-notes" key={`notes-${record.id}`}><summary>Entry reasoning & observations</summary>
-          <p className="trade-help">Logged {setupTime(record.created_at)} · EUR/USD · H4</p>
-          {record.context?.entry_zones?.length > 0 && <><h4>Zones recorded with this trade</h4>
-            <ul className="trade-zones">{record.context.entry_zones.map(zone => <li key={zone.label}><strong>{zone.label}</strong> · {zone.kind} · {zone.lower}–{zone.upper}{zone.origin_at && <> · origin {setupTime(zone.origin_at)}</>}</li>)}</ul></>}
-          <h4>Reason for entry</h4><p className="trade-prose">{entry.entry_reason}</p>
-          {entry.entry_observations && <><h4>Entry observations</h4><p className="trade-prose">{entry.entry_observations}</p></>}
-        </details>
-        <TradeAlignment key={`${record.id}:${comparisonSource}`} record={record} source={comparisonSource} onSourceChange={setComparisonSource} onAnalyze={analyze} busy={waiting} active={active} />
+        <TradeTimeline key={`${record.id}:${record.revision}:${record.exit?.exit_at ?? 'open'}`} record={record} active={active} onCoachBusyChange={setCoachBusy} onCoachDirtyChange={setCoachDirty} onPriceResult={setLivePrice} />
         <section className="trade-card"><h3>Original entry context</h3>{evidence ? <>
           <p className="trade-help">{record.context.setup.snapshot.entry.title || 'Saved setup'} · cutoff {setupTime(evidence.cutoff_at)}</p>
           <p className="trade-notice">{record.context_timing === 'captured_before_entry' ? 'Setup captured before entry. Your manual entry notes were logged separately at the time shown above.' : 'Retrospective context: this setup was reconstructed historically or saved after entry. It does not establish what you knew at entry.'}</p>
@@ -290,7 +263,7 @@ export default function TradesPage({ active, seed, onBusyChange, onDirtyChange }
           {evidence.trade_plan && <div className="trade-original-plan"><h4>Original proposed plan</h4><SavedTradePlan plan={evidence.trade_plan} /></div>}
           {evidence.zones.length > 0 && <ul className="trade-zones">{evidence.zones.map(zone => <li key={zone.id}><strong>{zone.label}</strong> · {zone.kind} · {zone.lower}–{zone.upper}</li>)}</ul>}
           <p className="trade-help">This entry copy stays with the trade if its original setup is deleted. It is never refreshed with later market data.</p>
-        </> : <p className="trade-help">The original entry was logged manually without a market snapshot. Your reasoning and observations are self-reported. Any later reconstruction is stored separately above.</p>}</section>
+        </> : <p className="trade-help">The original entry was logged manually. Your recorded reasoning and observations are available above. Entry score evidence shows the reconstructed H4 candle at entry.</p>}</section>
         <section className="trade-card"><h3>{record.status === 'open' ? 'Record a full exit' : 'Recorded outcome'}</h3>
           {record.status === 'open' ? <form className="trade-form" onSubmit={close}><p className="trade-help">One full exit per trade. Enter your actual exit fill; price touching a chart level does not close this record. You can correct a saved exit using Edit trade.</p><fieldset disabled={waiting}><div className="trade-fields">
             <label>Actual exit price<input required inputMode="decimal" value={exit.price} onChange={e => setExit({ ...exit, price: e.target.value })} /></label>
