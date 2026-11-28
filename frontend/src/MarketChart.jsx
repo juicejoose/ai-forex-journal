@@ -119,6 +119,8 @@ export default function MarketChart({ snapshot, evaluation, guideRuleSet, select
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 } }, 1)
     rsiMa.priceScale().applyOptions({ autoScale: true, scaleMargins: { top: 0.05, bottom: 0.05 } })
     const momentum = chart.addSeries(HistogramSeries, { ...lineOptions, base: 0 }, 2)
+    // Set price padding after creating the panes so the indicators keep their own scales.
+    candles.priceScale().applyOptions({ scaleMargins: { top: 0.14, bottom: 0.08 } })
     momentum.createPriceLine({ price: 0, color: '#87919d', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false })
     chart.panes()[0].setStretchFactor(2.3)
     chart.panes()[1].setStretchFactor(1)
